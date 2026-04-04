@@ -1,0 +1,7 @@
+{
+  "name": "Lulu E-Commerce",
+  "description": "A modern, mobile-first warehouse management system for attendance tracking and order processing.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

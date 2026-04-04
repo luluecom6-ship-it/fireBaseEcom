@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+#reader {
+  border: none !important;
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+#reader__dashboard_section_csr button {
+  background-color: #2563eb !important;
+  color: white !important;
+  border: none !important;
+  padding: 0.5rem 1rem !important;
+  border-radius: 0.75rem !important;
+  font-weight: 900 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.1em !important;
+  font-size: 10px !important;
+  cursor: pointer !important;
+  transition: all 0.2s !important;
+}
+
+#reader__dashboard_section_csr button:hover {
+  background-color: #1d4ed8 !important;
+  transform: scale(1.05);
+}
+
+#reader__status_span {
+  font-weight: 900 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.1em !important;
+  font-size: 10px !important;
+  color: #64748b !important;
+}
+
+#reader__camera_selection {
+  padding: 0.5rem !important;
+  border-radius: 0.75rem !important;
+  border: 1px solid #e2e8f0 !important;
+  font-weight: 700 !important;
+  font-size: 12px !important;
+  outline: none !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #cbd5e1;
+}
