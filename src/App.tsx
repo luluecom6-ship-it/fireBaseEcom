@@ -261,6 +261,17 @@ export default function App() {
     };
   }, [attendanceStatus]);
 
+  // --- LOGIC: Auto-Refresh Matrix ---
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | undefined;
+    if (page === "matrix") {
+      interval = setInterval(fetchMatrixData, 300000); // 5 minutes
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [page]);
+
   // --- ACTIONS ---
   const navigateTo = (target: typeof page) => {
     setImagePreviews([]);
@@ -649,11 +660,18 @@ export default function App() {
 
   const fetchAdminData = async () => {
     if (!user || (user.role !== 'admin' && user.role !== 'supervisor')) return;
+    showToast("Refreshing Admin Data...", "info");
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}?action=getAdminData`);
+      const baseUrl = API_URL.trim();
+      const urlObj = new URL(baseUrl);
+      urlObj.searchParams.set('action', 'getAdminData');
+      urlObj.searchParams.set('_t', Date.now().toString());
+      
+      const res = await fetch(urlObj.toString());
       const data = await res.json();
       setAdminData(data);
+      showToast("Data Refreshed Successfully", "success");
     } catch (e) { 
       alert("Admin sync failed"); 
     } finally {
@@ -663,6 +681,7 @@ export default function App() {
 
   const fetchMatrixData = async () => {
     console.log("--- Matrix Sync Started ---");
+    showToast("Syncing Matrix Data...", "info");
     setIsMatrixLoading(true);
     try {
       // Use robust URL construction to prevent "Invalid Action" errors
@@ -684,17 +703,25 @@ export default function App() {
         const data = JSON.parse(text);
         if (data.status === "success") {
           console.log("Matrix Data Parsed Successfully:", data.data);
-          setMatrixData(data.data);
+          // Merge the timestamp into the matrix data object
+          setMatrixData({
+            ...data.data,
+            timestamp: data.timestamp || new Date().toISOString()
+          });
+          showToast("Matrix Synchronized", "success");
         } else {
           console.error("Server returned error status:", data);
+          showToast("Sync Failed: Server Error", "error");
         }
       } else {
         // This handles the "Invalid Action" plain text response
         console.error("Server returned non-JSON response. This usually means the 'getMatrixData' action is not recognized or not deployed in your Apps Script.");
         console.log("Server Message:", text);
+        showToast("Sync Failed: Invalid Response", "error");
       }
     } catch (e) {
       console.error("Matrix sync failed with exception:", e);
+      showToast("Sync Failed: Connection Error", "error");
     } finally {
       setIsMatrixLoading(false);
       console.log("--- Matrix Sync Finished ---");
@@ -1361,7 +1388,7 @@ export default function App() {
                     whileTap={{ scale: 0.95 }}
                     onClick={fetchMatrixData}
                     disabled={isMatrixLoading}
-                    className="h-14 w-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all disabled:bg-slate-300"
+                    className="h-14 w-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all disabled:bg-slate-300 matrix-refresh-btn"
                   >
                     <RefreshCw size={24} className={cn(isMatrixLoading && "animate-spin")} />
                   </motion.button>
