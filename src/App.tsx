@@ -49,6 +49,21 @@ const getImages = (url: string): string[] => {
   return url.split("|||").filter(Boolean);
 };
 
+const sortSlots = (slots: string[]) => {
+  return [...slots].sort((a, b) => {
+    const parseTime = (s: string) => {
+      const match = s.match(/(\d+):(\d+)\s*(AM|PM)/i);
+      if (!match) return 0;
+      let [_, hrs, mins, ampm] = match;
+      let h = parseInt(hrs);
+      if (ampm.toUpperCase() === 'PM' && h !== 12) h += 12;
+      if (ampm.toUpperCase() === 'AM' && h === 12) h = 0;
+      return h * 60 + parseInt(mins);
+    };
+    return parseTime(a) - parseTime(b);
+  });
+};
+
 // --- MATRIX CONSTANTS ---
 const AGE_BUCKETS = ["0-5Min", "5-10Min", "10-15Min", "15-20Min", "20-25Min", "25-30Min", "30-35Min", "35-40Min", "40-45Min", "45-50Min", "50-55Min", "55-60Min", "60Min+"];
 const SLOTS = ["8:00 AM - 9:59 AM", "10:00 AM - 11:59 AM", "12:00 PM - 1:59 PM", "2:00 PM - 3:59 PM", "4:00 PM - 5:59 PM", "6:00 PM - 7:59 PM", "8:00 PM - 9:59 PM", "10:00 PM - 11:59 PM", "12:00 AM - 1:59 AM"];
@@ -110,7 +125,12 @@ const MatrixTable = ({ title, headers, data, keyField, themeColor, onCellClick }
             <tr className="bg-slate-50 border-b border-slate-100">
               <th className="p-4 text-left font-black text-slate-400 uppercase tracking-widest border-r border-slate-100 min-w-[150px]">Status</th>
               {headers.map(h => (
-                <th key={h} className="p-4 text-center font-black text-slate-400 uppercase tracking-widest border-r border-slate-100 min-w-[80px]">{h}</th>
+                <th key={h} className="p-4 text-center font-black text-slate-400 uppercase tracking-widest border-r border-slate-100 min-w-[80px] bg-slate-50/50">
+                  <div className="flex flex-col items-center gap-1">
+                    <span>{h.split(' - ')[0]}</span>
+                    {h.includes(' - ') && <span className="text-[8px] opacity-40 leading-none">to {h.split(' - ')[1]}</span>}
+                  </div>
+                </th>
               ))}
             </tr>
           </thead>
@@ -119,7 +139,10 @@ const MatrixTable = ({ title, headers, data, keyField, themeColor, onCellClick }
               <tr key={stat} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
                 <td className="p-4 text-left font-black text-slate-700 border-r border-slate-100 sticky left-0 bg-white z-10 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">{stat}</td>
                 {headers.map(h => {
-                  const matches = data.filter(d => d.status.toLowerCase() === stat.toLowerCase() && d[keyField] === h);
+                  const matches = data.filter(d => 
+                    (d.status || "").toLowerCase().trim() === stat.toLowerCase().trim() && 
+                    String(d[keyField] || "").toLowerCase().trim() === String(h || "").toLowerCase().trim()
+                  );
                   const count = matches.length;
                   const hasData = count > 0;
                   const cellBg = hasData ? (themeColor.includes('red') ? 'bg-red-50' : 'bg-emerald-50') : '';
@@ -142,6 +165,19 @@ const MatrixTable = ({ title, headers, data, keyField, themeColor, onCellClick }
                 })}
               </tr>
             ))}
+            {/* Total Row */}
+            <tr className="bg-slate-50/80 font-black">
+              <td className="p-4 text-left text-slate-900 border-r border-slate-100 sticky left-0 bg-slate-50 z-10">TOTAL</td>
+              {headers.map(h => {
+                const matches = data.filter(d => String(d[keyField] || "").toLowerCase().trim() === String(h || "").toLowerCase().trim());
+                const count = matches.length;
+                return (
+                  <td key={h} className="p-4 text-center text-slate-900 border-r border-slate-100">
+                    {count > 0 ? count : '-'}
+                  </td>
+                );
+              })}
+            </tr>
           </tbody>
         </table>
       </div>
@@ -705,7 +741,8 @@ export default function App() {
           console.log("Matrix Data Parsed Successfully:", data.data);
           // Merge the timestamp into the matrix data object
           setMatrixData({
-            ...data.data,
+            quick: data.data.quick || [],
+            schedule: data.data.schedule || [],
             timestamp: data.timestamp || new Date().toISOString()
           });
           showToast("Matrix Synchronized", "success");
@@ -1373,8 +1410,12 @@ export default function App() {
             <div className="p-8 max-w-7xl mx-auto">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
                 <div>
-                  <h2 className="text-3xl font-black text-slate-800 tracking-tighter">Live Order Matrix</h2>
-                  <p className="text-slate-500 font-bold mt-1">Real-time ageing & store-wise distribution</p>
+                  <h2 className="text-4xl font-black text-slate-900 tracking-tight">Matrix Intelligence</h2>
+                  <div className="flex items-center gap-4 mt-2">
+                    <p className="text-slate-500 font-bold">Real-time ageing & store-wise distribution</p>
+                    <div className="h-1 w-1 rounded-full bg-slate-300"></div>
+                    <p className="text-blue-600 font-black text-sm">{(matrixData?.quick?.length || 0) + (matrixData?.schedule?.length || 0)} Total Orders</p>
+                  </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="bg-white px-6 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
@@ -1395,6 +1436,40 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+                <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-100">
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="h-10 w-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
+                      <TrendingUp size={20} />
+                    </div>
+                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Quick Commerce</p>
+                  </div>
+                  <p className="text-4xl font-black text-slate-900">{matrixData?.quick?.length || 0}</p>
+                  <p className="text-xs font-bold text-slate-400 mt-1">Active ageing orders</p>
+                </div>
+                <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-100">
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                      <Clock size={20} />
+                    </div>
+                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Schedule Commerce</p>
+                  </div>
+                  <p className="text-4xl font-black text-slate-900">{matrixData?.schedule?.length || 0}</p>
+                  <p className="text-xs font-bold text-slate-400 mt-1">Scheduled delivery orders</p>
+                </div>
+                <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-100">
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                      <LayoutDashboard size={20} />
+                    </div>
+                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Total Volume</p>
+                  </div>
+                  <p className="text-4xl font-black text-slate-900">{(matrixData?.quick?.length || 0) + (matrixData?.schedule?.length || 0)}</p>
+                  <p className="text-xs font-bold text-slate-400 mt-1">Combined order flow</p>
+                </div>
+              </div>
+
               {!matrixData && !isMatrixLoading ? (
                 <div className="bg-white p-20 rounded-[3rem] shadow-xl border border-slate-100 text-center">
                   <div className="h-24 w-24 rounded-[2rem] bg-slate-50 text-slate-200 flex items-center justify-center mx-auto mb-6">
@@ -1402,12 +1477,15 @@ export default function App() {
                   </div>
                   <h3 className="text-2xl font-black text-slate-800 tracking-tight">No Matrix Data Available</h3>
                   <p className="text-slate-400 font-bold mt-2 max-w-md mx-auto">Run the bookmarklet on the source system to sync live data to this dashboard.</p>
-                  <button 
-                    onClick={fetchMatrixData}
-                    className="mt-8 px-8 py-4 bg-blue-600 text-white font-black rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all"
-                  >
-                    Try Refreshing
-                  </button>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-8">
+                    <button 
+                      onClick={fetchMatrixData}
+                      className="px-8 py-4 bg-blue-600 text-white font-black rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all flex items-center gap-2"
+                    >
+                      <RefreshCw size={20} className={cn(isMatrixLoading && "animate-spin")} />
+                      Try Refreshing
+                    </button>
+                  </div>
                 </div>
               ) : isMatrixLoading && !matrixData ? (
                 <div className="flex flex-col items-center justify-center py-40">
@@ -1455,7 +1533,7 @@ export default function App() {
                     
                     <MatrixTable 
                       title="Delivery Slot View" 
-                      headers={SLOTS} 
+                      headers={sortSlots([...new Set(matrixData?.schedule.map(d => d.slot) || [])] as string[])} 
                       data={matrixData?.schedule || []} 
                       keyField="slot" 
                       themeColor="bg-emerald-600" 
