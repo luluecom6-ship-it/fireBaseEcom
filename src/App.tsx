@@ -743,7 +743,9 @@ export default function App() {
           setMatrixData({
             quick: data.data.quick || [],
             schedule: data.data.schedule || [],
-            timestamp: data.timestamp || new Date().toISOString()
+            // Check both root and data object for timestamp
+            syncTime: data.timestamp || data.data?.timestamp || null,
+            timestamp: new Date().toISOString()
           });
           showToast("Matrix Synchronized", "success");
         } else {
@@ -1419,10 +1421,29 @@ export default function App() {
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="bg-white px-6 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
+                    <RefreshCw size={20} className="text-emerald-600" />
+                    <div>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sync Time</p>
+                      <p className="text-sm font-black text-slate-700">
+                        {(() => {
+                          if (!matrixData?.syncTime) return 'Never';
+                          const d = new Date(matrixData.syncTime);
+                          return isNaN(d.getTime()) ? matrixData.syncTime : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        })()}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="bg-white px-6 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
                     <Clock size={20} className="text-blue-600" />
                     <div>
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Last Updated</p>
-                      <p className="text-sm font-black text-slate-700">{matrixData?.timestamp ? new Date(matrixData.timestamp).toLocaleTimeString() : 'Never'}</p>
+                      <p className="text-sm font-black text-slate-700">
+                        {(() => {
+                          if (!matrixData?.timestamp) return 'Never';
+                          const d = new Date(matrixData.timestamp);
+                          return isNaN(d.getTime()) ? matrixData.timestamp : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        })()}
+                      </p>
                     </div>
                   </div>
                   <motion.button 

@@ -43,5 +43,6 @@ export interface MatrixData {
   quick: MatrixItem[];
   schedule: MatrixItem[];
   timestamp?: string;
+  syncTime?: string;
   cycleCount?: number;
 }
