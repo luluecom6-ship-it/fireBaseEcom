@@ -219,6 +219,7 @@ export default function App() {
   const [matrixData, setMatrixData] = useState<MatrixData | null>(null);
   const [isMatrixLoading, setIsMatrixLoading] = useState(false);
   const [matrixDetail, setMatrixDetail] = useState<{ title: string, stat: string, key: string, orders: MatrixItem[] } | null>(null);
+  const [matrixStoreFilter, setMatrixStoreFilter] = useState("All");
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
   const [isScanning, setIsScanning] = useState(false);
 
@@ -1410,17 +1411,58 @@ export default function App() {
           >
             <Header title="Matrix Intelligence" showBack />
             <div className="p-8 max-w-7xl mx-auto">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
-                <div>
-                  <h2 className="text-4xl font-black text-slate-900 tracking-tight">Matrix Intelligence</h2>
-                  <div className="flex items-center gap-4 mt-2">
-                    <p className="text-slate-500 font-bold">Real-time ageing & store-wise distribution</p>
-                    <div className="h-1 w-1 rounded-full bg-slate-300"></div>
-                    <p className="text-blue-600 font-black text-sm">{(matrixData?.quick?.length || 0) + (matrixData?.schedule?.length || 0)} Total Orders</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="bg-white px-6 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
+              {(() => {
+                const filteredQuick = matrixStoreFilter === "All" 
+                  ? (matrixData?.quick || []) 
+                  : (matrixData?.quick || []).filter(d => d.storeID.toLowerCase().includes(matrixStoreFilter.toLowerCase()));
+                const filteredSchedule = matrixStoreFilter === "All" 
+                  ? (matrixData?.schedule || []) 
+                  : (matrixData?.schedule || []).filter(d => d.storeID.toLowerCase().includes(matrixStoreFilter.toLowerCase()));
+                const totalOrders = filteredQuick.length + filteredSchedule.length;
+                const allStores = [...new Set([
+                  ...(matrixData?.quick.map(d => d.storeID) || []),
+                  ...(matrixData?.schedule.map(d => d.storeID) || [])
+                ])].sort();
+
+                return (
+                  <>
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
+                      <div>
+                        <h2 className="text-4xl font-black text-slate-900 tracking-tight">Matrix Intelligence</h2>
+                        <div className="flex items-center gap-4 mt-2">
+                          <p className="text-slate-500 font-bold">Real-time ageing & store-wise distribution</p>
+                          <div className="h-1 w-1 rounded-full bg-slate-300"></div>
+                          <p className="text-blue-600 font-black text-sm">{totalOrders} Total Orders</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        {/* Store Filter */}
+                        <div className="bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
+                          <Store size={18} className="text-blue-600" />
+                          <div className="flex flex-col">
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Filter by Store</p>
+                            <div className="flex items-center gap-2">
+                              <select 
+                                value={allStores.includes(matrixStoreFilter) ? matrixStoreFilter : "All"}
+                                onChange={(e) => setMatrixStoreFilter(e.target.value)}
+                                className="text-xs font-black text-slate-700 outline-none bg-transparent cursor-pointer"
+                              >
+                                <option value="All">All Stores</option>
+                                {allStores.map(s => <option key={s} value={s}>{s}</option>)}
+                              </select>
+                              <div className="h-4 w-[1px] bg-slate-100"></div>
+                              <input 
+                                type="text"
+                                placeholder="Type Store ID..."
+                                value={matrixStoreFilter === "All" ? "" : matrixStoreFilter}
+                                onChange={(e) => setMatrixStoreFilter(e.target.value || "All")}
+                                className="text-xs font-black text-slate-700 outline-none bg-transparent w-24"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="bg-white px-6 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
                     <RefreshCw size={20} className="text-emerald-600" />
                     <div>
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sync Time</p>
@@ -1466,7 +1508,7 @@ export default function App() {
                     </div>
                     <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Quick Commerce</p>
                   </div>
-                  <p className="text-4xl font-black text-slate-900">{matrixData?.quick?.length || 0}</p>
+                  <p className="text-4xl font-black text-slate-900">{filteredQuick.length}</p>
                   <p className="text-xs font-bold text-slate-400 mt-1">Active ageing orders</p>
                 </div>
                 <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-100">
@@ -1476,7 +1518,7 @@ export default function App() {
                     </div>
                     <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Schedule Commerce</p>
                   </div>
-                  <p className="text-4xl font-black text-slate-900">{matrixData?.schedule?.length || 0}</p>
+                  <p className="text-4xl font-black text-slate-900">{filteredSchedule.length}</p>
                   <p className="text-xs font-bold text-slate-400 mt-1">Scheduled delivery orders</p>
                 </div>
                 <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-100">
@@ -1486,7 +1528,7 @@ export default function App() {
                     </div>
                     <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Total Volume</p>
                   </div>
-                  <p className="text-4xl font-black text-slate-900">{(matrixData?.quick?.length || 0) + (matrixData?.schedule?.length || 0)}</p>
+                  <p className="text-4xl font-black text-slate-900">{totalOrders}</p>
                   <p className="text-xs font-bold text-slate-400 mt-1">Combined order flow</p>
                 </div>
               </div>
@@ -1527,7 +1569,7 @@ export default function App() {
                     <MatrixTable 
                       title="Hourly Ageing View" 
                       headers={AGE_BUCKETS} 
-                      data={matrixData?.quick || []} 
+                      data={filteredQuick} 
                       keyField="bucket" 
                       themeColor="bg-red-600" 
                       onCellClick={(stat, key, orders) => setMatrixDetail({ title: 'Quick Commerce Ageing', stat, key, orders })}
@@ -1535,8 +1577,8 @@ export default function App() {
                     
                     <MatrixTable 
                       title="Store Distribution View" 
-                      headers={([...new Set(matrixData?.quick.map(d => d.storeID) || [])] as string[]).sort()} 
-                      data={matrixData?.quick || []} 
+                      headers={([...new Set(filteredQuick.map(d => d.storeID))] as string[]).sort()} 
+                      data={filteredQuick} 
                       keyField="storeID" 
                       themeColor="bg-red-500" 
                       onCellClick={(stat, key, orders) => setMatrixDetail({ title: 'Quick Commerce Store', stat, key, orders })}
@@ -1554,8 +1596,8 @@ export default function App() {
                     
                     <MatrixTable 
                       title="Delivery Slot View" 
-                      headers={sortSlots([...new Set(matrixData?.schedule.map(d => d.slot) || [])] as string[])} 
-                      data={matrixData?.schedule || []} 
+                      headers={sortSlots([...new Set(filteredSchedule.map(d => d.slot))] as string[])} 
+                      data={filteredSchedule} 
                       keyField="slot" 
                       themeColor="bg-emerald-600" 
                       onCellClick={(stat, key, orders) => setMatrixDetail({ title: 'Schedule Commerce Slot', stat, key, orders })}
@@ -1563,8 +1605,8 @@ export default function App() {
                     
                     <MatrixTable 
                       title="Store Distribution View" 
-                      headers={([...new Set(matrixData?.schedule.map(d => d.storeID) || [])] as string[]).sort()} 
-                      data={matrixData?.schedule || []} 
+                      headers={([...new Set(filteredSchedule.map(d => d.storeID))] as string[]).sort()} 
+                      data={filteredSchedule} 
                       keyField="storeID" 
                       themeColor="bg-emerald-500" 
                       onCellClick={(stat, key, orders) => setMatrixDetail({ title: 'Schedule Commerce Store', stat, key, orders })}
@@ -1572,9 +1614,12 @@ export default function App() {
                   </div>
                 </div>
               )}
-            </div>
-          </motion.div>
-        )}
+            </>
+          );
+        })()}
+      </div>
+    </motion.div>
+  )}
         {page === "admin" && (user.role === "admin" || user.role === "supervisor") && (
           <motion.div 
             key="admin"
@@ -1612,8 +1657,8 @@ export default function App() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
                   { id: "orders", label: "Daily Orders", val: adminData.orders.filter(o => o.timestamp.includes(filterDate)).length, icon: Package, color: "text-blue-600", bg: "bg-blue-50" },
-                  { id: "active", label: "Active Staff", val: adminData.attendance.filter(a => a.type === "In" && a.timestamp.includes(filterDate)).length, icon: Users, color: "text-emerald-600", bg: "bg-emerald-50" },
-                  { id: "total", label: "Total Staff", val: adminData.users.length, icon: UserCheck, color: "text-purple-600", bg: "bg-purple-50" },
+                  { id: "active", label: "Active Staff", val: adminData.attendance.filter(a => a.type === "In" && a.timestamp.includes(filterDate) && !adminData.users.find(u => u.empId === a.empId && u.role === 'admin')).length, icon: Users, color: "text-emerald-600", bg: "bg-emerald-50" },
+                  { id: "total", label: "Total Staff", val: adminData.users.filter(u => u.role !== 'admin').length, icon: UserCheck, color: "text-purple-600", bg: "bg-purple-50" },
                   { id: "efficiency", label: "Efficiency", val: "94%", icon: TrendingUp, color: "text-amber-600", bg: "bg-amber-50" },
                 ].map((m, i) => (
                   <motion.div 
@@ -1687,7 +1732,7 @@ export default function App() {
                   <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-[10px] font-black uppercase tracking-widest">Live Status</span>
                 </div>
                 <div className="divide-y divide-slate-50">
-                  {adminData.users.map((u, i) => {
+                  {adminData.users.filter(u => u.role !== 'admin').map((u, i) => {
                     const inRecord = adminData.attendance.find(a => a.empId === u.empId && a.type === "In" && a.timestamp.includes(filterDate));
                     const outRecord = [...adminData.attendance].reverse().find(a => a.empId === u.empId && a.type === "Out" && a.timestamp.includes(filterDate));
                     
