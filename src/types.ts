@@ -1,9 +1,34 @@
 export interface User {
   empId: string;
   name: string;
-  role: 'picker' | 'supervisor' | 'driver' | 'admin' | 'user';
+  role: 'picker' | 'supervisor' | 'driver' | 'admin' | 'user' | 'store' | 'manager';
   storeId: string;
   status: string;
+}
+
+export interface AlertLog {
+  id: string;
+  timestamp: string;
+  orderId: string;
+  eventType: string;
+  storeId: string;
+  userId: string;
+  notificationTime: string;
+  storeStaffName: string;
+  status: string; // Pending / Acknowledged
+  escalation: string; // TRUE / FALSE
+  managerName: string;
+  statusTrigger: string;
+  managerStatus: string; // Pending / Accepted
+  orderCreatedAt: string;
+  // UI Helpers
+  triggeredAt: string; // mapped from timestamp
+  bucket: string; // mapped from statusTrigger
+}
+
+export interface ActiveAlert extends AlertLog {
+  buzzerStarted: boolean;
+  managerBuzzerStarted: boolean;
 }
 
 export interface AttendanceRecord {
@@ -45,4 +70,12 @@ export interface MatrixData {
   timestamp?: string;
   syncTime?: string;
   cycleCount?: number;
+}
+
+export interface EscalationRule {
+  id: string;
+  status: string;
+  bucket: string;
+  escalationUser: string;
+  isActive: boolean;
 }

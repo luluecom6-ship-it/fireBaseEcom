@@ -3,7 +3,24 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend, 
+  ResponsiveContainer, 
+  PieChart, 
+  Pie, 
+  Cell,
+  LineChart,
+  Line,
+  AreaChart,
+  Area
+} from "recharts";
 import { 
   Camera, 
   Package, 
@@ -23,15 +40,20 @@ import {
   History,
   LayoutDashboard,
   Store,
-  ScanLine
+  ScanLine,
+  BarChart3,
+  Activity,
+  Zap,
+  AlertTriangle,
+  PieChart as PieChartIcon
 } from "lucide-react";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/src/lib/utils";
-import { User, AttendanceRecord, OrderRecord, AdminData, MatrixData, MatrixItem } from "./types";
+import { User, AttendanceRecord, OrderRecord, AdminData, MatrixData, MatrixItem, EscalationRule, ActiveAlert, AlertLog } from "./types";
 
 // --- CONFIGURATION ---
-const API_URL = "https://script.google.com/macros/s/AKfycbxq26ohowEP2C4H1Z9CvevqAFiK2oG-viK75f7tGQPN6oucP0V8-rNNL3rRRBq0kMha/exec";
+const API_URL ="https://script.google.com/macros/s/AKfycby5sADpZlveo2Krlay1nEZ4HfxxdlqspzbORIYfY0vKwJtcNrZyHtJXhD69cC5nAXB8/exec";
 
 // --- UTILS ---
 const fixImageUrl = (url: string) => {
@@ -67,7 +89,7 @@ const sortSlots = (slots: string[]) => {
 // --- MATRIX CONSTANTS ---
 const AGE_BUCKETS = ["0-5Min", "5-10Min", "10-15Min", "15-20Min", "20-25Min", "25-30Min", "30-35Min", "35-40Min", "40-45Min", "45-50Min", "50-55Min", "55-60Min", "60Min+"];
 const SLOTS = ["8:00 AM - 9:59 AM", "10:00 AM - 11:59 AM", "12:00 PM - 1:59 PM", "2:00 PM - 3:59 PM", "4:00 PM - 5:59 PM", "6:00 PM - 7:59 PM", "8:00 PM - 9:59 PM", "10:00 PM - 11:59 PM", "12:00 AM - 1:59 AM"];
-const STATUSES = ["Created", "Picking with packing", "Picking with unassigned zone", "Parking", "Auditing", "Stored", "Going to Origin", "Transferring", "Going to destination", "In Route", "Delivering"];
+const STATUSES = ["Created", "Picking", "Picking with unassigned zone", "Parking", "Auditing", "Stored", "Going to Origin", "Transferring", "Going to destination", "In Route", "Delivering"];
 
 // --- COMPONENTS ---
 
@@ -114,10 +136,12 @@ const Loader = ({ loading, message = "Processing Live Data..." }: { loading: boo
 
 const MatrixTable = ({ title, headers, data, keyField, themeColor, onCellClick }: { title: string, headers: string[], data: MatrixItem[], keyField: keyof MatrixItem, themeColor: string, onCellClick: (stat: string, key: string, orders: MatrixItem[]) => void }) => {
   return (
-    <div className="bg-white rounded-[2.5rem] shadow-xl border border-slate-100 overflow-hidden mb-10">
-      <div className={cn("p-6 text-white font-black text-lg flex items-center justify-between", themeColor)}>
-        {title}
-        <span className="bg-white/20 px-3 py-1 rounded-full text-[10px] uppercase tracking-widest">{data.length} Orders</span>
+    <div className="bg-white rounded-[3rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.08)] border border-slate-100 overflow-hidden mb-12">
+      <div className={cn("p-8 text-white font-black text-xl flex items-center justify-between", themeColor)}>
+        <span className="tracking-tight">{title}</span>
+        <span className="bg-white/20 backdrop-blur-md px-4 py-1.5 rounded-full text-xs uppercase tracking-[0.2em] font-black border border-white/20">
+          {data.length} Orders
+        </span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-[10px]">
@@ -185,9 +209,108 @@ const MatrixTable = ({ title, headers, data, keyField, themeColor, onCellClick }
   );
 };
 
+const getAgeing = (triggeredAt: string) => {
+  if (!triggeredAt) return "N/A";
+  let start = new Date(triggeredAt).getTime();
+  
+  // Fallback for non-standard date strings
+  if (isNaN(start)) {
+    // Try to handle "M/D/YYYY, H:MM:SS AM/PM" format
+    const cleaned = triggeredAt.replace(/,/g, '');
+    start = new Date(cleaned).getTime();
+  }
+  
+  if (isNaN(start)) return "N/A";
+  const now = new Date().getTime();
+  const diff = Math.floor((now - start) / 1000);
+  const mins = Math.floor(diff / 60);
+  const secs = diff % 60;
+  return `${mins}m ${secs}s`;
+};
+
+const AlertHistory = ({ logs, onBack }: { logs: AlertLog[], onBack: () => void }) => {
+  return (
+    <div className="p-6 max-w-7xl mx-auto">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h2 className="text-3xl font-black tracking-tight">Alert History</h2>
+          <p className="text-slate-400 font-bold uppercase tracking-widest text-xs mt-1">Operational Audit Logs (Single Row Per Alert)</p>
+        </div>
+        <button onClick={onBack} className="p-3 bg-slate-100 rounded-2xl hover:bg-slate-200 transition-all">
+          <ChevronLeft size={24} />
+        </button>
+      </div>
+
+      <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-slate-50/50 border-b border-slate-100">
+                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Timestamp</th>
+                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Order ID</th>
+                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Store ID</th>
+                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ageing</th>
+                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Trigger Status</th>
+                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Staff Status</th>
+                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Staff Name</th>
+                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Escalation</th>
+                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Manager Status</th>
+                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Manager Name</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {logs.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="p-20 text-center text-slate-300 font-bold">No alert logs found</td>
+                </tr>
+              ) : (
+                [...logs].reverse().map(log => (
+                  <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="p-6 text-xs font-bold text-slate-500">{new Date(log.timestamp).toLocaleString()}</td>
+                    <td className="p-6 font-black text-slate-800">{log.orderId}</td>
+                    <td className="p-6 text-xs font-bold text-slate-500">{log.storeId}</td>
+                    <td className="p-6 text-xs font-bold text-slate-500">{getAgeing(log.orderCreatedAt)}</td>
+                    <td className="p-6 text-xs font-bold text-slate-500">{log.statusTrigger}</td>
+                    <td className="p-6">
+                      <span className={cn(
+                        "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest",
+                        log.status === "Acknowledged" ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
+                      )}>
+                        {log.status}
+                      </span>
+                    </td>
+                    <td className="p-6 text-xs font-bold text-slate-500">{log.storeStaffName || "--"}</td>
+                    <td className="p-6">
+                      <span className={cn(
+                        "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest",
+                        log.escalation === "TRUE" ? "bg-red-50 text-red-600" : "bg-slate-50 text-slate-400"
+                      )}>
+                        {log.escalation}
+                      </span>
+                    </td>
+                    <td className="p-6">
+                      <span className={cn(
+                        "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest",
+                        log.managerStatus === "Accepted" ? "bg-blue-50 text-blue-600" : "bg-slate-50 text-slate-400"
+                      )}>
+                        {log.managerStatus}
+                      </span>
+                    </td>
+                    <td className="p-6 text-xs font-bold text-slate-500">{log.managerName || "--"}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   // Navigation & Auth
-  const [page, setPage] = useState<"login" | "dashboard" | "upload" | "attendance" | "admin" | "search" | "matrix">("login");
+  const [page, setPage] = useState<"login" | "dashboard" | "upload" | "attendance" | "admin" | "search" | "matrix" | "analytics" | "alerts">("login");
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -216,12 +339,468 @@ export default function App() {
   const [duplicateErrorId, setDuplicateErrorId] = useState<string | null>(null);
   const [successOrder, setSuccessOrder] = useState<OrderRecord | null>(null);
   const [maxImages, setMaxImages] = useState(1);
-  const [matrixData, setMatrixData] = useState<MatrixData | null>(null);
+  const [matrixData, setMatrixData] = useState<MatrixData>({ quick: [], schedule: [] });
   const [isMatrixLoading, setIsMatrixLoading] = useState(false);
   const [matrixDetail, setMatrixDetail] = useState<{ title: string, stat: string, key: string, orders: MatrixItem[] } | null>(null);
   const [matrixStoreFilter, setMatrixStoreFilter] = useState("All");
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+
+  // Escalation States
+  const [escalationRules, setEscalationRules] = useState<EscalationRule[]>(() => {
+    const saved = localStorage.getItem('escalationRules');
+    return saved ? JSON.parse(saved) : [
+      { id: '1', status: 'Created', bucket: '15-20Min', escalationUser: 'Supervisor A', isActive: true },
+      { id: '2', status: 'Picking', bucket: '15-20Min', escalationUser: 'Supervisor B', isActive: true }
+    ];
+  });
+  const [activeAlerts, setActiveAlerts] = useState<ActiveAlert[]>([]);
+  const [alertLogs, setAlertLogs] = useState<AlertLog[]>([]);
+  const [adminHiddenAlerts, setAdminHiddenAlerts] = useState<string[]>([]);
+  const [isBuzzerMuted, setIsBuzzerMuted] = useState(false);
+  const pendingActionsRef = useRef<Set<string>>(new Set());
+  const notifiedEscalationsRef = useRef<Set<string>>(new Set());
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  // Resume audio context on any user interaction to bypass browser restrictions
+  useEffect(() => {
+    const resumeAudio = async () => {
+      if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume();
+        console.log("[Audio] Context Resumed via User Interaction");
+      }
+    };
+    window.addEventListener('click', resumeAudio);
+    window.addEventListener('touchstart', resumeAudio);
+    window.addEventListener('keydown', resumeAudio);
+    return () => {
+      window.removeEventListener('click', resumeAudio);
+      window.removeEventListener('touchstart', resumeAudio);
+      window.removeEventListener('keydown', resumeAudio);
+    };
+  }, []);
+
+  const fetchAlertLogs = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}?action=getAlertLogs`);
+      const response = await res.json();
+      if (response.status === "success" && Array.isArray(response.data)) {
+        // Map sheet headers back to AlertLog interface
+        // We handle both old and new parameter names for robustness
+        const mappedData: AlertLog[] = response.data.map((item: any) => {
+          const orderId = item.orderId || "";
+          const statusTrigger = item['Status Trigger'] || item.statusTrigger || "";
+          
+          return {
+            id: `${orderId}|${statusTrigger}`.toLowerCase().trim(),
+            timestamp: item.timestamp || "",
+            orderId: orderId,
+            eventType: item.eventType || "",
+            storeId: item.storeId || "",
+            userId: item.userId || "",
+            notificationTime: item['Notification Time'] || item.notificationTime || "",
+            storeStaffName: item['StoreStaff Name'] || item.storeStaffName || "",
+            status: item.Status || item.status || "Pending",
+            escalation: String(item.Escalation || item.escalation).toUpperCase() === "TRUE" ? "TRUE" : "FALSE",
+            managerName: item['Manager Name'] || item.managerName || "",
+            statusTrigger: statusTrigger,
+            managerStatus: item['Manager Status'] || item.managerStatus || "Pending",
+            orderCreatedAt: item.orderCreatedAt || item.timestamp || "",
+            // UI Helpers
+            triggeredAt: item.timestamp || "",
+            bucket: statusTrigger
+          };
+        });
+        
+        // CONSOLIDATION: Even if backend appends, we only want the latest state per alert
+        const consolidated: Record<string, AlertLog> = {};
+        
+        // Sort by timestamp ascending so later actions override earlier ones
+        const sortedLogs = [...mappedData].sort((a, b) => 
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        );
+
+        sortedLogs.forEach(log => {
+          if (!log.orderId || !log.statusTrigger) return;
+          const key = log.id;
+          if (!consolidated[key]) {
+            consolidated[key] = { ...log };
+          } else {
+            // Merge info: later logs (acknowledgments/escalations) take precedence
+            if (log.status === "Acknowledged") {
+              consolidated[key].status = "Acknowledged";
+              consolidated[key].storeStaffName = log.storeStaffName;
+            }
+            if (log.escalation === "TRUE") {
+              consolidated[key].escalation = "TRUE";
+            }
+            if (log.managerStatus === "Accepted") {
+              consolidated[key].managerStatus = "Accepted";
+              consolidated[key].managerName = log.managerName;
+            }
+            // Always keep the earliest timestamp as the "Triggered At"
+            if (new Date(log.timestamp).getTime() < new Date(consolidated[key].timestamp).getTime()) {
+              consolidated[key].timestamp = log.timestamp;
+              consolidated[key].triggeredAt = log.timestamp;
+            }
+          }
+        });
+
+        const finalLogs = Object.values(consolidated);
+        setAlertLogs(finalLogs);
+
+        // Check for new escalations to notify relevant users (like Pickers)
+        finalLogs.forEach(log => {
+          if (log.escalation === "TRUE" && !notifiedEscalationsRef.current.has(log.id)) {
+            const role = String(user?.role || "").toLowerCase();
+            const isStoreMatch = String(log.storeId || "").trim().toLowerCase() === String(user?.storeId || "").trim().toLowerCase();
+            const canSeeAllStores = role === 'admin' || role === 'supervisor';
+            
+            if (isStoreMatch || canSeeAllStores) {
+              showToast(`Alert Escalated to Manager: Order ${log.orderId}`, 'error');
+              notifiedEscalationsRef.current.add(log.id);
+            }
+          }
+        });
+
+        // Sync active alerts from consolidated logs
+        const active = finalLogs.filter((l: AlertLog) => {
+          const triggeredTime = new Date(l.timestamp).getTime();
+          const now = new Date().getTime();
+          const ageMins = isNaN(triggeredTime) ? 0 : (now - triggeredTime) / (1000 * 60);
+
+          // Auto-disable alerts older than 60 minutes
+          if (ageMins > 60) return false;
+
+          // Hide if fully handled
+          if (l.status === "Acknowledged" || l.managerStatus === "Accepted") return false;
+          
+          return true;
+        }).map((l: AlertLog) => {
+          const notificationTime = new Date(l.notificationTime).getTime();
+          const now = new Date().getTime();
+          const diffMins = isNaN(notificationTime) ? 0 : (now - notificationTime) / (1000 * 60);
+          
+          return {
+            ...l,
+            buzzerStarted: diffMins >= 2 && diffMins < 3,
+            managerBuzzerStarted: diffMins >= 3 && diffMins < 4
+          };
+        });
+        setActiveAlerts(active);
+      }
+    } catch (e) {
+      console.error("Failed to fetch alert logs", e);
+    }
+  }, [user?.role]);
+
+  const logAlertAction = async (alert: Partial<AlertLog>, action: 'trigger' | 'acknowledge' | 'escalate') => {
+    const actionKey = `${alert.orderId}|${alert.statusTrigger}|${action}`.toLowerCase().trim();
+    if (pendingActionsRef.current.has(actionKey)) return;
+    
+    pendingActionsRef.current.add(actionKey);
+    try {
+      const params = new URLSearchParams();
+      // Use logalertv2 as it contains the search-and-update logic for single rows
+      params.append('action', 'logalertv2');
+      
+      const now = new Date().toISOString();
+      
+      // Parameter names must match logAlertV2 in GAS exactly
+      params.append('timestamp', alert.timestamp || now);
+      params.append('orderId', alert.orderId || "");
+      params.append('eventType', action);
+      params.append('storeId', alert.storeId || "");
+      params.append('userId', user?.empId || "");
+      
+      let notificationTime = alert.notificationTime || now;
+      if (action === 'trigger') {
+        const triggerDate = new Date(now);
+        triggerDate.setMinutes(triggerDate.getMinutes() + 15);
+        notificationTime = triggerDate.toISOString();
+      }
+      params.append('notificationTime', notificationTime);
+      
+      if (action === 'acknowledge' && user?.role !== 'manager') {
+        params.append('storeStaffName', user?.name || "");
+        params.append('status', "Acknowledged");
+      } else {
+        params.append('storeStaffName', alert.storeStaffName || "");
+        params.append('status', alert.status || "Pending");
+      }
+
+      params.append('escalation', (action === 'escalate' || alert.escalation === 'TRUE') ? "TRUE" : "FALSE");
+      
+      if (action === 'acknowledge' && user?.role === 'manager') {
+        params.append('managerName', user?.name || "");
+        params.append('managerStatus', "Accepted");
+      } else {
+        params.append('managerName', alert.managerName || "");
+        params.append('managerStatus', alert.managerStatus || "Pending");
+      }
+
+      params.append('statusTrigger', alert.statusTrigger || "");
+      params.append('orderCreatedAt', alert.orderCreatedAt || "");
+
+      await fetch(API_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        body: params
+      });
+      
+      setTimeout(() => {
+        pendingActionsRef.current.delete(actionKey);
+        fetchAlertLogs();
+      }, 2000);
+    } catch (e) {
+      console.error("Failed to log alert action", e);
+      pendingActionsRef.current.delete(actionKey);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      fetchAdminData(false);
+      const interval = setInterval(() => fetchAdminData(false), 60000); // Refresh every minute
+      return () => clearInterval(interval);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (page === 'admin' || page === 'matrix' || page === 'alerts' || page === 'dashboard') {
+      fetchAlertLogs();
+      const interval = setInterval(fetchAlertLogs, 30000); // Poll every 30s
+      return () => clearInterval(interval);
+    }
+  }, [page, fetchAlertLogs]);
+
+  useEffect(() => {
+    localStorage.setItem('escalationRules', JSON.stringify(escalationRules));
+  }, [escalationRules]);
+
+  // --- LOGIC: Monitoring Matrix for Alerts ---
+  useEffect(() => {
+    if (!matrixData || !user) return;
+
+    const allOrders = matrixData.quick;
+    
+    escalationRules.filter(r => r.isActive).forEach(rule => {
+      const violatingOrders = allOrders.filter(order => 
+        (order.status || "").toLowerCase().trim() === rule.status.toLowerCase().trim() &&
+        (order.bucket || "").toLowerCase().trim() === rule.bucket.toLowerCase().trim()
+      );
+
+      violatingOrders.forEach(order => {
+        const role = String(user.role || "").toLowerCase();
+        const isStoreMatch = String(order.storeID || "").trim().toLowerCase() === String(user.storeId || "").trim().toLowerCase();
+        const canSeeAllStores = role === 'admin' || role === 'supervisor';
+
+        // Check if alert already exists in logs for this order+status
+        const alertKey = `${order.orderID}|${order.status}`.toLowerCase().trim();
+        const exists = alertLogs.find(a => a.id === alertKey);
+        const isPending = pendingActionsRef.current.has(`${alertKey}|trigger`);
+
+        if (!exists && !isPending) {
+          const now = new Date().toISOString();
+          const triggerDate = new Date(now);
+          triggerDate.setMinutes(triggerDate.getMinutes() + 15);
+          const notificationTime = triggerDate.toISOString();
+
+          // FIND CORRECT ORDER CREATION TIME FROM ADMIN DATA
+          const originalOrder = adminData.orders.find(o => 
+            String(o.orderId || o.orderID || "").toLowerCase().trim() === String(order.orderID || "").toLowerCase().trim()
+          );
+          const orderCreatedAt = originalOrder ? originalOrder.timestamp : (matrixData.timestamp || now);
+
+          const newAlert: AlertLog = {
+            id: alertKey,
+            timestamp: now,
+            orderId: order.orderID,
+            eventType: 'trigger',
+            storeId: order.storeID,
+            userId: user?.empId || "",
+            notificationTime: notificationTime,
+            storeStaffName: "",
+            status: "Pending",
+            escalation: "FALSE",
+            managerName: "",
+            statusTrigger: order.status,
+            managerStatus: "Pending",
+            orderCreatedAt: orderCreatedAt,
+            triggeredAt: now,
+            bucket: order.status
+          };
+          logAlertAction(newAlert, 'trigger');
+          
+          // Only show toast if it's relevant to this user
+          if (isStoreMatch || canSeeAllStores) {
+            const ageingText = getAgeing(orderCreatedAt);
+            showToast(`New Alert: Order ${order.orderID} (Ageing: ${ageingText})`, 'error');
+            if (!isBuzzerMuted) playBuzzer();
+          }
+        }
+      });
+    });
+  }, [matrixData, escalationRules, alertLogs, user, adminData.orders]);
+
+  // --- LOGIC: Alert Escalation Timer (Local UI feedback) ---
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (!user) return;
+      
+      const now = new Date().getTime();
+      let shouldPlayBuzzer = false;
+      
+      activeAlerts.forEach(alert => {
+        if (alert.status === "Acknowledged" || alert.managerStatus === "Accepted") return;
+        
+        const role = String(user.role || "").toLowerCase();
+        const isStoreMatch = String(alert.storeId || "").trim().toLowerCase() === String(user.storeId || "").trim().toLowerCase();
+        const canSeeAllStores = role === 'admin' || role === 'supervisor';
+
+        // Filter by store for buzzer/escalation (Only notify if relevant)
+        if (!isStoreMatch && !canSeeAllStores) return;
+
+        const triggeredAt = new Date(alert.timestamp).getTime();
+        if (isNaN(triggeredAt)) return;
+        
+        const diffMins = (now - triggeredAt) / (1000 * 60);
+
+        // 0-1 min: Immediate buzzer for new alerts (as requested)
+        if (diffMins < 1) {
+          shouldPlayBuzzer = true;
+        }
+
+        // Escalation logic (Only if not already escalated in backend)
+        // Escalates 3 mins after triggeredAt
+        const escalationKey = `${alert.id}|escalate`;
+        if (diffMins >= 3 && alert.escalation !== "TRUE" && !pendingActionsRef.current.has(escalationKey)) {
+          logAlertAction({ ...alert, escalation: "TRUE" }, 'escalate');
+          showToast(`Escalated: Order ${alert.orderId} to Manager`, 'error');
+        }
+
+        // 2+ mins after triggeredAt: Buzzer for Picker/Store/Supervisor
+        // We keep it buzzing until acknowledged
+        if (diffMins >= 2) {
+          if (!alert.buzzerStarted && diffMins < 3) {
+            setActiveAlerts(prev => prev.map(a => a.id === alert.id ? { ...a, buzzerStarted: true } : a));
+          }
+          
+          if (role !== 'admin') {
+            // Picker, Store, and Supervisor always buzzer after 2 mins
+            if (['picker', 'store', 'supervisor'].includes(role)) {
+              shouldPlayBuzzer = true;
+            }
+          }
+        }
+
+        // 3+ mins after triggeredAt: Buzzer for Manager/Supervisor
+        if (diffMins >= 3) {
+          if (!alert.managerBuzzerStarted && diffMins < 4) {
+            setActiveAlerts(prev => prev.map(a => a.id === alert.id ? { ...a, managerBuzzerStarted: true } : a));
+          }
+          
+          if (role !== 'admin') {
+            // Manager and Supervisor buzzer after 3 mins (escalation phase)
+            if (['manager', 'supervisor'].includes(role)) {
+              shouldPlayBuzzer = true;
+            }
+          }
+        }
+      });
+
+      if (shouldPlayBuzzer && !isBuzzerMuted && activeAlerts.length > 0) {
+        console.log(`[Buzzer] Playing for role: ${user.role}`);
+        playBuzzer();
+      }
+    }, 10000);
+
+    return () => clearInterval(timer);
+  }, [activeAlerts, isBuzzerMuted, user]);
+
+  const playBuzzer = async () => {
+    try {
+      console.log("[Buzzer] Attempting to play sound...");
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      
+      const context = audioContextRef.current;
+      if (context.state === 'suspended') {
+        console.log("[Buzzer] Context suspended, attempting to resume...");
+        await context.resume();
+      }
+      
+      if (context.state !== 'running') {
+        console.warn("[Buzzer] Audio Context is not running. State:", context.state);
+        return;
+      }
+      
+      const playTone = (freq: number, start: number, duration: number) => {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        
+        oscillator.type = 'square'; // More aggressive sound
+        oscillator.frequency.setValueAtTime(freq, start);
+        oscillator.frequency.exponentialRampToValueAtTime(freq * 1.5, start + duration);
+        
+        gain.gain.setValueAtTime(0.2, start);
+        gain.gain.exponentialRampToValueAtTime(0.01, start + duration);
+        
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        
+        oscillator.start(start);
+        oscillator.stop(start + duration);
+      };
+
+      // Play a double-beep pattern
+      const now = context.currentTime;
+      playTone(440, now, 0.3);
+      playTone(660, now + 0.4, 0.3);
+      playTone(880, now + 0.8, 0.5);
+      console.log("[Buzzer] Sound played successfully");
+      
+    } catch (e) {
+      console.warn("Audio context failed", e);
+    }
+  };
+
+  const handleAcceptAlert = (alertId: string) => {
+    const alert = activeAlerts.find(a => a.id === alertId);
+    if (alert && user) {
+      const role = String(user.role || "").toLowerCase();
+      if (role === 'admin') {
+        // Admin only hides it for themselves locally
+        setAdminHiddenAlerts(prev => [...prev, alertId]);
+        showToast("Alert Hidden for Admin", "info");
+      } else {
+        // Update local state immediately for better UX
+        const updatedAlert = { ...alert };
+        if (role === 'manager') {
+          updatedAlert.managerStatus = "Accepted";
+          updatedAlert.managerName = user.name;
+        } else {
+          updatedAlert.status = "Acknowledged";
+          updatedAlert.storeStaffName = user.name;
+        }
+        
+        setActiveAlerts(prev => prev.filter(a => a.id !== alertId));
+        setAlertLogs(prev => prev.map(l => l.id === alertId ? updatedAlert : l));
+        
+        logAlertAction(updatedAlert, 'acknowledge');
+        showToast(role === 'manager' ? "Alert Accepted by Manager" : "Alert Acknowledged", "success");
+      }
+    }
+  };
+
+  const handleManualEscalate = (alertId: string) => {
+    const alert = activeAlerts.find(a => a.id === alertId);
+    if (alert) {
+      logAlertAction({ ...alert, escalation: "TRUE" }, 'escalate');
+      showToast("Alert Manually Escalated to Manager", "error");
+    }
+  };
 
   const startScanner = useCallback(() => {
     setIsScanning(true);
@@ -301,8 +880,8 @@ export default function App() {
   // --- LOGIC: Auto-Refresh Matrix ---
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | undefined;
-    if (page === "matrix") {
-      interval = setInterval(fetchMatrixData, 300000); // 5 minutes
+    if (page === "matrix" || page === "alerts" || page === "dashboard") {
+      interval = setInterval(() => fetchMatrixData(false), 30000); // 30 seconds (silent)
     }
     return () => {
       if (interval) clearInterval(interval);
@@ -620,9 +1199,10 @@ export default function App() {
     setSearchResults([]);
     try {
       const res = await fetch(`${API_URL}?action=getAdminData`);
-      const data: AdminData = await res.json();
+      const response = await res.json();
+      const data: AdminData = (response && response.data) || { users: [], attendance: [], orders: [] };
       const query = order.orderId.toLowerCase();
-      let filtered = data.orders.filter(o => String(o.orderId).toLowerCase().includes(query));
+      let filtered = (data.orders || []).filter(o => String(o.orderId).toLowerCase().includes(query));
       
       // Driver RBAC: Only see own uploads
       if (user?.role === "driver") {
@@ -643,12 +1223,13 @@ export default function App() {
     try {
       // Fetch fresh data for search
       const res = await fetch(`${API_URL}?action=getAdminData`);
-      const data: AdminData = await res.json();
+      const response = await res.json();
+      const data: AdminData = (response && response.data) || { users: [], attendance: [], orders: [] };
       
       const query = searchQuery.trim().toLowerCase();
       
       // Flexible search: check if query is contained in orderId
-      let filtered = data.orders.filter(order => {
+      let filtered = (data.orders || []).filter(order => {
         const orderId = String(order.orderId).toLowerCase();
         return orderId.includes(query);
       });
@@ -695,10 +1276,12 @@ export default function App() {
     }
   };
 
-  const fetchAdminData = async () => {
-    if (!user || (user.role !== 'admin' && user.role !== 'supervisor')) return;
-    showToast("Refreshing Admin Data...", "info");
-    setLoading(true);
+  const fetchAdminData = async (isManual = false) => {
+    if (!user || (user.role !== 'admin' && user.role !== 'supervisor' && user.role !== 'manager' && user.role !== 'store')) return;
+    if (isManual) {
+      showToast("Refreshing Admin Data...", "info");
+      setLoading(true);
+    }
     try {
       const baseUrl = API_URL.trim();
       const urlObj = new URL(baseUrl);
@@ -706,19 +1289,28 @@ export default function App() {
       urlObj.searchParams.set('_t', Date.now().toString());
       
       const res = await fetch(urlObj.toString());
-      const data = await res.json();
-      setAdminData(data);
-      showToast("Data Refreshed Successfully", "success");
-    } catch (e) { 
-      alert("Admin sync failed"); 
+      const response = await res.json();
+      if (response && response.status === "success" && response.data) {
+        setAdminData({
+          users: response.data.users || [],
+          attendance: response.data.attendance || [],
+          orders: response.data.orders || []
+        });
+        if (isManual) showToast("Data Refreshed Successfully", "success");
+      } else {
+        if (isManual) showToast("Failed to fetch admin data: " + (response?.message || "Unknown error"), "error");
+      }
+    } catch (e) {
+      console.error("Admin sync failed", e);
+      if (isManual) showToast("Admin sync failed: Connection Error", "error");
     } finally {
-      setLoading(false);
+      if (isManual) setLoading(false);
     }
   };
 
-  const fetchMatrixData = async () => {
+  const fetchMatrixData = async (isManual = false) => {
     console.log("--- Matrix Sync Started ---");
-    showToast("Syncing Matrix Data...", "info");
+    if (isManual) showToast("Syncing Matrix Data...", "info");
     setIsMatrixLoading(true);
     try {
       // Use robust URL construction to prevent "Invalid Action" errors
@@ -738,30 +1330,30 @@ export default function App() {
       // Check if the response is actually JSON before parsing
       if (text.trim().startsWith('{') || text.trim().startsWith('[')) {
         const data = JSON.parse(text);
-        if (data.status === "success") {
+        if (data.status === "success" && data.data) {
           console.log("Matrix Data Parsed Successfully:", data.data);
           // Merge the timestamp into the matrix data object
           setMatrixData({
             quick: data.data.quick || [],
             schedule: data.data.schedule || [],
-            // Check both root and data object for timestamp
+            // Use the server's generation timestamp if available
             syncTime: data.timestamp || data.data?.timestamp || null,
-            timestamp: new Date().toISOString()
+            timestamp: data.timestamp || data.data?.timestamp || new Date().toISOString()
           });
-          showToast("Matrix Synchronized", "success");
+          if (isManual) showToast("Matrix Synchronized", "success");
         } else {
           console.error("Server returned error status:", data);
-          showToast("Sync Failed: Server Error", "error");
+          if (isManual) showToast("Sync Failed: Server Error", "error");
         }
       } else {
         // This handles the "Invalid Action" plain text response
         console.error("Server returned non-JSON response. This usually means the 'getMatrixData' action is not recognized or not deployed in your Apps Script.");
         console.log("Server Message:", text);
-        showToast("Sync Failed: Invalid Response", "error");
+        if (isManual) showToast("Sync Failed: Invalid Response", "error");
       }
     } catch (e) {
       console.error("Matrix sync failed with exception:", e);
-      showToast("Sync Failed: Connection Error", "error");
+      if (isManual) showToast("Sync Failed: Connection Error", "error");
     } finally {
       setIsMatrixLoading(false);
       console.log("--- Matrix Sync Finished ---");
@@ -816,7 +1408,163 @@ export default function App() {
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-blue-100">
       <Loader loading={loading} />
       
+      {/* Active Alerts Overlay */}
+      {user && (
+        <AnimatePresence>
+          {(() => {
+            const filtered = activeAlerts.filter(a => {
+              const role = String(user.role || "").toLowerCase();
+              // Admin specific local hide
+              if (role === 'admin') {
+                if (adminHiddenAlerts.includes(a.id)) return false;
+                return true; // Admin sees everything until hidden
+              }
+              
+              if (a.status === "Acknowledged" || a.managerStatus === "Accepted") return false;
+              
+              // Filter by store - Admin and Supervisor see all stores
+              const isStoreMatch = String(a.storeId || "").trim().toLowerCase() === String(user.storeId || "").trim().toLowerCase();
+              const canSeeAllStores = role === 'admin' || role === 'supervisor';
+              if (!isStoreMatch && !canSeeAllStores) return false;
+
+              // Filter by role
+              if (role === 'manager') return a.escalation === "TRUE";
+              if (['picker', 'store', 'supervisor'].includes(role)) return true;
+              return false;
+            });
+            
+            // Unique by orderId, keeping the latest one
+            const unique: ActiveAlert[] = [];
+            const seen = new Set();
+            [...filtered].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).forEach(a => {
+              if (!seen.has(a.orderId)) {
+                unique.push(a);
+                seen.add(a.orderId);
+              }
+            });
+            return unique;
+          })().length > 0 && (
+            <div className="fixed bottom-24 left-6 right-6 z-[20000] space-y-3 pointer-events-none">
+              {(() => {
+                const filtered = activeAlerts.filter(a => {
+                  const role = String(user.role || "").toLowerCase();
+                  if (role === 'admin') {
+                    if (adminHiddenAlerts.includes(a.id)) return false;
+                    return true;
+                  }
+                  if (a.status === "Acknowledged" || a.managerStatus === "Accepted") return false;
+                  
+                  // Filter by store - Admin and Supervisor see all stores
+                  const isStoreMatch = String(a.storeId || "").trim().toLowerCase() === String(user.storeId || "").trim().toLowerCase();
+                  const canSeeAllStores = role === 'admin' || role === 'supervisor';
+                  if (!isStoreMatch && !canSeeAllStores) return false;
+
+                  if (role === 'manager') return a.escalation === "TRUE";
+                  if (['picker', 'store', 'supervisor'].includes(role)) return true;
+                  return false;
+                });
+                
+                const unique: ActiveAlert[] = [];
+                const seen = new Set();
+                [...filtered].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).forEach(a => {
+                  if (!seen.has(a.orderId)) {
+                    unique.push(a);
+                    seen.add(a.orderId);
+                  }
+                });
+                return unique;
+              })().slice(-3).map((alert) => (
+                <motion.div 
+                  key={alert.id}
+                  initial={{ opacity: 0, x: -100 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  className={cn(
+                    "p-5 rounded-[2rem] shadow-2xl border-4 flex items-center gap-4 pointer-events-auto backdrop-blur-md",
+                    alert.escalation === "TRUE" ? "bg-red-600/90 border-red-400 text-white" : (alert.buzzerStarted || alert.managerBuzzerStarted ? "bg-amber-500/90 border-amber-300 text-white" : "bg-white/90 border-blue-100 text-slate-800")
+                  )}
+                >
+                  <div className={cn("h-12 w-12 rounded-2xl flex items-center justify-center animate-pulse", alert.escalation === "TRUE" ? "bg-white/20" : "bg-blue-50 text-blue-600")}>
+                    <AlertTriangle size={24} />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-[10px] font-black uppercase tracking-widest opacity-60">
+                      {alert.escalation === "TRUE" ? "🔥 Escalated Alert" : (alert.buzzerStarted || alert.managerBuzzerStarted ? "🔔 Critical Alert" : "⚠️ New Alert")}
+                    </p>
+                    <h4 className="font-black text-sm tracking-tight">Order {alert.orderId}</h4>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      <span className="text-[9px] font-black uppercase bg-black/10 px-2 py-0.5 rounded-full">Store : {alert.storeId}</span>
+                      <span className="text-[9px] font-black uppercase bg-black/10 px-2 py-0.5 rounded-full">Ageing: {getAgeing(alert.orderCreatedAt)}</span>
+                    </div>
+                    {alert.status === "Acknowledged" && (
+                      <p className="text-[8px] font-black text-emerald-500 uppercase tracking-widest mt-1">✓ Acknowledged by {alert.storeStaffName}</p>
+                    )}
+                    {alert.managerStatus === "Accepted" && (
+                      <p className="text-[8px] font-black text-blue-500 uppercase tracking-widest mt-1">✓ Accepted by Manager {alert.managerName}</p>
+                    )}
+                    <p className="text-[10px] font-bold opacity-80 mt-1">{alert.statusTrigger} • {alert.status}</p>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2 pointer-events-auto">
+                    {String(user.role || "").toLowerCase() === 'admin' ? (
+                      <>
+                        <button 
+                          onClick={() => handleAcceptAlert(alert.id)}
+                          className="px-4 py-2 bg-slate-200 text-slate-700 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-300 transition-all"
+                        >
+                          Hide
+                        </button>
+                        {alert.escalation !== "TRUE" && (
+                          <button 
+                            onClick={() => handleManualEscalate(alert.id)}
+                            className="px-4 py-2 bg-red-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg shadow-red-200"
+                          >
+                            Escalate
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <button 
+                          onClick={() => handleAcceptAlert(alert.id)}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
+                        >
+                          {String(user.role || "").toLowerCase() === 'manager' ? 'Accept' : 'Acknowledge'}
+                        </button>
+                        {(String(user.role || "").toLowerCase() === 'supervisor' || String(user.role || "").toLowerCase() === 'manager') && alert.escalation !== "TRUE" && (
+                          <button 
+                            onClick={() => handleManualEscalate(alert.id)}
+                            className="px-4 py-2 bg-red-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg shadow-red-200"
+                          >
+                            Escalate
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </AnimatePresence>
+      )}
+
       <AnimatePresence mode="wait">
+        {page === "alerts" && user?.role !== "driver" && (
+          <motion.div 
+            key="alerts"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+          >
+            <AlertHistory 
+              logs={alertLogs.filter(log => {
+                if (user?.role === 'admin' || user?.role === 'supervisor') return true;
+                return log.storeId === user?.storeId;
+              })} 
+              onBack={() => setPage("dashboard")} 
+            />
+          </motion.div>
+        )}
         {page === "login" && (
           <motion.div 
             key="login"
@@ -1044,7 +1792,7 @@ export default function App() {
                 <motion.div 
                   whileHover={{ y: -5 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={async () => { await fetchAdminData(); navigateTo("admin"); }}
+                  onClick={async () => { await fetchAdminData(true); navigateTo("admin"); }}
                   className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 flex items-center gap-6 cursor-pointer group"
                 >
                   <div className="h-20 w-20 rounded-3xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all duration-300">
@@ -1061,23 +1809,61 @@ export default function App() {
               )}
 
               {user.role !== "driver" && (
-                <motion.div 
-                  whileHover={{ y: -5 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={async () => { await fetchMatrixData(); navigateTo("matrix"); }}
-                  className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 flex items-center gap-6 cursor-pointer group"
-                >
-                  <div className="h-20 w-20 rounded-3xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition-all duration-300">
-                    <LayoutDashboard size={36} />
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="font-black text-slate-800 text-xl tracking-tight">Matrix Dashboard</h4>
-                    <p className="text-slate-500 text-sm font-bold mt-1">Live order matrix & ageing</p>
-                  </div>
-                  <div className="h-10 w-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-amber-50 group-hover:text-amber-600 transition-all">
-                    <ArrowRight size={20} />
-                  </div>
-                </motion.div>
+                <>
+                  <motion.div 
+                    whileHover={{ y: -5 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => { fetchAlertLogs(); navigateTo("alerts"); }}
+                    className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 flex items-center gap-6 cursor-pointer group"
+                  >
+                    <div className="h-20 w-20 rounded-3xl bg-red-50 text-red-600 flex items-center justify-center group-hover:bg-red-600 group-hover:text-white transition-all duration-300">
+                      <History size={36} />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-black text-slate-800 text-xl tracking-tight">Alert History</h4>
+                      <p className="text-slate-500 text-sm font-bold mt-1">Audit logs of all notifications</p>
+                    </div>
+                    <div className="h-10 w-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-red-50 group-hover:text-red-600 transition-all">
+                      <ArrowRight size={20} />
+                    </div>
+                  </motion.div>
+
+                  <motion.div 
+                    whileHover={{ y: -5 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={async () => { await fetchMatrixData(true); navigateTo("matrix"); }}
+                    className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 flex items-center gap-6 cursor-pointer group"
+                  >
+                    <div className="h-20 w-20 rounded-3xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition-all duration-300">
+                      <LayoutDashboard size={36} />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-black text-slate-800 text-xl tracking-tight">Matrix Dashboard</h4>
+                      <p className="text-slate-500 text-sm font-bold mt-1">Live order matrix & ageing</p>
+                    </div>
+                    <div className="h-10 w-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-amber-50 group-hover:text-amber-600 transition-all">
+                      <ArrowRight size={20} />
+                    </div>
+                  </motion.div>
+
+                  <motion.div 
+                    whileHover={{ y: -5 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={async () => { await fetchMatrixData(true); navigateTo("analytics"); }}
+                    className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 flex items-center gap-6 cursor-pointer group"
+                  >
+                    <div className="h-20 w-20 rounded-3xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all duration-300">
+                      <BarChart3 size={36} />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-black text-slate-800 text-xl tracking-tight">Operational Analytics</h4>
+                      <p className="text-slate-500 text-sm font-bold mt-1">Advanced insights & trends</p>
+                    </div>
+                    <div className="h-10 w-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-blue-50 group-hover:text-blue-600 transition-all">
+                      <ArrowRight size={20} />
+                    </div>
+                  </motion.div>
+                </>
               )}
             </div>
 
@@ -1420,118 +2206,150 @@ export default function App() {
                   : (matrixData?.schedule || []).filter(d => d.storeID.toLowerCase().includes(matrixStoreFilter.toLowerCase()));
                 const totalOrders = filteredQuick.length + filteredSchedule.length;
                 const allStores = [...new Set([
-                  ...(matrixData?.quick.map(d => d.storeID) || []),
-                  ...(matrixData?.schedule.map(d => d.storeID) || [])
+                  ...(matrixData?.quick || []).map(d => d.storeID),
+                  ...(matrixData?.schedule || []).map(d => d.storeID)
                 ])].sort();
 
                 return (
                   <>
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
-                      <div>
-                        <h2 className="text-4xl font-black text-slate-900 tracking-tight">Matrix Intelligence</h2>
-                        <div className="flex items-center gap-4 mt-2">
-                          <p className="text-slate-500 font-bold">Real-time ageing & store-wise distribution</p>
-                          <div className="h-1 w-1 rounded-full bg-slate-300"></div>
-                          <p className="text-blue-600 font-black text-sm">{totalOrders} Total Orders</p>
+                    <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-8 mb-12">
+                      <div className="relative">
+                        <h2 className="text-5xl font-black text-slate-900 tracking-tighter leading-none">Matrix Intelligence</h2>
+                        <div className="flex items-center gap-4 mt-4">
+                          <p className="text-slate-500 font-bold text-lg">Real-time ageing & store-wise distribution</p>
+                          <div className="h-1.5 w-1.5 rounded-full bg-blue-500"></div>
+                          <p className="text-blue-600 font-black text-lg tracking-tight">{totalOrders} Total Orders</p>
                         </div>
                       </div>
-                      <div className="flex flex-wrap items-center gap-3">
-                        {/* Store Filter */}
-                        <div className="bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
-                          <Store size={18} className="text-blue-600" />
+
+                      <div className="flex flex-wrap items-center gap-4">
+                        {/* Store Filter Pill */}
+                        <div className="bg-slate-200/50 backdrop-blur-md px-6 py-3 rounded-full border border-white/50 shadow-inner flex items-center gap-4">
+                          <div className="p-2 bg-blue-600 rounded-lg text-white shadow-lg shadow-blue-200">
+                            <Store size={18} />
+                          </div>
                           <div className="flex flex-col">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Filter by Store</p>
-                            <div className="flex items-center gap-2">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Filter by Store</p>
+                            <div className="flex items-center gap-3">
                               <select 
                                 value={allStores.includes(matrixStoreFilter) ? matrixStoreFilter : "All"}
                                 onChange={(e) => setMatrixStoreFilter(e.target.value)}
-                                className="text-xs font-black text-slate-700 outline-none bg-transparent cursor-pointer"
+                                className="text-sm font-black text-slate-800 outline-none bg-transparent cursor-pointer appearance-none pr-4"
                               >
                                 <option value="All">All Stores</option>
                                 {allStores.map(s => <option key={s} value={s}>{s}</option>)}
                               </select>
-                              <div className="h-4 w-[1px] bg-slate-100"></div>
+                              <div className="h-4 w-[1px] bg-slate-300"></div>
                               <input 
                                 type="text"
                                 placeholder="Type Store ID..."
                                 value={matrixStoreFilter === "All" ? "" : matrixStoreFilter}
                                 onChange={(e) => setMatrixStoreFilter(e.target.value || "All")}
-                                className="text-xs font-black text-slate-700 outline-none bg-transparent w-24"
+                                className="text-sm font-black text-slate-800 outline-none bg-transparent w-28 placeholder:text-slate-400"
                               />
                             </div>
                           </div>
                         </div>
 
-                        <div className="bg-white px-6 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
-                    <RefreshCw size={20} className="text-emerald-600" />
-                    <div>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sync Time</p>
-                      <p className="text-sm font-black text-slate-700">
-                        {(() => {
-                          if (!matrixData?.syncTime) return 'Never';
-                          const d = new Date(matrixData.syncTime);
-                          return isNaN(d.getTime()) ? matrixData.syncTime : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                        })()}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="bg-white px-6 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
-                    <Clock size={20} className="text-blue-600" />
-                    <div>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Last Updated</p>
-                      <p className="text-sm font-black text-slate-700">
-                        {(() => {
-                          if (!matrixData?.timestamp) return 'Never';
-                          const d = new Date(matrixData.timestamp);
-                          return isNaN(d.getTime()) ? matrixData.timestamp : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                        })()}
-                      </p>
-                    </div>
-                  </div>
-                  <motion.button 
-                    whileTap={{ scale: 0.95 }}
-                    onClick={fetchMatrixData}
-                    disabled={isMatrixLoading}
-                    className="h-14 w-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all disabled:bg-slate-300 matrix-refresh-btn"
-                  >
-                    <RefreshCw size={24} className={cn(isMatrixLoading && "animate-spin")} />
-                  </motion.button>
-                </div>
-              </div>
+                        {/* Sync Time Pill */}
+                        <div className="bg-slate-200/50 backdrop-blur-md px-6 py-3 rounded-full border border-white/50 shadow-inner flex items-center gap-4">
+                          <div className="p-2 bg-emerald-500 rounded-lg text-white shadow-lg shadow-emerald-200">
+                            <RefreshCw size={18} />
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Sync Time</p>
+                            <p className="text-sm font-black text-slate-800">
+                              {(() => {
+                                if (!matrixData?.syncTime) return 'Never';
+                                const d = new Date(matrixData.syncTime);
+                                return isNaN(d.getTime()) ? matrixData.syncTime : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                              })()}
+                            </p>
+                          </div>
+                        </div>
 
-              {/* Summary Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-                <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-100">
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="h-10 w-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
-                      <TrendingUp size={20} />
+                        {/* Last Updated Pill */}
+                        <div className="bg-slate-200/50 backdrop-blur-md px-6 py-3 rounded-full border border-white/50 shadow-inner flex items-center gap-4">
+                          <div className="p-2 bg-blue-500 rounded-lg text-white shadow-lg shadow-blue-200">
+                            <Clock size={18} />
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Last Updated</p>
+                            <p className="text-sm font-black text-slate-800">
+                              {(() => {
+                                if (!matrixData?.timestamp) return 'Never';
+                                const d = new Date(matrixData.timestamp);
+                                return isNaN(d.getTime()) ? matrixData.timestamp : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                              })()}
+                            </p>
+                          </div>
+                        </div>
+
+                        <motion.button 
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => fetchMatrixData(true)}
+                          disabled={isMatrixLoading}
+                          className="h-16 w-16 rounded-3xl bg-blue-600 text-white flex items-center justify-center shadow-2xl shadow-blue-300 hover:bg-blue-700 transition-all disabled:bg-slate-300"
+                        >
+                          <RefreshCw size={28} className={cn(isMatrixLoading && "animate-spin")} />
+                        </motion.button>
+                      </div>
                     </div>
-                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Quick Commerce</p>
-                  </div>
-                  <p className="text-4xl font-black text-slate-900">{filteredQuick.length}</p>
-                  <p className="text-xs font-bold text-slate-400 mt-1">Active ageing orders</p>
-                </div>
-                <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-100">
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                      <Clock size={20} />
+
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
+                      <motion.div 
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1 }}
+                        className="bg-white/80 backdrop-blur-xl p-10 rounded-[3rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1)] border border-white relative overflow-hidden group"
+                      >
+                        <div className="flex items-center gap-6 mb-8">
+                          <div className="h-14 w-14 rounded-2xl bg-red-50 text-red-500 flex items-center justify-center shadow-inner">
+                            <TrendingUp size={28} />
+                          </div>
+                          <p className="text-sm font-black text-slate-400 uppercase tracking-[0.2em]">Quick Commerce</p>
+                        </div>
+                        <p className="text-7xl font-black text-slate-900 tracking-tighter">{filteredQuick.length}</p>
+                        <p className="text-sm font-bold text-slate-400 mt-2">Active ageing orders</p>
+                        <div className="absolute -right-4 -bottom-4 h-24 w-24 bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity blur-2xl"></div>
+                      </motion.div>
+
+                      <motion.div 
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 }}
+                        className="bg-white/80 backdrop-blur-xl p-10 rounded-[3rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1)] border border-white relative overflow-hidden group"
+                      >
+                        <div className="flex items-center gap-6 mb-8">
+                          <div className="h-14 w-14 rounded-2xl bg-emerald-50 text-emerald-500 flex items-center justify-center shadow-inner">
+                            <Clock size={28} />
+                          </div>
+                          <p className="text-sm font-black text-slate-400 uppercase tracking-[0.2em]">Schedule Commerce</p>
+                        </div>
+                        <p className="text-7xl font-black text-slate-900 tracking-tighter">{filteredSchedule.length}</p>
+                        <p className="text-sm font-bold text-slate-400 mt-2">Scheduled delivery orders</p>
+                        <div className="absolute -right-4 -bottom-4 h-24 w-24 bg-emerald-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity blur-2xl"></div>
+                      </motion.div>
+
+                      <motion.div 
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3 }}
+                        className="bg-white/80 backdrop-blur-xl p-10 rounded-[3rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1)] border border-white relative overflow-hidden group"
+                      >
+                        <div className="flex items-center gap-6 mb-8">
+                          <div className="h-14 w-14 rounded-2xl bg-blue-50 text-blue-500 flex items-center justify-center shadow-inner">
+                            <LayoutDashboard size={28} />
+                          </div>
+                          <p className="text-sm font-black text-slate-400 uppercase tracking-[0.2em]">Total Volume</p>
+                        </div>
+                        <p className="text-7xl font-black text-slate-900 tracking-tighter">{totalOrders}</p>
+                        <p className="text-sm font-bold text-slate-400 mt-2">Combined order flow</p>
+                        <div className="absolute -right-4 -bottom-4 h-24 w-24 bg-blue-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity blur-2xl"></div>
+                      </motion.div>
                     </div>
-                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Schedule Commerce</p>
-                  </div>
-                  <p className="text-4xl font-black text-slate-900">{filteredSchedule.length}</p>
-                  <p className="text-xs font-bold text-slate-400 mt-1">Scheduled delivery orders</p>
-                </div>
-                <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-100">
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                      <LayoutDashboard size={20} />
-                    </div>
-                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Total Volume</p>
-                  </div>
-                  <p className="text-4xl font-black text-slate-900">{totalOrders}</p>
-                  <p className="text-xs font-bold text-slate-400 mt-1">Combined order flow</p>
-                </div>
-              </div>
 
               {!matrixData && !isMatrixLoading ? (
                 <div className="bg-white p-20 rounded-[3rem] shadow-xl border border-slate-100 text-center">
@@ -1542,7 +2360,7 @@ export default function App() {
                   <p className="text-slate-400 font-bold mt-2 max-w-md mx-auto">Run the bookmarklet on the source system to sync live data to this dashboard.</p>
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-8">
                     <button 
-                      onClick={fetchMatrixData}
+                      onClick={() => fetchMatrixData(true)}
                       className="px-8 py-4 bg-blue-600 text-white font-black rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all flex items-center gap-2"
                     >
                       <RefreshCw size={20} className={cn(isMatrixLoading && "animate-spin")} />
@@ -1558,12 +2376,12 @@ export default function App() {
               ) : (
                 <div className="space-y-12">
                   {/* Quick Commerce Section */}
-                  <div>
-                    <div className="flex items-center gap-4 mb-6">
-                      <div className="h-10 w-10 rounded-xl bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-100">
-                        <TrendingUp size={20} />
+                  <div className="space-y-8">
+                    <div className="flex items-center gap-6">
+                      <div className="h-14 w-14 rounded-[1.5rem] bg-red-600 flex items-center justify-center text-white shadow-2xl shadow-red-200">
+                        <TrendingUp size={28} />
                       </div>
-                      <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">Quick Commerce</h3>
+                      <h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Quick Commerce</h3>
                     </div>
                     
                     <MatrixTable 
@@ -1620,6 +2438,231 @@ export default function App() {
       </div>
     </motion.div>
   )}
+
+  {page === "analytics" && (
+    <motion.div 
+      key="analytics"
+      initial={{ opacity: 0, x: 50 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -50 }}
+      className="min-h-screen bg-slate-50/50 pb-20"
+    >
+      <Header title="Operational Analytics" showBack />
+      <div className="p-8 max-w-7xl mx-auto">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
+          <div>
+            <h2 className="text-4xl font-black text-slate-900 tracking-tight">Operational Insights</h2>
+            <p className="text-slate-500 font-bold mt-2">Advanced data visualization & performance metrics</p>
+          </div>
+          <motion.button 
+            whileTap={{ scale: 0.95 }}
+            onClick={() => fetchMatrixData(true)}
+            disabled={isMatrixLoading}
+            className="h-14 px-6 rounded-2xl bg-blue-600 text-white flex items-center gap-3 shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all disabled:bg-slate-300"
+          >
+            <RefreshCw size={20} className={cn(isMatrixLoading && "animate-spin")} />
+            <span className="font-black uppercase tracking-widest text-xs">Refresh Data</span>
+          </motion.button>
+        </div>
+
+        {!matrixData ? (
+          <div className="bg-white p-20 rounded-[3rem] shadow-xl border border-slate-100 text-center">
+            <BarChart3 size={48} className="mx-auto text-slate-200 mb-6" />
+            <h3 className="text-2xl font-black text-slate-800 tracking-tight">No Analytics Data</h3>
+            <p className="text-slate-400 font-bold mt-2">Please sync matrix data first to view insights.</p>
+          </div>
+        ) : (
+          <div className="space-y-8">
+            {/* Top Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+                <div className="flex items-center gap-3 mb-2">
+                  <Zap className="text-amber-500" size={18} />
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Quick Vol</span>
+                </div>
+                <p className="text-3xl font-black text-slate-900">{(matrixData?.quick || []).length}</p>
+              </div>
+              <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+                <div className="flex items-center gap-3 mb-2">
+                  <Clock className="text-emerald-500" size={18} />
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Schedule Vol</span>
+                </div>
+                <p className="text-3xl font-black text-slate-900">{(matrixData?.schedule || []).length}</p>
+              </div>
+              <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+                <div className="flex items-center gap-3 mb-2">
+                  <AlertTriangle className="text-red-500" size={18} />
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">High Risk (45m+)</span>
+                </div>
+                <p className="text-3xl font-black text-slate-900">
+                  {(matrixData?.quick || []).filter(d => d.bucket.includes("45Min+") || d.bucket.includes("60Min+") || d.bucket.includes("45-50") || d.bucket.includes("50-55") || d.bucket.includes("55-60")).length}
+                </p>
+              </div>
+              <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+                <div className="flex items-center gap-3 mb-2">
+                  <Activity className="text-blue-500" size={18} />
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Stores</span>
+                </div>
+                <p className="text-3xl font-black text-slate-900">
+                  {new Set([...(matrixData?.quick || []).map(d => d.storeID), ...(matrixData?.schedule || []).map(d => d.storeID)]).size}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Status Distribution */}
+              <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100">
+                <div className="flex items-center justify-between mb-8">
+                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Status Distribution</h3>
+                  <BarChart3 className="text-slate-300" size={20} />
+                </div>
+                <div className="h-[300px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart 
+                      data={(() => {
+                        const all = [...matrixData.quick, ...matrixData.schedule];
+                        const counts: Record<string, number> = {};
+                        all.forEach(item => {
+                          const s = item.status || "Unknown";
+                          counts[s] = (counts[s] || 0) + 1;
+                        });
+                        return Object.entries(counts)
+                          .map(([name, value]) => ({ name, value }))
+                          .sort((a, b) => b.value - a.value);
+                      })()}
+                      layout="vertical"
+                      margin={{ left: 40, right: 20 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                      <XAxis type="number" hide />
+                      <YAxis 
+                        dataKey="name" 
+                        type="category" 
+                        width={120} 
+                        tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <Tooltip 
+                        cursor={{ fill: '#f8fafc' }}
+                        contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 900, fontSize: '12px' }}
+                      />
+                      <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Ageing Risk Profile */}
+              <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100">
+                <div className="flex items-center justify-between mb-8">
+                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Quick Ageing Risk Profile</h3>
+                  <PieChartIcon className="text-slate-300" size={20} />
+                </div>
+                <div className="h-[300px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={(() => {
+                          let low = 0, mid = 0, high = 0;
+                          matrixData.quick.forEach(item => {
+                            const b = item.bucket || "";
+                            if (b.includes("60Min+") || b.includes("45-50") || b.includes("50-55") || b.includes("55-60")) high++;
+                            else if (b.includes("20-25") || b.includes("25-30") || b.includes("30-35") || b.includes("35-40") || b.includes("40-45")) mid++;
+                            else low++;
+                          });
+                          return [
+                            { name: 'Low (0-20m)', value: low, color: '#10b981' },
+                            { name: 'Mid (20-45m)', value: mid, color: '#f59e0b' },
+                            { name: 'High (45m+)', value: high, color: '#ef4444' }
+                          ];
+                        })()}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {(() => {
+                          let low = 0, mid = 0, high = 0;
+                          matrixData.quick.forEach(item => {
+                            const b = item.bucket || "";
+                            if (b.includes("60Min+") || b.includes("45-50") || b.includes("50-55") || b.includes("55-60")) high++;
+                            else if (b.includes("20-25") || b.includes("25-30") || b.includes("30-35") || b.includes("35-40") || b.includes("40-45")) mid++;
+                            else low++;
+                          });
+                          return [
+                            { name: 'Low (0-20m)', value: low, color: '#10b981' },
+                            { name: 'Mid (20-45m)', value: mid, color: '#f59e0b' },
+                            { name: 'High (45m+)', value: high, color: '#ef4444' }
+                          ];
+                        })().map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 900, fontSize: '12px' }}
+                      />
+                      <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Store Volume Ranking */}
+              <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 lg:col-span-2">
+                <div className="flex items-center justify-between mb-8">
+                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Top 10 Stores by Volume</h3>
+                  <Store className="text-slate-300" size={20} />
+                </div>
+                <div className="h-[350px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart 
+                      data={(() => {
+                        const all = [...matrixData.quick, ...matrixData.schedule];
+                        const counts: Record<string, number> = {};
+                        all.forEach(item => {
+                          counts[item.storeID] = (counts[item.storeID] || 0) + 1;
+                        });
+                        return Object.entries(counts)
+                          .map(([name, value]) => ({ name, value }))
+                          .sort((a, b) => b.value - a.value)
+                          .slice(0, 10);
+                      })()}
+                      margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis 
+                        dataKey="name" 
+                        angle={-45} 
+                        textAnchor="end" 
+                        interval={0} 
+                        height={80}
+                        tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis 
+                        tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <Tooltip 
+                        cursor={{ fill: '#f8fafc' }}
+                        contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 900, fontSize: '12px' }}
+                      />
+                      <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={40} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  )}
         {page === "admin" && (user.role === "admin" || user.role === "supervisor") && (
           <motion.div 
             key="admin"
@@ -1643,11 +2686,11 @@ export default function App() {
                       className="font-black text-slate-700 outline-none bg-transparent"
                     />
                   </div>
-                  <motion.button 
-                    whileTap={{ rotate: 180 }}
-                    onClick={fetchAdminData}
-                    className="p-2 hover:bg-slate-50 rounded-full text-blue-600"
-                  >
+                    <motion.button 
+                      whileTap={{ rotate: 180 }}
+                      onClick={() => fetchAdminData(true)}
+                      className="p-2 hover:bg-slate-50 rounded-full text-blue-600"
+                    >
                     <RefreshCw size={20} />
                   </motion.button>
                 </div>
@@ -1718,6 +2761,103 @@ export default function App() {
                         ))}
                       </div>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Escalation Matrix Configuration */}
+              {user.role === 'admin' && (
+                <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+                  <div className="p-6 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between">
+                    <h4 className="font-black text-slate-800 flex items-center gap-3">
+                      <AlertTriangle size={20} className="text-red-600" />
+                      Escalation Matrix
+                    </h4>
+                    <button 
+                      onClick={() => setPage("alerts")}
+                      className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center gap-2"
+                    >
+                      <History size={14} /> View History
+                    </button>
+                    <button 
+                      onClick={() => {
+                        const newRule: EscalationRule = {
+                          id: Math.random().toString(36).substr(2, 9),
+                          status: STATUSES[0],
+                          bucket: AGE_BUCKETS[0],
+                          escalationUser: 'New Supervisor',
+                          isActive: true
+                        };
+                        setEscalationRules([...escalationRules, newRule]);
+                      }}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all"
+                    >
+                      Add Rule
+                    </button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="bg-slate-50/50 border-b border-slate-100">
+                          <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status Trigger</th>
+                          <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Bucket Trigger</th>
+                          <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Escalation To</th>
+                          <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Active</th>
+                          <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {escalationRules.map(rule => (
+                          <tr key={rule.id} className="hover:bg-slate-50/30 transition-colors">
+                            <td className="p-4">
+                              <select 
+                                value={rule.status}
+                                onChange={(e) => setEscalationRules(prev => prev.map(r => r.id === rule.id ? { ...r, status: e.target.value } : r))}
+                                className="w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                              >
+                                {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                              </select>
+                            </td>
+                            <td className="p-4">
+                              <select 
+                                value={rule.bucket}
+                                onChange={(e) => setEscalationRules(prev => prev.map(r => r.id === rule.id ? { ...r, bucket: e.target.value } : r))}
+                                className="w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                              >
+                                {AGE_BUCKETS.map(b => <option key={b} value={b}>{b}</option>)}
+                              </select>
+                            </td>
+                            <td className="p-4">
+                              <input 
+                                type="text"
+                                value={rule.escalationUser}
+                                onChange={(e) => setEscalationRules(prev => prev.map(r => r.id === rule.id ? { ...r, escalationUser: e.target.value } : r))}
+                                className="w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                              />
+                            </td>
+                            <td className="p-4 text-center">
+                              <button 
+                                onClick={() => setEscalationRules(prev => prev.map(r => r.id === rule.id ? { ...r, isActive: !r.isActive } : r))}
+                                className={cn(
+                                  "h-6 w-10 rounded-full relative transition-all",
+                                  rule.isActive ? "bg-emerald-500" : "bg-slate-200"
+                                )}
+                              >
+                                <div className={cn("absolute top-1 h-4 w-4 bg-white rounded-full transition-all", rule.isActive ? "right-1" : "left-1")}></div>
+                              </button>
+                            </td>
+                            <td className="p-4 text-center">
+                              <button 
+                                onClick={() => setEscalationRules(prev => prev.filter(r => r.id !== rule.id))}
+                                className="text-red-400 hover:text-red-600 transition-colors"
+                              >
+                                <X size={18} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}
