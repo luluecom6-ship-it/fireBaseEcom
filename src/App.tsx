@@ -38,6 +38,7 @@ import {
   TrendingUp,
   Users,
   History,
+  Save,
   LayoutDashboard,
   Store,
   ScanLine,
@@ -210,7 +211,7 @@ const MatrixTable = ({ title, headers, data, keyField, themeColor, onCellClick, 
                           onCellClick(stat, h, matches);
                         }
                       }}
-                      title={matches.map(m => `${m.orderID} (${m.storeID})`).join('\n')}
+                      title={matches.map(m => `${m.orderID} (${m.storeID})${m.timestamp ? ` - Created: ${new Date(m.timestamp).toLocaleString()}` : ''}`).join('\n')}
                     >
                       {hasData ? count : '-'}
                     </td>
@@ -280,87 +281,7 @@ const getBucketFromAgeing = (createdAt: string, triggeredAt?: string) => {
   return AGE_BUCKETS[bucketIndex] || "60Min+";
 };
 
-const AlertHistory = ({ logs, onBack }: { logs: AlertLog[], onBack: () => void }) => {
-  return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h2 className="text-3xl font-black tracking-tight">Alert History</h2>
-          <p className="text-slate-400 font-bold uppercase tracking-widest text-xs mt-1">Operational Audit Logs (Single Row Per Alert)</p>
-        </div>
-        <button onClick={onBack} className="p-3 bg-slate-100 rounded-2xl hover:bg-slate-200 transition-all">
-          <ChevronLeft size={24} />
-        </button>
-      </div>
 
-      <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-slate-50/50 border-b border-slate-100">
-                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Timestamp</th>
-                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Order ID</th>
-                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Store ID</th>
-                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ageing</th>
-                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Trigger Status</th>
-                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Staff Status</th>
-                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Staff Name</th>
-                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Escalation</th>
-                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Manager Status</th>
-                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Manager Name</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {logs.length === 0 ? (
-                <tr>
-                  <td colSpan={10} className="p-20 text-center text-slate-300 font-bold">No alert logs found</td>
-                </tr>
-              ) : (
-                [...logs].reverse().map(log => (
-                  <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="p-6 text-xs font-bold text-slate-500">{new Date(log.timestamp).toLocaleString()}</td>
-                    <td className="p-6 font-black text-slate-800">{log.orderId}</td>
-                    <td className="p-6 text-xs font-bold text-slate-500">{log.storeId}</td>
-                    <td className="p-6 text-xs font-bold text-slate-500">
-                      {log.bucket && log.bucket !== log.statusTrigger ? log.bucket : getBucketFromAgeing(log.orderCreatedAt, log.timestamp)}
-                    </td>
-                    <td className="p-6 text-xs font-bold text-slate-500">{log.statusTrigger}</td>
-                    <td className="p-6">
-                      <span className={cn(
-                        "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest",
-                        log.status === "Acknowledged" ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
-                      )}>
-                        {log.status}
-                      </span>
-                    </td>
-                    <td className="p-6 text-xs font-bold text-slate-500">{log.storeStaffName || "--"}</td>
-                    <td className="p-6">
-                      <span className={cn(
-                        "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest",
-                        log.escalation === "TRUE" ? "bg-red-50 text-red-600" : "bg-slate-50 text-slate-400"
-                      )}>
-                        {log.escalation}
-                      </span>
-                    </td>
-                    <td className="p-6">
-                      <span className={cn(
-                        "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest",
-                        log.managerStatus === "Accepted" ? "bg-blue-50 text-blue-600" : "bg-slate-50 text-slate-400"
-                      )}>
-                        {log.managerStatus}
-                      </span>
-                    </td>
-                    <td className="p-6 text-xs font-bold text-slate-500">{log.managerName || "--"}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 export default function App() {
   // Navigation & Auth
@@ -399,17 +320,67 @@ export default function App() {
   const [matrixStoreFilter, setMatrixStoreFilter] = useState("All");
   const [minimizedAlerts, setMinimizedAlerts] = useState<string[]>([]);
   const [expandedAlertId, setExpandedAlertId] = useState<string | null>(null);
+  const [showEarlyPunchOutConfirm, setShowEarlyPunchOutConfirm] = useState(false);
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
   const [isScanning, setIsScanning] = useState(false);
 
+  // Webcam States
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [isDesktop] = useState(() => !/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
+
+  const stopCamera = useCallback(() => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+  }, [cameraStream]);
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          facingMode: "user",
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        } 
+      });
+      setCameraStream(stream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error("Camera access denied:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (page === "attendance" && isDesktop && imagePreviews.length === 0) {
+      startCamera();
+    } else {
+      stopCamera();
+    }
+    return () => stopCamera();
+  }, [page, isDesktop, imagePreviews.length]);
+
+  const capturePhoto = () => {
+    if (videoRef.current) {
+      const canvas = document.createElement("canvas");
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(videoRef.current, 0, 0);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+        setImagePreviews([dataUrl]);
+        stopCamera();
+      }
+    }
+  };
+
   // Escalation States
-  const [escalationRules, setEscalationRules] = useState<EscalationRule[]>(() => {
-    const saved = localStorage.getItem('escalationRules');
-    return saved ? JSON.parse(saved) : [
-      { id: '1', status: 'Created', bucket: '15-20Min', escalationUser: 'Supervisor A', isActive: true },
-      { id: '2', status: 'Picking', bucket: '15-20Min', escalationUser: 'Supervisor B', isActive: true }
-    ];
-  });
+  const [escalationRules, setEscalationRules] = useState<EscalationRule[]>([]);
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [activeAlerts, setActiveAlerts] = useState<ActiveAlert[]>([]);
   const [alertLogs, setAlertLogs] = useState<AlertLog[]>([]);
   const [adminHiddenAlerts, setAdminHiddenAlerts] = useState<string[]>([]);
@@ -436,14 +407,100 @@ export default function App() {
     };
   }, []);
 
+  const fetchSystemConfig = useCallback(async () => {
+    try {
+      const baseUrl = API_URL.trim();
+      const urlObj = new URL(baseUrl);
+      urlObj.searchParams.set('action', 'getSystemConfig');
+      urlObj.searchParams.set('_t', Date.now().toString());
+      
+      const res = await fetch(urlObj.toString());
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const response = await res.json();
+      if (response.status === "success" && response.data) {
+        if (Array.isArray(response.data.escalationRules)) {
+          setEscalationRules(response.data.escalationRules);
+        }
+        if (typeof response.data.maxImages === 'number') {
+          setMaxImages(response.data.maxImages);
+        }
+      } else {
+        // Fallback to localStorage
+        const savedRules = localStorage.getItem('escalationRules');
+        if (savedRules) setEscalationRules(JSON.parse(savedRules));
+        else {
+          setEscalationRules([
+            { id: '1', status: 'Created', bucket: '15-20Min', escalationUser: 'Supervisor A', isActive: true },
+            { id: '2', status: 'Picking', bucket: '15-20Min', escalationUser: 'Supervisor B', isActive: true }
+          ]);
+        }
+        const savedMax = localStorage.getItem('maxImages');
+        if (savedMax) setMaxImages(parseInt(savedMax));
+      }
+    } catch (e) {
+      const savedRules = localStorage.getItem('escalationRules');
+      if (savedRules) setEscalationRules(JSON.parse(savedRules));
+      const savedMax = localStorage.getItem('maxImages');
+      if (savedMax) setMaxImages(parseInt(savedMax));
+    }
+  }, []);
+
+  const saveSystemConfig = async () => {
+    setIsSavingConfig(true);
+    try {
+      const config = {
+        escalationRules,
+        maxImages
+      };
+      
+      // Save to localStorage
+      localStorage.setItem('escalationRules', JSON.stringify(escalationRules));
+      localStorage.setItem('maxImages', maxImages.toString());
+      
+      const params = new URLSearchParams();
+      params.append('action', 'saveSystemConfig');
+      params.append('data', JSON.stringify(config));
+      
+      await fetch(API_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        body: params
+      });
+      
+      showToast("System Configuration Synced", "success");
+    } catch (e) {
+      console.error("Failed to save config", e);
+      showToast("Saved locally (Server sync failed)", "error");
+    } finally {
+      setIsSavingConfig(false);
+    }
+  };
+
   const fetchAlertLogs = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}?action=getAlertLogs`);
-      const response = await res.json();
-      if (response.status === "success" && Array.isArray(response.data)) {
+      const baseUrl = API_URL.trim();
+      const urlObj = new URL(baseUrl);
+      urlObj.searchParams.set('action', 'getAlertLogs');
+      urlObj.searchParams.set('_t', Date.now().toString());
+      
+      const res = await fetch(urlObj.toString());
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const text = await res.text();
+      
+      let response;
+      try {
+        response = JSON.parse(text);
+      } catch (e) {
+        throw new Error("Invalid JSON response from server");
+      }
+
+      // Handle both wrapped and unwrapped responses
+      const result = response.status === "success" ? response.data : response;
+      const logs = Array.isArray(result) ? result : (Array.isArray(result?.data) ? result.data : []);
+
+      if (logs.length > 0 || response.status === "success") {
         // Map sheet headers back to AlertLog interface
-        // We handle both old and new parameter names for robustness
-        const mappedData: AlertLog[] = response.data.map((item: any) => {
+        const mappedData: AlertLog[] = logs.map((item: any) => {
           const orderId = item.orderId || "";
           const statusTrigger = item['Status Trigger'] || item.statusTrigger || "";
           
@@ -461,7 +518,7 @@ export default function App() {
             managerName: item['Manager Name'] || item.managerName || "",
             statusTrigger: statusTrigger,
             managerStatus: item['Manager Status'] || item.managerStatus || "Pending",
-            orderCreatedAt: item.orderCreatedAt || item.timestamp || "",
+            orderCreatedAt: item['Order Created At'] || item.orderCreatedAt || item.timestamp || "",
             // UI Helpers
             triggeredAt: item.timestamp || "",
             bucket: item.bucket || item['Bucket'] || ""
@@ -599,8 +656,8 @@ export default function App() {
         params.append('managerStatus', alert.managerStatus || "Pending");
       }
 
-      params.append('statusTrigger', alert.statusTrigger || "");
       params.append('orderCreatedAt', alert.orderCreatedAt || "");
+      params.append('statusTrigger', alert.statusTrigger || "");
 
       await fetch(API_URL, {
         method: 'POST',
@@ -629,10 +686,11 @@ export default function App() {
   useEffect(() => {
     if (page === 'admin' || page === 'matrix' || page === 'alerts' || page === 'dashboard') {
       fetchAlertLogs();
+      if (page === 'admin' || page === 'matrix') fetchSystemConfig();
       const interval = setInterval(fetchAlertLogs, 30000); // Poll every 30s
       return () => clearInterval(interval);
     }
-  }, [page, fetchAlertLogs]);
+  }, [page, fetchAlertLogs, fetchSystemConfig]);
 
   useEffect(() => {
     localStorage.setItem('escalationRules', JSON.stringify(escalationRules));
@@ -666,11 +724,34 @@ export default function App() {
           triggerDate.setMinutes(triggerDate.getMinutes() + 15);
           const notificationTime = triggerDate.toISOString();
 
-          // FIND CORRECT ORDER CREATION TIME FROM ADMIN DATA
-          const originalOrder = adminData.orders.find(o => 
-            String(o.orderId || o.orderID || "").toLowerCase().trim() === String(order.orderID || "").toLowerCase().trim()
-          );
-          const orderCreatedAt = originalOrder ? originalOrder.timestamp : (matrixData.timestamp || now);
+          // FIND CORRECT ORDER CREATION TIME
+          // 1. Check if the matrix item itself has a timestamp (as per user request)
+          // 2. Check adminData.orders (uploaded orders)
+          // 3. Fallback to estimation from bucket
+          
+          let orderCreatedAt = order.timestamp || "";
+          
+          if (!orderCreatedAt) {
+            const originalOrder = adminData.orders.find(o => 
+              String(o.orderId || o.orderID || "").toLowerCase().trim() === String(order.orderID || "").toLowerCase().trim()
+            );
+            orderCreatedAt = originalOrder ? originalOrder.timestamp : "";
+          }
+          
+          // If still not found, estimate from bucket
+          if (!orderCreatedAt && order.bucket) {
+            const bucketMatch = order.bucket.match(/^(\d+)/);
+            if (bucketMatch) {
+              const minsAgo = parseInt(bucketMatch[1]);
+              const estimatedDate = new Date(now);
+              estimatedDate.setMinutes(estimatedDate.getMinutes() - minsAgo);
+              orderCreatedAt = estimatedDate.toISOString();
+            }
+          }
+          
+          if (!orderCreatedAt) {
+            orderCreatedAt = matrixData.timestamp || now;
+          }
 
           const newAlert: AlertLog = {
             id: alertKey,
@@ -961,8 +1042,18 @@ export default function App() {
 
   const fetchStatus = async (empId: string) => {
     try {
-      const res = await fetch(`${API_URL}?action=getTodayAttendance&empId=${empId}`);
-      const data = await res.json();
+      const baseUrl = API_URL.trim();
+      const urlObj = new URL(baseUrl);
+      urlObj.searchParams.set('action', 'getTodayAttendance');
+      urlObj.searchParams.set('empId', empId);
+      urlObj.searchParams.set('_t', Date.now().toString());
+      
+      const res = await fetch(urlObj.toString());
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const response = await res.json();
+      
+      // Handle both wrapped and direct responses
+      const data = response.status === "success" ? response.data : response;
       
       if (!Array.isArray(data) || data.length === 0) {
         setAttendanceStatus({ inTime: null, outTime: null });
@@ -1061,19 +1152,32 @@ export default function App() {
     const p = formData.get("password");
 
     try {
-      const res = await fetch(`${API_URL}?action=login&username=${encodeURIComponent(String(u))}&password=${encodeURIComponent(String(p))}`);
+      const baseUrl = API_URL.trim();
+      const urlObj = new URL(baseUrl);
+      urlObj.searchParams.set('action', 'login');
+      urlObj.searchParams.set('username', String(u));
+      urlObj.searchParams.set('password', String(p));
+      urlObj.searchParams.set('_t', Date.now().toString());
+      
+      const res = await fetch(urlObj.toString());
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
-      if (data.status === "success") {
-        setUser(data);
-        localStorage.setItem("lulu_user", JSON.stringify(data));
+      
+      // Support both direct user object and wrapped {status: "success", ...user}
+      const userData = data.status === "success" ? data : (data.empId ? data : null);
+      
+      if (userData && (userData.status === "success" || userData.empId)) {
+        setUser(userData);
+        localStorage.setItem("lulu_user", JSON.stringify(userData));
         localStorage.setItem("lulu_login_time", new Date().getTime().toString());
-        await fetchStatus(data.empId);
+        await fetchStatus(userData.empId);
         setPage("dashboard");
+        showToast(`Welcome, ${userData.name || 'User'}`, "success");
       } else {
-        alert("Invalid Credentials");
+        showToast("Invalid Credentials", "error");
       }
     } catch (err) {
-      alert("Connection Error. Please check your internet.");
+      showToast("Connection Error. Please check your internet.", "error");
     } finally {
       setLoading(false);
     }
@@ -1352,16 +1456,21 @@ export default function App() {
       urlObj.searchParams.set('_t', Date.now().toString());
       
       const res = await fetch(urlObj.toString());
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const response = await res.json();
-      if (response && response.status === "success" && response.data) {
+      
+      // Handle both wrapped and direct responses
+      const data = response.status === "success" ? response.data : response;
+      
+      if (data && (data.users || data.attendance || data.orders)) {
         setAdminData({
-          users: response.data.users || [],
-          attendance: response.data.attendance || [],
-          orders: response.data.orders || []
+          users: data.users || [],
+          attendance: data.attendance || [],
+          orders: data.orders || []
         });
         if (isManual) showToast("Data Refreshed Successfully", "success");
       } else {
-        if (isManual) showToast("Failed to fetch admin data: " + (response?.message || "Unknown error"), "error");
+        if (isManual) showToast("Failed to fetch admin data: " + (response?.message || "No data found"), "error");
       }
     } catch (e) {
       console.error("Admin sync failed", e);
@@ -1387,21 +1496,25 @@ export default function App() {
       console.log("Fetching from robust URL:", finalUrl);
       
       const res = await fetch(finalUrl);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const text = await res.text();
       console.log("Raw Response from Server:", text);
 
       // Check if the response is actually JSON before parsing
       if (text.trim().startsWith('{') || text.trim().startsWith('[')) {
         const data = JSON.parse(text);
-        if (data.status === "success" && data.data) {
-          console.log("Matrix Data Parsed Successfully:", data.data);
+        // Handle both {status: "success", data: {...}} and direct {...}
+        const matrix = data.status === "success" ? data.data : data;
+        
+        if (matrix && (matrix.quick || matrix.schedule)) {
+          console.log("Matrix Data Parsed Successfully:", matrix);
           // Merge the timestamp into the matrix data object
           setMatrixData({
-            quick: data.data.quick || [],
-            schedule: data.data.schedule || [],
+            quick: matrix.quick || [],
+            schedule: matrix.schedule || [],
             // Use the server's generation timestamp if available
-            syncTime: data.timestamp || data.data?.timestamp || null,
-            timestamp: data.timestamp || data.data?.timestamp || new Date().toISOString()
+            syncTime: data.timestamp || matrix.timestamp || null,
+            timestamp: data.timestamp || matrix.timestamp || new Date().toISOString()
           });
           if (isManual) showToast("Matrix Synchronized", "success");
         } else {
@@ -1538,42 +1651,48 @@ export default function App() {
                   exit={{ opacity: 0, scale: 0.9, y: 20 }}
                   onClick={(e) => e.stopPropagation()}
                   className={cn(
-                    "w-full max-w-lg p-8 rounded-[3rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.3)] border-4 flex flex-col gap-6 relative",
+                    "w-full max-w-lg p-6 sm:p-8 rounded-[2.5rem] sm:rounded-[3rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.3)] border-4 flex flex-col gap-4 sm:gap-6 relative",
                     alert.escalation === "TRUE" ? "bg-red-600 border-red-400 text-white" : (alert.buzzerStarted || alert.managerBuzzerStarted ? "bg-amber-500 border-amber-300 text-white" : "bg-white border-blue-100 text-slate-800")
                   )}
                 >
                   <button 
                     onClick={() => setExpandedAlertId(null)}
-                    className="absolute top-6 right-6 p-2 hover:bg-black/10 rounded-full transition-colors"
+                    className="absolute top-4 right-4 sm:top-6 sm:right-6 p-2 hover:bg-black/10 rounded-full transition-colors"
                   >
-                    <X size={24} />
+                    <X size={20} />
                   </button>
 
-                  <div className="flex items-center gap-6">
-                    <div className={cn("h-20 w-20 rounded-[2rem] flex items-center justify-center animate-pulse shadow-inner", alert.escalation === "TRUE" ? "bg-white/20" : "bg-blue-50 text-blue-600")}>
-                      <AlertTriangle size={40} />
+                  <div className="flex items-center gap-4 sm:gap-6">
+                    <div className={cn("h-16 w-16 sm:h-20 sm:w-20 rounded-2xl sm:rounded-[2rem] flex items-center justify-center animate-pulse shadow-inner", alert.escalation === "TRUE" ? "bg-white/20" : "bg-blue-50 text-blue-600")}>
+                      <AlertTriangle size={32} />
                     </div>
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-[0.3em] opacity-60">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] opacity-60">
                         {alert.escalation === "TRUE" ? "🔥 Escalated Alert" : (alert.buzzerStarted || alert.managerBuzzerStarted ? "🔔 Critical Alert" : "⚠️ New Alert")}
                       </p>
-                      <h4 className="text-3xl font-black tracking-tight mt-1">Order {alert.orderId}</h4>
+                      <h4 className="text-xs sm:text-sm font-black tracking-tight mt-1 break-all">Order {alert.orderId}</h4>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-black/10 p-4 rounded-2xl">
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                    <div className="bg-black/10 p-3 sm:p-4 rounded-2xl">
                       <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">Store ID</p>
-                      <p className="font-black text-lg">{alert.storeId}</p>
+                      <p className="font-black text-base sm:text-lg">{alert.storeId}</p>
                     </div>
-                    <div className="bg-black/10 p-4 rounded-2xl">
-                      <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">Ageing</p>
-                      <p className="font-black text-lg">{alert.bucket || getAgeing(alert.orderCreatedAt)}</p>
+                    <div className="bg-black/10 p-3 sm:p-4 rounded-2xl">
+                      <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">Trigger</p>
+                      <p className="font-black text-base sm:text-lg truncate">{alert.statusTrigger}</p>
                     </div>
+                  </div>
+
+                  <div className="bg-black/10 p-3 sm:p-4 rounded-2xl">
+                    <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">Ageing</p>
+                    <p className="font-black text-base sm:text-lg">
+                      {alert.bucket && alert.bucket !== alert.statusTrigger ? alert.bucket : getBucketFromAgeing(alert.orderCreatedAt, alert.timestamp)}
+                    </p>
                   </div>
 
                   <div className="space-y-2">
-                    <p className="text-xs font-bold opacity-80">Trigger: <span className="font-black">{alert.statusTrigger}</span></p>
                     <p className="text-xs font-bold opacity-80">Current Status: <span className="font-black">{alert.status}</span></p>
                     
                     {alert.status === "Acknowledged" && (
@@ -1641,14 +1760,105 @@ export default function App() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
+            className="min-h-screen bg-slate-50 pb-20"
           >
-            <AlertHistory 
-              logs={alertLogs.filter(log => {
-                if (user?.role === 'admin' || user?.role === 'supervisor') return true;
-                return log.storeId === user?.storeId;
-              })} 
-              onBack={() => setPage("dashboard")} 
-            />
+            <Header title="Alert History" showBack />
+            
+            <div className="p-6 max-w-7xl mx-auto space-y-6">
+              <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+                <div>
+                  <h2 className="text-3xl font-black text-slate-800 tracking-tight">Audit Logs</h2>
+                  <p className="text-slate-500 font-bold mt-1">Operational history for {filterDate}</p>
+                </div>
+                
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
+                  <Clock className="text-blue-600" size={20} />
+                  <input 
+                    type="date" 
+                    value={filterDate} 
+                    onChange={(e) => setFilterDate(e.target.value)} 
+                    className="font-black text-slate-700 outline-none bg-transparent"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="bg-slate-50/50 border-b border-slate-100">
+                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Timestamp</th>
+                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Order ID</th>
+                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Store ID</th>
+                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ageing</th>
+                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Trigger Status</th>
+                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Staff Status</th>
+                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Staff Name</th>
+                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Escalation</th>
+                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Manager Status</th>
+                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Manager Name</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {(() => {
+                        const filteredLogs = alertLogs.filter(log => {
+                          const dateMatch = log.timestamp.includes(filterDate);
+                          if (!dateMatch) return false;
+                          if (user?.role === 'admin' || user?.role === 'supervisor') return true;
+                          return log.storeId === user?.storeId;
+                        });
+
+                        if (filteredLogs.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={10} className="p-20 text-center text-slate-300 font-bold">No alert logs found for {filterDate}</td>
+                            </tr>
+                          );
+                        }
+
+                        return [...filteredLogs].reverse().map(log => (
+                          <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="p-6 text-xs font-bold text-slate-500">{new Date(log.timestamp).toLocaleString()}</td>
+                            <td className="p-6 font-black text-slate-800">{log.orderId}</td>
+                            <td className="p-6 text-xs font-bold text-slate-500">{log.storeId}</td>
+                            <td className="p-6 text-xs font-bold text-slate-500">
+                              {log.bucket || getBucketFromAgeing(log.orderCreatedAt, log.timestamp)}
+                            </td>
+                            <td className="p-6 text-xs font-bold text-slate-500">{log.statusTrigger}</td>
+                            <td className="p-6">
+                              <span className={cn(
+                                "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest",
+                                log.status === "Acknowledged" ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
+                              )}>
+                                {log.status}
+                              </span>
+                            </td>
+                            <td className="p-6 text-xs font-bold text-slate-500">{log.storeStaffName || "--"}</td>
+                            <td className="p-6">
+                              <span className={cn(
+                                "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest",
+                                log.escalation === "TRUE" ? "bg-red-50 text-red-600" : "bg-slate-50 text-slate-400"
+                              )}>
+                                {log.escalation}
+                              </span>
+                            </td>
+                            <td className="p-6">
+                              <span className={cn(
+                                "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest",
+                                log.managerStatus === "Accepted" ? "bg-blue-50 text-blue-600" : "bg-slate-50 text-slate-400"
+                              )}>
+                                {log.managerStatus}
+                              </span>
+                            </td>
+                            <td className="p-6 text-xs font-bold text-slate-500">{log.managerName || "--"}</td>
+                          </tr>
+                        ));
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
           </motion.div>
         )}
         {page === "login" && (
@@ -1722,10 +1932,18 @@ export default function App() {
               <div className="flex items-start justify-between mb-10 relative z-10">
                 <div>
                   <h2 className="text-3xl font-black tracking-tight">Hello, {user.name.split(' ')[0]} 👋</h2>
-                  <p className="text-blue-200 font-bold text-sm mt-1 flex items-center gap-2">
-                    <span className="px-2 py-0.5 bg-blue-800 rounded-md text-[10px] uppercase tracking-widest">{user.role}</span>
-                    {user.empId}
-                  </p>
+                  <div className="flex items-center gap-3 mt-1">
+                    <p className="text-blue-200 font-bold text-sm flex items-center gap-2">
+                      <span className="px-2 py-0.5 bg-blue-800 rounded-md text-[10px] uppercase tracking-widest">{user.role}</span>
+                      {user.empId}
+                    </p>
+                    <button 
+                      onClick={handleLogout}
+                      className="text-[10px] font-black uppercase tracking-widest text-white/60 hover:text-white flex items-center gap-1 transition-colors"
+                    >
+                      <LogOut size={12} /> Logout
+                    </button>
+                  </div>
                 </div>
                 <RealTimeClock />
               </div>
@@ -1802,27 +2020,28 @@ export default function App() {
                         <motion.button 
                           whileTap={{ scale: 0.95 }}
                           onClick={() => navigateTo("attendance")} 
-                          className="flex w-full items-center justify-center gap-3 rounded-2xl bg-indigo-600 p-5 font-black text-white shadow-xl shadow-indigo-200 text-lg"
+                          className="flex w-full items-center justify-center gap-3 rounded-2xl bg-emerald-500 p-5 font-black text-white shadow-xl shadow-emerald-200 text-lg"
                         >
-                          <Clock size={24} /> Start New Shift
+                          <Clock size={24} /> Punch In Again
                         </motion.button>
                       </div>
                     ) : (
-                      <div className="space-y-3">
+                    <div className="space-y-3">
                         <motion.button 
                           whileTap={{ scale: 0.95 }}
                           onClick={() => {
                             if (!isShiftComplete) {
-                              if (!window.confirm("Inform Supervisor for early departure. Do you want to continue?")) return;
+                              setShowEarlyPunchOutConfirm(true);
+                            } else {
+                              navigateTo("attendance");
                             }
-                            navigateTo("attendance");
                           }}
                           className={cn(
                             "flex w-full items-center justify-center gap-3 rounded-2xl p-5 font-black text-white transition-all shadow-2xl text-lg",
                             isShiftComplete ? "bg-blue-600 shadow-blue-200" : "bg-amber-500 shadow-amber-200"
                           )}
                         >
-                          <LogOut size={24} /> {isShiftComplete ? "Attendance & Logout" : "Early Logout Request"}
+                          <LogOut size={24} /> Punch Out
                         </motion.button>
                         {!isShiftComplete && (
                           <p className="text-[10px] text-amber-600 font-bold text-center uppercase tracking-widest animate-pulse">
@@ -2103,29 +2322,55 @@ export default function App() {
                     ))}
 
                     {(page === "attendance" ? imagePreviews.length === 0 : imagePreviews.length < maxImages) && (
-                      <motion.label 
-                        whileHover={{ scale: 1.01 }}
-                        whileTap={{ scale: 0.99 }}
-                        className={cn(
-                          "flex flex-col items-center justify-center rounded-[2rem] border-4 border-dashed border-slate-100 bg-slate-50 cursor-pointer hover:bg-blue-50 hover:border-blue-200 transition-all group aspect-video",
-                          imagePreviews.length > 0 ? "h-full" : "w-full"
+                      <div className="relative aspect-video rounded-[2rem] overflow-hidden border-4 border-dashed border-slate-100 bg-slate-50 group">
+                        {page === "attendance" && isDesktop && !imagePreviews.length ? (
+                          <div className="relative w-full h-full">
+                            <video 
+                              ref={videoRef} 
+                              autoPlay 
+                              playsInline 
+                              muted
+                              className="w-full h-full object-cover"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                              <div className="w-48 h-48 border-2 border-white/50 rounded-full border-dashed animate-pulse" />
+                            </div>
+                            <button 
+                              onClick={capturePhoto}
+                              className="absolute bottom-6 left-1/2 -translate-x-1/2 h-16 w-16 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all ring-4 ring-white/30"
+                            >
+                              <Camera size={32} />
+                            </button>
+                            <div className="absolute top-4 left-4 px-3 py-1 bg-black/50 backdrop-blur-sm rounded-full text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-2">
+                              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                              Live Camera
+                            </div>
+                          </div>
+                        ) : (
+                          <motion.label 
+                            whileHover={{ scale: 1.01 }}
+                            whileTap={{ scale: 0.99 }}
+                            className={cn(
+                              "flex flex-col items-center justify-center w-full h-full cursor-pointer hover:bg-blue-50 hover:border-blue-200 transition-all",
+                            )}
+                          >
+                            <div className="h-16 w-16 rounded-full bg-white shadow-lg flex items-center justify-center text-slate-300 group-hover:text-blue-500 transition-all mb-3">
+                              <Camera size={32} />
+                            </div>
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="text-slate-500 font-black text-[10px] uppercase tracking-widest">
+                                {imagePreviews.length > 0 ? "Add Another" : "Initialize Camera"}
+                              </span>
+                              {page === "upload" && (
+                                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
+                                  {imagePreviews.length} / {maxImages} Images
+                                </span>
+                              )}
+                            </div>
+                            <input type="file" accept="image/*" capture={page === "attendance" ? "user" : "environment"} onChange={handleFileUpload} className="hidden" />
+                          </motion.label>
                         )}
-                      >
-                        <div className="h-16 w-16 rounded-full bg-white shadow-lg flex items-center justify-center text-slate-300 group-hover:text-blue-500 transition-all mb-3">
-                          <Camera size={32} />
-                        </div>
-                        <div className="flex flex-col items-center gap-1">
-                          <span className="text-slate-500 font-black text-[10px] uppercase tracking-widest">
-                            {imagePreviews.length > 0 ? "Add Another" : "Initialize Camera"}
-                          </span>
-                          {page === "upload" && (
-                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
-                              {imagePreviews.length} / {maxImages} Images
-                            </span>
-                          )}
-                        </div>
-                        <input type="file" accept="image/*" capture={page === "attendance" ? "user" : "environment"} onChange={handleFileUpload} className="hidden" />
-                      </motion.label>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -2152,7 +2397,7 @@ export default function App() {
                   <>
                     {page === "upload" 
                       ? "Finalize Order" 
-                      : (attendanceStatus.inTime && !attendanceStatus.outTime ? "Confirm Punch Out" : "Confirm Punch In")
+                      : (attendanceStatus.inTime && !attendanceStatus.outTime ? "Confirm Punch Out" : (attendanceStatus.outTime ? "Confirm Punch In Again" : "Confirm Punch In"))
                     }
                   </>
                 )}
@@ -2766,6 +3011,13 @@ export default function App() {
             <Header title="Admin Intelligence" showBack />
             
             <div className="p-6 max-w-4xl mx-auto space-y-6">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <h2 className="text-3xl font-black text-slate-800 tracking-tight">System Admin</h2>
+                  <p className="text-slate-500 font-bold mt-1">Manage escalation rules and system settings</p>
+                </div>
+              </div>
+
               {/* Controls Row */}
               <div className="flex flex-col sm:flex-row gap-4">
                 <div className="flex-1 bg-white p-5 rounded-3xl shadow-sm border border-slate-100 flex items-center justify-between">
@@ -2871,6 +3123,19 @@ export default function App() {
                     >
                       <History size={14} /> View History
                     </button>
+                    <div className="flex flex-col items-end gap-1">
+                      <button 
+                        onClick={saveSystemConfig}
+                        disabled={isSavingConfig}
+                        className={cn(
+                          "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
+                          isSavingConfig ? "bg-slate-100 text-slate-400" : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-200"
+                        )}
+                      >
+                        <Save size={14} /> {isSavingConfig ? "Syncing..." : "Save & Sync Cloud"}
+                      </button>
+                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Syncs mobile & desktop</p>
+                    </div>
                     <button 
                       onClick={() => {
                         const newRule: EscalationRule = {
@@ -3355,12 +3620,12 @@ export default function App() {
                 </div>
                 
                 <div className="space-y-4">
-                  <div className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl">
-                    <div>
+                  <div className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl gap-4">
+                    <div className="min-w-0 flex-1">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Order ID</p>
-                      <p className="text-lg font-black text-slate-800">{duplicateOrder.orderId}</p>
+                      <p className="text-xs font-black text-slate-800 break-all">{duplicateOrder.orderId}</p>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right flex-shrink-0">
                       <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Store</p>
                       <p className="font-bold text-blue-600">{duplicateOrder.storeId}</p>
                     </div>
@@ -3419,8 +3684,8 @@ export default function App() {
                 <h3 className="text-2xl font-black tracking-tight">Upload Successful!</h3>
               </div>
               
-              <div className="p-8 space-y-6 text-center">
-                <p className="text-slate-600 font-medium">
+              <div className="p-6 sm:p-8 space-y-4 sm:space-y-6 text-center">
+                <p className="text-slate-600 font-medium break-all text-xs">
                   Order <span className="font-black text-slate-900">{successOrder.orderId}</span> has been successfully recorded.
                 </p>
 
@@ -3488,6 +3753,9 @@ export default function App() {
                       <div>
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Order ID</p>
                         <p className="font-black text-slate-800">{order.orderID}</p>
+                        {order.timestamp && (
+                          <p className="text-[9px] text-slate-400 font-bold mt-1">Created: {new Date(order.timestamp).toLocaleString()}</p>
+                        )}
                       </div>
                       <div className="text-right">
                         <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Store</p>
@@ -3518,6 +3786,58 @@ export default function App() {
                   >
                     Close
                   </motion.button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {showEarlyPunchOutConfirm && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[30000] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-6"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100"
+            >
+              <div className="bg-amber-500 p-6 text-white flex flex-col items-center gap-4">
+                <div className="h-20 w-20 bg-white/20 rounded-full flex items-center justify-center">
+                  <AlertTriangle size={48} />
+                </div>
+                <h3 className="text-2xl font-black tracking-tight">Early Departure</h3>
+              </div>
+              
+              <div className="p-8 space-y-6 text-center">
+                <p className="text-slate-600 font-medium">
+                  You have not completed your <span className="font-black text-slate-900">10-hour shift</span> yet.
+                </p>
+                <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100">
+                  <p className="text-xs font-bold text-amber-700 uppercase tracking-widest leading-relaxed">
+                    Please ensure you have taken verbal confirmation from your supervisor before punching out early.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <motion.button 
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      setShowEarlyPunchOutConfirm(false);
+                      navigateTo("attendance");
+                    }}
+                    className="w-full bg-amber-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl"
+                  >
+                    Confirm & Punch Out
+                  </motion.button>
+                  <button 
+                    onClick={() => setShowEarlyPunchOutConfirm(false)}
+                    className="w-full p-4 text-slate-400 font-black uppercase tracking-widest text-xs hover:text-slate-600 transition-colors"
+                  >
+                    Cancel
+                  </button>
                 </div>
               </div>
             </motion.div>

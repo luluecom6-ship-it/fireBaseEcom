@@ -62,6 +62,7 @@ export interface MatrixItem {
   bucket: string;
   slot: string;
   orderID: string;
+  timestamp?: string;
 }
 
 export interface MatrixData {
