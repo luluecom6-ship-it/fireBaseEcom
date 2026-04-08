@@ -89,7 +89,10 @@ const sortSlots = (slots: string[]) => {
 // --- MATRIX CONSTANTS ---
 const AGE_BUCKETS = ["0-5Min", "5-10Min", "10-15Min", "15-20Min", "20-25Min", "25-30Min", "30-35Min", "35-40Min", "40-45Min", "45-50Min", "50-55Min", "55-60Min", "60Min+"];
 const SLOTS = ["8:00 AM - 9:59 AM", "10:00 AM - 11:59 AM", "12:00 PM - 1:59 PM", "2:00 PM - 3:59 PM", "4:00 PM - 5:59 PM", "6:00 PM - 7:59 PM", "8:00 PM - 9:59 PM", "10:00 PM - 11:59 PM", "12:00 AM - 1:59 AM"];
-const STATUSES = ["Created", "Picking", "Picking with unassigned zone", "Parking", "Auditing", "Stored", "Going to Origin", "Transferring", "Going to destination", "In Route", "Delivering"];
+const STATUSES = ["Created", "Picking", "Picking with unassigned zone", "Picking with packing", "Parking", "Storing", "Auditing", "Stored", "Going to Origin", "Transferring", "Going to destination", "In Route", "Delivering"];
+
+const QUICK_STATUSES = ["Created", "Picking", "Picking with packing", "Storing", "Stored", "Going to Origin", "Transferring", "Going to destination", "In Route", "Delivering"];
+const SCHEDULE_STATUSES = ["Created", "Picking", "Picking with unassigned zone", "Parking", "Auditing", "Stored", "Going to Origin", "Transferring", "Going to destination", "In Route", "Delivering"];
 
 // --- COMPONENTS ---
 
@@ -134,39 +137,65 @@ const Loader = ({ loading, message = "Processing Live Data..." }: { loading: boo
   </AnimatePresence>
 );
 
-const MatrixTable = ({ title, headers, data, keyField, themeColor, onCellClick }: { title: string, headers: string[], data: MatrixItem[], keyField: keyof MatrixItem, themeColor: string, onCellClick: (stat: string, key: string, orders: MatrixItem[]) => void }) => {
+const MatrixTable = ({ title, headers, data, keyField, themeColor, onCellClick, statuses = STATUSES, isQuick = false }: { title: string, headers: string[], data: MatrixItem[], keyField: keyof MatrixItem, themeColor: string, onCellClick: (stat: string, key: string, orders: MatrixItem[]) => void, statuses?: string[], isQuick?: boolean }) => {
+  // Derive all statuses present in data to avoid blank rows if source system uses different names
+  const dataStatuses = [...new Set((data || []).map(d => (d.status || "").trim()))].filter(s => {
+    if (!s) return false;
+    const sLower = s.toLowerCase().trim();
+    // For quick orders, we map these statuses to new labels, so they shouldn't appear as "extra" rows
+    if (isQuick) {
+      if (sLower === "picking with unassigned zone") return false;
+      if (sLower === "parking") return false;
+      if (sLower === "auditing") return false;
+    }
+    return !(statuses || []).some(st => st.toLowerCase().trim() === sLower);
+  });
+  const displayStatuses = [...(statuses || []), ...dataStatuses];
+
   return (
-    <div className="bg-white rounded-[3rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.08)] border border-slate-100 overflow-hidden mb-12">
-      <div className={cn("p-8 text-white font-black text-xl flex items-center justify-between", themeColor)}>
-        <span className="tracking-tight">{title}</span>
-        <span className="bg-white/20 backdrop-blur-md px-4 py-1.5 rounded-full text-xs uppercase tracking-[0.2em] font-black border border-white/20">
+    <div className="bg-white rounded-xl shadow-md border border-slate-100 overflow-hidden mb-4">
+      <div className={cn("p-2.5 text-white font-black text-xs flex items-center justify-between", themeColor)}>
+        <span className="tracking-tight uppercase">{title}</span>
+        <span className="bg-white/20 backdrop-blur-md px-2 py-0.5 rounded-full text-[9px] uppercase tracking-widest font-black border border-white/20">
           {data.length} Orders
         </span>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-[10px]">
+        <table className="w-full border-collapse text-[9px]">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100">
-              <th className="p-4 text-left font-black text-slate-400 uppercase tracking-widest border-r border-slate-100 min-w-[150px]">Status</th>
+              <th className="p-2 text-left font-black text-slate-400 uppercase tracking-widest border-r border-slate-100 min-w-[120px]">Status</th>
               {headers.map(h => (
-                <th key={h} className="p-4 text-center font-black text-slate-400 uppercase tracking-widest border-r border-slate-100 min-w-[80px] bg-slate-50/50">
-                  <div className="flex flex-col items-center gap-1">
+                <th key={h} className="p-2 text-center font-black text-slate-400 uppercase tracking-widest border-r border-slate-100 min-w-[60px] bg-slate-50/50">
+                  <div className="flex flex-col items-center gap-0.5">
                     <span>{h.split(' - ')[0]}</span>
-                    {h.includes(' - ') && <span className="text-[8px] opacity-40 leading-none">to {h.split(' - ')[1]}</span>}
+                    {h.includes(' - ') && <span className="text-[7px] opacity-40 leading-none">to {h.split(' - ')[1]}</span>}
                   </div>
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {STATUSES.map(stat => (
-              <tr key={stat} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                <td className="p-4 text-left font-black text-slate-700 border-r border-slate-100 sticky left-0 bg-white z-10 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">{stat}</td>
-                {headers.map(h => {
-                  const matches = data.filter(d => 
-                    (d.status || "").toLowerCase().trim() === stat.toLowerCase().trim() && 
-                    String(d[keyField] || "").toLowerCase().trim() === String(h || "").toLowerCase().trim()
-                  );
+                {displayStatuses.map(stat => (
+                  <tr key={stat} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                    <td className="p-2 text-left font-black text-slate-700 border-r border-slate-100 sticky left-0 bg-white z-10 shadow-[1px_0_3px_rgba(0,0,0,0.02)] uppercase">{stat}</td>
+                    {headers.map(h => {
+                      const matches = (data || []).filter(d => {
+                        const dStatus = (d.status || "").toLowerCase().trim();
+                        const sStatus = stat.toLowerCase().trim();
+                        const keyMatch = String(d[keyField] || "").toLowerCase().trim() === String(h || "").toLowerCase().trim();
+                        
+                        if (!keyMatch) return false;
+
+                        // Mapping for Quick Orders
+                        if (isQuick) {
+                          if (sStatus === "picking with packing" && dStatus === "picking with unassigned zone") return true;
+                          if (sStatus === "storing" && dStatus === "parking") return true;
+                          if (sStatus === "auditing") return false; // Explicitly hide auditing for quick
+                        }
+
+                        return dStatus === sStatus;
+                      });
                   const count = matches.length;
                   const hasData = count > 0;
                   const cellBg = hasData ? (themeColor.includes('red') ? 'bg-red-50' : 'bg-emerald-50') : '';
@@ -175,7 +204,7 @@ const MatrixTable = ({ title, headers, data, keyField, themeColor, onCellClick }
                   return (
                     <td 
                       key={h} 
-                      className={cn("p-4 text-center font-black border-r border-slate-100 transition-all", cellBg, textColor, hasData && "cursor-pointer active:scale-95 hover:brightness-95")}
+                      className={cn("p-2 text-center font-black border-r border-slate-100 transition-all", cellBg, textColor, hasData && "cursor-pointer active:scale-95 hover:brightness-95")}
                       onClick={() => {
                         if (hasData) {
                           onCellClick(stat, h, matches);
@@ -189,14 +218,13 @@ const MatrixTable = ({ title, headers, data, keyField, themeColor, onCellClick }
                 })}
               </tr>
             ))}
-            {/* Total Row */}
             <tr className="bg-slate-50/80 font-black">
-              <td className="p-4 text-left text-slate-900 border-r border-slate-100 sticky left-0 bg-slate-50 z-10">TOTAL</td>
+              <td className="p-2 text-left text-slate-900 border-r border-slate-100 sticky left-0 bg-slate-50 z-10">TOTAL</td>
               {headers.map(h => {
-                const matches = data.filter(d => String(d[keyField] || "").toLowerCase().trim() === String(h || "").toLowerCase().trim());
+                const matches = (data || []).filter(d => String(d[keyField] || "").toLowerCase().trim() === String(h || "").toLowerCase().trim());
                 const count = matches.length;
                 return (
-                  <td key={h} className="p-4 text-center text-slate-900 border-r border-slate-100">
+                  <td key={h} className="p-2 text-center text-slate-900 border-r border-slate-100">
                     {count > 0 ? count : '-'}
                   </td>
                 );
@@ -226,6 +254,30 @@ const getAgeing = (triggeredAt: string) => {
   const mins = Math.floor(diff / 60);
   const secs = diff % 60;
   return `${mins}m ${secs}s`;
+};
+
+const getBucketFromAgeing = (createdAt: string, triggeredAt?: string) => {
+  if (!createdAt) return "--";
+  let start = new Date(createdAt).getTime();
+  let end = triggeredAt ? new Date(triggeredAt).getTime() : new Date().getTime();
+
+  if (isNaN(start)) {
+    const cleaned = createdAt.replace(/,/g, '');
+    start = new Date(cleaned).getTime();
+  }
+  if (isNaN(end) && triggeredAt) {
+    const cleaned = triggeredAt.replace(/,/g, '');
+    end = new Date(cleaned).getTime();
+  }
+
+  if (isNaN(start)) return "--";
+  
+  const diff = Math.floor((end - start) / (1000 * 60));
+  if (diff < 0) return AGE_BUCKETS[0];
+  if (diff >= 60) return "60Min+";
+  
+  const bucketIndex = Math.floor(diff / 5);
+  return AGE_BUCKETS[bucketIndex] || "60Min+";
 };
 
 const AlertHistory = ({ logs, onBack }: { logs: AlertLog[], onBack: () => void }) => {
@@ -269,7 +321,9 @@ const AlertHistory = ({ logs, onBack }: { logs: AlertLog[], onBack: () => void }
                     <td className="p-6 text-xs font-bold text-slate-500">{new Date(log.timestamp).toLocaleString()}</td>
                     <td className="p-6 font-black text-slate-800">{log.orderId}</td>
                     <td className="p-6 text-xs font-bold text-slate-500">{log.storeId}</td>
-                    <td className="p-6 text-xs font-bold text-slate-500">{getAgeing(log.orderCreatedAt)}</td>
+                    <td className="p-6 text-xs font-bold text-slate-500">
+                      {log.bucket && log.bucket !== log.statusTrigger ? log.bucket : getBucketFromAgeing(log.orderCreatedAt, log.timestamp)}
+                    </td>
                     <td className="p-6 text-xs font-bold text-slate-500">{log.statusTrigger}</td>
                     <td className="p-6">
                       <span className={cn(
@@ -343,6 +397,8 @@ export default function App() {
   const [isMatrixLoading, setIsMatrixLoading] = useState(false);
   const [matrixDetail, setMatrixDetail] = useState<{ title: string, stat: string, key: string, orders: MatrixItem[] } | null>(null);
   const [matrixStoreFilter, setMatrixStoreFilter] = useState("All");
+  const [minimizedAlerts, setMinimizedAlerts] = useState<string[]>([]);
+  const [expandedAlertId, setExpandedAlertId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
   const [isScanning, setIsScanning] = useState(false);
 
@@ -408,7 +464,7 @@ export default function App() {
             orderCreatedAt: item.orderCreatedAt || item.timestamp || "",
             // UI Helpers
             triggeredAt: item.timestamp || "",
-            bucket: statusTrigger
+            bucket: item.bucket || item['Bucket'] || ""
           };
         });
         
@@ -472,8 +528,8 @@ export default function App() {
           // Auto-disable alerts older than 60 minutes
           if (ageMins > 60) return false;
 
-          // Hide if fully handled
-          if (l.status === "Acknowledged" || l.managerStatus === "Accepted") return false;
+          // Hide if fully handled - unless it's in minimizedAlerts
+          if ((l.status === "Acknowledged" || l.managerStatus === "Accepted") && !minimizedAlerts.includes(l.id)) return false;
           
           return true;
         }).map((l: AlertLog) => {
@@ -488,6 +544,9 @@ export default function App() {
           };
         });
         setActiveAlerts(active);
+        
+        // Cleanup minimizedAlerts state
+        setMinimizedAlerts(prev => prev.filter(id => active.some(a => a.id === id)));
       }
     } catch (e) {
       console.error("Failed to fetch alert logs", e);
@@ -512,6 +571,7 @@ export default function App() {
       params.append('eventType', action);
       params.append('storeId', alert.storeId || "");
       params.append('userId', user?.empId || "");
+      params.append('bucket', alert.bucket || "");
       
       let notificationTime = alert.notificationTime || now;
       if (action === 'trigger') {
@@ -628,14 +688,13 @@ export default function App() {
             managerStatus: "Pending",
             orderCreatedAt: orderCreatedAt,
             triggeredAt: now,
-            bucket: order.status
+            bucket: order.bucket
           };
           logAlertAction(newAlert, 'trigger');
           
           // Only show toast if it's relevant to this user
           if (isStoreMatch || canSeeAllStores) {
-            const ageingText = getAgeing(orderCreatedAt);
-            showToast(`New Alert: Order ${order.orderID} (Ageing: ${ageingText})`, 'error');
+            showToast(`New Alert: Order ${order.orderID} (Ageing: ${order.bucket})`, 'error');
             if (!isBuzzerMuted) playBuzzer();
           }
         }
@@ -652,7 +711,8 @@ export default function App() {
       let shouldPlayBuzzer = false;
       
       activeAlerts.forEach(alert => {
-        if (alert.status === "Acknowledged" || alert.managerStatus === "Accepted") return;
+        const isMinimized = minimizedAlerts.includes(alert.id);
+        if ((alert.status === "Acknowledged" || alert.managerStatus === "Accepted") && !isMinimized) return;
         
         const role = String(user.role || "").toLowerCase();
         const isStoreMatch = String(alert.storeId || "").trim().toLowerCase() === String(user.storeId || "").trim().toLowerCase();
@@ -666,8 +726,8 @@ export default function App() {
         
         const diffMins = (now - triggeredAt) / (1000 * 60);
 
-        // 0-1 min: Immediate buzzer for new alerts (as requested)
-        if (diffMins < 1) {
+        // 0-1 min: Immediate buzzer for new alerts (as requested) - only if not minimized
+        if (diffMins < 1 && !isMinimized) {
           shouldPlayBuzzer = true;
         }
 
@@ -680,8 +740,8 @@ export default function App() {
         }
 
         // 2+ mins after triggeredAt: Buzzer for Picker/Store/Supervisor
-        // We keep it buzzing until acknowledged
-        if (diffMins >= 2) {
+        // We keep it buzzing until acknowledged - only if not minimized
+        if (diffMins >= 2 && !isMinimized) {
           if (!alert.buzzerStarted && diffMins < 3) {
             setActiveAlerts(prev => prev.map(a => a.id === alert.id ? { ...a, buzzerStarted: true } : a));
           }
@@ -695,7 +755,7 @@ export default function App() {
         }
 
         // 3+ mins after triggeredAt: Buzzer for Manager/Supervisor
-        if (diffMins >= 3) {
+        if (diffMins >= 3 && !isMinimized) {
           if (!alert.managerBuzzerStarted && diffMins < 4) {
             setActiveAlerts(prev => prev.map(a => a.id === alert.id ? { ...a, managerBuzzerStarted: true } : a));
           }
@@ -766,7 +826,7 @@ export default function App() {
     }
   };
 
-  const handleAcceptAlert = (alertId: string) => {
+   const handleAcceptAlert = (alertId: string) => {
     const alert = activeAlerts.find(a => a.id === alertId);
     if (alert && user) {
       const role = String(user.role || "").toLowerCase();
@@ -785,7 +845,10 @@ export default function App() {
           updatedAlert.storeStaffName = user.name;
         }
         
-        setActiveAlerts(prev => prev.filter(a => a.id !== alertId));
+        // Minimize the alert instead of removing it
+        setMinimizedAlerts(prev => [...new Set([...prev, alertId])]);
+        setExpandedAlertId(null);
+        
         setAlertLogs(prev => prev.map(l => l.id === alertId ? updatedAlert : l));
         
         logAlertAction(updatedAlert, 'acknowledge');
@@ -899,9 +962,9 @@ export default function App() {
   const fetchStatus = async (empId: string) => {
     try {
       const res = await fetch(`${API_URL}?action=getTodayAttendance&empId=${empId}`);
-      const data: AttendanceRecord[] = await res.json();
+      const data = await res.json();
       
-      if (data.length === 0) {
+      if (!Array.isArray(data) || data.length === 0) {
         setAttendanceStatus({ inTime: null, outTime: null });
         return;
       }
@@ -1443,108 +1506,131 @@ export default function App() {
               }
             });
             return unique;
-          })().length > 0 && (
-            <div className="fixed bottom-24 left-6 right-6 z-[20000] space-y-3 pointer-events-none">
-              {(() => {
-                const filtered = activeAlerts.filter(a => {
-                  const role = String(user.role || "").toLowerCase();
-                  if (role === 'admin') {
-                    if (adminHiddenAlerts.includes(a.id)) return false;
-                    return true;
-                  }
-                  if (a.status === "Acknowledged" || a.managerStatus === "Accepted") return false;
-                  
-                  // Filter by store - Admin and Supervisor see all stores
-                  const isStoreMatch = String(a.storeId || "").trim().toLowerCase() === String(user.storeId || "").trim().toLowerCase();
-                  const canSeeAllStores = role === 'admin' || role === 'supervisor';
-                  if (!isStoreMatch && !canSeeAllStores) return false;
-
-                  if (role === 'manager') return a.escalation === "TRUE";
-                  if (['picker', 'store', 'supervisor'].includes(role)) return true;
-                  return false;
-                });
-                
-                const unique: ActiveAlert[] = [];
-                const seen = new Set();
-                [...filtered].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).forEach(a => {
-                  if (!seen.has(a.orderId)) {
-                    unique.push(a);
-                    seen.add(a.orderId);
-                  }
-                });
-                return unique;
-              })().slice(-3).map((alert) => (
-                <motion.div 
-                  key={alert.id}
-                  initial={{ opacity: 0, x: -100 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
+          })().map((alert) => {
+            const isMinimized = minimizedAlerts.includes(alert.id) && expandedAlertId !== alert.id;
+            
+            if (isMinimized) {
+              return (
+                <motion.div
+                  key={`min-${alert.id}`}
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0, opacity: 0 }}
+                  onClick={() => setExpandedAlertId(alert.id)}
                   className={cn(
-                    "p-5 rounded-[2rem] shadow-2xl border-4 flex items-center gap-4 pointer-events-auto backdrop-blur-md",
-                    alert.escalation === "TRUE" ? "bg-red-600/90 border-red-400 text-white" : (alert.buzzerStarted || alert.managerBuzzerStarted ? "bg-amber-500/90 border-amber-300 text-white" : "bg-white/90 border-blue-100 text-slate-800")
+                    "fixed bottom-24 right-8 h-14 w-14 rounded-full flex items-center justify-center cursor-pointer shadow-2xl border-4 z-[100] group",
+                    alert.escalation === "TRUE" ? "bg-red-600 border-red-400 text-white" : "bg-amber-500 border-amber-300 text-white"
                   )}
                 >
-                  <div className={cn("h-12 w-12 rounded-2xl flex items-center justify-center animate-pulse", alert.escalation === "TRUE" ? "bg-white/20" : "bg-blue-50 text-blue-600")}>
-                    <AlertTriangle size={24} />
+                  <div className="absolute -top-2 -right-2 bg-white text-slate-800 text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-md border border-slate-100">
+                    {alert.orderId.slice(-4)}
                   </div>
-                  <div className="flex-1">
-                    <p className="text-[10px] font-black uppercase tracking-widest opacity-60">
-                      {alert.escalation === "TRUE" ? "🔥 Escalated Alert" : (alert.buzzerStarted || alert.managerBuzzerStarted ? "🔔 Critical Alert" : "⚠️ New Alert")}
-                    </p>
-                    <h4 className="font-black text-sm tracking-tight">Order {alert.orderId}</h4>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      <span className="text-[9px] font-black uppercase bg-black/10 px-2 py-0.5 rounded-full">Store : {alert.storeId}</span>
-                      <span className="text-[9px] font-black uppercase bg-black/10 px-2 py-0.5 rounded-full">Ageing: {getAgeing(alert.orderCreatedAt)}</span>
+                  <AlertTriangle size={24} className="group-hover:scale-110 transition-transform" />
+                </motion.div>
+              );
+            }
+
+            return (
+              <div key={alert.id} className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/20 backdrop-blur-sm pointer-events-auto" onClick={() => setExpandedAlertId(null)}>
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className={cn(
+                    "w-full max-w-lg p-8 rounded-[3rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.3)] border-4 flex flex-col gap-6 relative",
+                    alert.escalation === "TRUE" ? "bg-red-600 border-red-400 text-white" : (alert.buzzerStarted || alert.managerBuzzerStarted ? "bg-amber-500 border-amber-300 text-white" : "bg-white border-blue-100 text-slate-800")
+                  )}
+                >
+                  <button 
+                    onClick={() => setExpandedAlertId(null)}
+                    className="absolute top-6 right-6 p-2 hover:bg-black/10 rounded-full transition-colors"
+                  >
+                    <X size={24} />
+                  </button>
+
+                  <div className="flex items-center gap-6">
+                    <div className={cn("h-20 w-20 rounded-[2rem] flex items-center justify-center animate-pulse shadow-inner", alert.escalation === "TRUE" ? "bg-white/20" : "bg-blue-50 text-blue-600")}>
+                      <AlertTriangle size={40} />
                     </div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-[0.3em] opacity-60">
+                        {alert.escalation === "TRUE" ? "🔥 Escalated Alert" : (alert.buzzerStarted || alert.managerBuzzerStarted ? "🔔 Critical Alert" : "⚠️ New Alert")}
+                      </p>
+                      <h4 className="text-3xl font-black tracking-tight mt-1">Order {alert.orderId}</h4>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-black/10 p-4 rounded-2xl">
+                      <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">Store ID</p>
+                      <p className="font-black text-lg">{alert.storeId}</p>
+                    </div>
+                    <div className="bg-black/10 p-4 rounded-2xl">
+                      <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">Ageing</p>
+                      <p className="font-black text-lg">{alert.bucket || getAgeing(alert.orderCreatedAt)}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-bold opacity-80">Trigger: <span className="font-black">{alert.statusTrigger}</span></p>
+                    <p className="text-xs font-bold opacity-80">Current Status: <span className="font-black">{alert.status}</span></p>
+                    
                     {alert.status === "Acknowledged" && (
-                      <p className="text-[8px] font-black text-emerald-500 uppercase tracking-widest mt-1">✓ Acknowledged by {alert.storeStaffName}</p>
+                      <div className="flex items-center gap-2 text-emerald-400 bg-emerald-400/10 p-3 rounded-xl mt-4">
+                        <CheckCircle2 size={16} />
+                        <p className="text-[10px] font-black uppercase tracking-widest">Acknowledged by {alert.storeStaffName}</p>
+                      </div>
                     )}
                     {alert.managerStatus === "Accepted" && (
-                      <p className="text-[8px] font-black text-blue-500 uppercase tracking-widest mt-1">✓ Accepted by Manager {alert.managerName}</p>
+                      <div className="flex items-center gap-2 text-blue-400 bg-blue-400/10 p-3 rounded-xl mt-4">
+                        <CheckCircle2 size={16} />
+                        <p className="text-[10px] font-black uppercase tracking-widest">Accepted by Manager {alert.managerName}</p>
+                      </div>
                     )}
-                    <p className="text-[10px] font-bold opacity-80 mt-1">{alert.statusTrigger} • {alert.status}</p>
                   </div>
-                  <div className="flex flex-col sm:flex-row gap-2 pointer-events-auto">
+
+                  <div className="flex flex-col gap-3 mt-4">
                     {String(user.role || "").toLowerCase() === 'admin' ? (
-                      <>
+                      <div className="grid grid-cols-2 gap-3">
                         <button 
                           onClick={() => handleAcceptAlert(alert.id)}
-                          className="px-4 py-2 bg-slate-200 text-slate-700 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-300 transition-all"
+                          className="px-6 py-4 bg-white/20 hover:bg-white/30 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
                         >
                           Hide
                         </button>
                         {alert.escalation !== "TRUE" && (
                           <button 
                             onClick={() => handleManualEscalate(alert.id)}
-                            className="px-4 py-2 bg-red-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg shadow-red-200"
+                            className="px-6 py-4 bg-white text-red-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-50 transition-all shadow-xl"
                           >
                             Escalate
                           </button>
                         )}
-                      </>
+                      </div>
                     ) : (
-                      <>
+                      <div className="flex flex-col gap-3">
                         <button 
                           onClick={() => handleAcceptAlert(alert.id)}
-                          className="px-4 py-2 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
+                          className="w-full px-6 py-5 bg-white text-slate-900 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-50 transition-all shadow-2xl"
                         >
-                          {String(user.role || "").toLowerCase() === 'manager' ? 'Accept' : 'Acknowledge'}
+                          {String(user.role || "").toLowerCase() === 'manager' ? 'Accept Alert' : 'Acknowledge Alert'}
                         </button>
                         {(String(user.role || "").toLowerCase() === 'supervisor' || String(user.role || "").toLowerCase() === 'manager') && alert.escalation !== "TRUE" && (
                           <button 
                             onClick={() => handleManualEscalate(alert.id)}
-                            className="px-4 py-2 bg-red-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg shadow-red-200"
+                            className="w-full px-6 py-4 bg-red-800 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-900 transition-all"
                           >
-                            Escalate
+                            Manual Escalation
                           </button>
                         )}
-                      </>
+                      </div>
                     )}
                   </div>
                 </motion.div>
-              ))}
-            </div>
-          )}
+              </div>
+            );
+          })}
         </AnimatePresence>
       )}
 
@@ -2196,7 +2282,7 @@ export default function App() {
             className="min-h-screen bg-slate-50/50"
           >
             <Header title="Matrix Intelligence" showBack />
-            <div className="p-8 max-w-7xl mx-auto">
+            <div className="p-4 max-w-7xl mx-auto">
               {(() => {
                 const filteredQuick = matrixStoreFilter === "All" 
                   ? (matrixData?.quick || []) 
@@ -2212,53 +2298,53 @@ export default function App() {
 
                 return (
                   <>
-                    <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-8 mb-12">
+                    <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3 mb-4">
                       <div className="relative">
-                        <h2 className="text-5xl font-black text-slate-900 tracking-tighter leading-none">Matrix Intelligence</h2>
-                        <div className="flex items-center gap-4 mt-4">
-                          <p className="text-slate-500 font-bold text-lg">Real-time ageing & store-wise distribution</p>
-                          <div className="h-1.5 w-1.5 rounded-full bg-blue-500"></div>
-                          <p className="text-blue-600 font-black text-lg tracking-tight">{totalOrders} Total Orders</p>
+                        <h2 className="text-2xl font-black text-slate-900 tracking-tighter leading-none">Matrix Intelligence</h2>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <p className="text-slate-500 font-bold text-xs">Real-time ageing & store-wise distribution</p>
+                          <div className="h-1 w-1 rounded-full bg-blue-500"></div>
+                          <p className="text-blue-600 font-black text-xs tracking-tight">{totalOrders} Total Orders</p>
                         </div>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-4">
+                      <div className="flex flex-wrap items-center gap-3">
                         {/* Store Filter Pill */}
-                        <div className="bg-slate-200/50 backdrop-blur-md px-6 py-3 rounded-full border border-white/50 shadow-inner flex items-center gap-4">
-                          <div className="p-2 bg-blue-600 rounded-lg text-white shadow-lg shadow-blue-200">
-                            <Store size={18} />
+                        <div className="bg-slate-200/50 backdrop-blur-md px-4 py-2 rounded-full border border-white/50 shadow-inner flex items-center gap-3">
+                          <div className="p-1.5 bg-blue-600 rounded-lg text-white shadow-lg shadow-blue-200">
+                            <Store size={14} />
                           </div>
                           <div className="flex flex-col">
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Filter by Store</p>
-                            <div className="flex items-center gap-3">
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em]">Filter by Store</p>
+                            <div className="flex items-center gap-2">
                               <select 
                                 value={allStores.includes(matrixStoreFilter) ? matrixStoreFilter : "All"}
                                 onChange={(e) => setMatrixStoreFilter(e.target.value)}
-                                className="text-sm font-black text-slate-800 outline-none bg-transparent cursor-pointer appearance-none pr-4"
+                                className="text-xs font-black text-slate-800 outline-none bg-transparent cursor-pointer appearance-none pr-3"
                               >
                                 <option value="All">All Stores</option>
                                 {allStores.map(s => <option key={s} value={s}>{s}</option>)}
                               </select>
-                              <div className="h-4 w-[1px] bg-slate-300"></div>
+                              <div className="h-3 w-[1px] bg-slate-300"></div>
                               <input 
                                 type="text"
                                 placeholder="Type Store ID..."
                                 value={matrixStoreFilter === "All" ? "" : matrixStoreFilter}
                                 onChange={(e) => setMatrixStoreFilter(e.target.value || "All")}
-                                className="text-sm font-black text-slate-800 outline-none bg-transparent w-28 placeholder:text-slate-400"
+                                className="text-xs font-black text-slate-800 outline-none bg-transparent w-24 placeholder:text-slate-400"
                               />
                             </div>
                           </div>
                         </div>
 
                         {/* Sync Time Pill */}
-                        <div className="bg-slate-200/50 backdrop-blur-md px-6 py-3 rounded-full border border-white/50 shadow-inner flex items-center gap-4">
-                          <div className="p-2 bg-emerald-500 rounded-lg text-white shadow-lg shadow-emerald-200">
-                            <RefreshCw size={18} />
+                        <div className="bg-slate-200/50 backdrop-blur-md px-4 py-2 rounded-full border border-white/50 shadow-inner flex items-center gap-3">
+                          <div className="p-1.5 bg-emerald-500 rounded-lg text-white shadow-lg shadow-emerald-200">
+                            <RefreshCw size={14} />
                           </div>
                           <div>
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Sync Time</p>
-                            <p className="text-sm font-black text-slate-800">
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em]">Sync Time</p>
+                            <p className="text-xs font-black text-slate-800">
                               {(() => {
                                 if (!matrixData?.syncTime) return 'Never';
                                 const d = new Date(matrixData.syncTime);
@@ -2269,13 +2355,13 @@ export default function App() {
                         </div>
 
                         {/* Last Updated Pill */}
-                        <div className="bg-slate-200/50 backdrop-blur-md px-6 py-3 rounded-full border border-white/50 shadow-inner flex items-center gap-4">
-                          <div className="p-2 bg-blue-500 rounded-lg text-white shadow-lg shadow-blue-200">
-                            <Clock size={18} />
+                        <div className="bg-slate-200/50 backdrop-blur-md px-4 py-2 rounded-full border border-white/50 shadow-inner flex items-center gap-3">
+                          <div className="p-1.5 bg-blue-500 rounded-lg text-white shadow-lg shadow-blue-200">
+                            <Clock size={14} />
                           </div>
                           <div>
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Last Updated</p>
-                            <p className="text-sm font-black text-slate-800">
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em]">Last Updated</p>
+                            <p className="text-xs font-black text-slate-800">
                               {(() => {
                                 if (!matrixData?.timestamp) return 'Never';
                                 const d = new Date(matrixData.timestamp);
@@ -2290,64 +2376,64 @@ export default function App() {
                           whileTap={{ scale: 0.95 }}
                           onClick={() => fetchMatrixData(true)}
                           disabled={isMatrixLoading}
-                          className="h-16 w-16 rounded-3xl bg-blue-600 text-white flex items-center justify-center shadow-2xl shadow-blue-300 hover:bg-blue-700 transition-all disabled:bg-slate-300"
+                          className="h-10 w-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-300 hover:bg-blue-700 transition-all disabled:bg-slate-300"
                         >
-                          <RefreshCw size={28} className={cn(isMatrixLoading && "animate-spin")} />
+                          <RefreshCw size={18} className={cn(isMatrixLoading && "animate-spin")} />
                         </motion.button>
                       </div>
                     </div>
 
                     {/* Summary Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-4">
                       <motion.div 
-                        initial={{ opacity: 0, y: 20 }}
+                        initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.1 }}
-                        className="bg-white/80 backdrop-blur-xl p-10 rounded-[3rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1)] border border-white relative overflow-hidden group"
+                        className="bg-white/80 backdrop-blur-xl p-2 rounded-xl shadow-sm border border-white relative overflow-hidden group"
                       >
-                        <div className="flex items-center gap-6 mb-8">
-                          <div className="h-14 w-14 rounded-2xl bg-red-50 text-red-500 flex items-center justify-center shadow-inner">
-                            <TrendingUp size={28} />
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-lg bg-red-50 text-red-500 flex items-center justify-center shrink-0 shadow-inner">
+                            <TrendingUp size={16} />
                           </div>
-                          <p className="text-sm font-black text-slate-400 uppercase tracking-[0.2em]">Quick Commerce</p>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest truncate">Quick Commerce</p>
+                            <p className="text-xl font-black text-slate-900 leading-none mt-0.5">{filteredQuick.length}</p>
+                          </div>
                         </div>
-                        <p className="text-7xl font-black text-slate-900 tracking-tighter">{filteredQuick.length}</p>
-                        <p className="text-sm font-bold text-slate-400 mt-2">Active ageing orders</p>
-                        <div className="absolute -right-4 -bottom-4 h-24 w-24 bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity blur-2xl"></div>
                       </motion.div>
 
                       <motion.div 
-                        initial={{ opacity: 0, y: 20 }}
+                        initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.2 }}
-                        className="bg-white/80 backdrop-blur-xl p-10 rounded-[3rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1)] border border-white relative overflow-hidden group"
+                        className="bg-white/80 backdrop-blur-xl p-2 rounded-xl shadow-sm border border-white relative overflow-hidden group"
                       >
-                        <div className="flex items-center gap-6 mb-8">
-                          <div className="h-14 w-14 rounded-2xl bg-emerald-50 text-emerald-500 flex items-center justify-center shadow-inner">
-                            <Clock size={28} />
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-lg bg-emerald-50 text-emerald-500 flex items-center justify-center shrink-0 shadow-inner">
+                            <Clock size={16} />
                           </div>
-                          <p className="text-sm font-black text-slate-400 uppercase tracking-[0.2em]">Schedule Commerce</p>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest truncate">Schedule Commerce</p>
+                            <p className="text-xl font-black text-slate-900 leading-none mt-0.5">{filteredSchedule.length}</p>
+                          </div>
                         </div>
-                        <p className="text-7xl font-black text-slate-900 tracking-tighter">{filteredSchedule.length}</p>
-                        <p className="text-sm font-bold text-slate-400 mt-2">Scheduled delivery orders</p>
-                        <div className="absolute -right-4 -bottom-4 h-24 w-24 bg-emerald-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity blur-2xl"></div>
                       </motion.div>
 
                       <motion.div 
-                        initial={{ opacity: 0, y: 20 }}
+                        initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.3 }}
-                        className="bg-white/80 backdrop-blur-xl p-10 rounded-[3rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1)] border border-white relative overflow-hidden group"
+                        className="bg-white/80 backdrop-blur-xl p-2 rounded-xl shadow-sm border border-white relative overflow-hidden group"
                       >
-                        <div className="flex items-center gap-6 mb-8">
-                          <div className="h-14 w-14 rounded-2xl bg-blue-50 text-blue-500 flex items-center justify-center shadow-inner">
-                            <LayoutDashboard size={28} />
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center shrink-0 shadow-inner">
+                            <LayoutDashboard size={16} />
                           </div>
-                          <p className="text-sm font-black text-slate-400 uppercase tracking-[0.2em]">Total Volume</p>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest truncate">Total Volume</p>
+                            <p className="text-xl font-black text-slate-900 leading-none mt-0.5">{totalOrders}</p>
+                          </div>
                         </div>
-                        <p className="text-7xl font-black text-slate-900 tracking-tighter">{totalOrders}</p>
-                        <p className="text-sm font-bold text-slate-400 mt-2">Combined order flow</p>
-                        <div className="absolute -right-4 -bottom-4 h-24 w-24 bg-blue-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity blur-2xl"></div>
                       </motion.div>
                     </div>
 
@@ -2376,12 +2462,12 @@ export default function App() {
               ) : (
                 <div className="space-y-12">
                   {/* Quick Commerce Section */}
-                  <div className="space-y-8">
-                    <div className="flex items-center gap-6">
-                      <div className="h-14 w-14 rounded-[1.5rem] bg-red-600 flex items-center justify-center text-white shadow-2xl shadow-red-200">
-                        <TrendingUp size={28} />
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-lg bg-red-600 flex items-center justify-center text-white shadow-md shadow-red-100">
+                        <TrendingUp size={16} />
                       </div>
-                      <h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Quick Commerce</h3>
+                      <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase">Quick Commerce</h3>
                     </div>
                     
                     <MatrixTable 
@@ -2390,6 +2476,8 @@ export default function App() {
                       data={filteredQuick} 
                       keyField="bucket" 
                       themeColor="bg-red-600" 
+                      statuses={QUICK_STATUSES}
+                      isQuick={true}
                       onCellClick={(stat, key, orders) => setMatrixDetail({ title: 'Quick Commerce Ageing', stat, key, orders })}
                     />
                     
@@ -2399,17 +2487,19 @@ export default function App() {
                       data={filteredQuick} 
                       keyField="storeID" 
                       themeColor="bg-red-500" 
+                      statuses={QUICK_STATUSES}
+                      isQuick={true}
                       onCellClick={(stat, key, orders) => setMatrixDetail({ title: 'Quick Commerce Store', stat, key, orders })}
                     />
                   </div>
 
                   {/* Schedule Section */}
                   <div>
-                    <div className="flex items-center gap-4 mb-6">
-                      <div className="h-10 w-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-lg shadow-emerald-100">
-                        <Clock size={20} />
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="h-8 w-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white shadow-md shadow-emerald-100">
+                        <Clock size={16} />
                       </div>
-                      <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">Schedule Commerce</h3>
+                      <h3 className="text-lg font-black text-slate-800 tracking-tight uppercase">Schedule Commerce</h3>
                     </div>
                     
                     <MatrixTable 
@@ -2418,6 +2508,7 @@ export default function App() {
                       data={filteredSchedule} 
                       keyField="slot" 
                       themeColor="bg-emerald-600" 
+                      statuses={SCHEDULE_STATUSES}
                       onCellClick={(stat, key, orders) => setMatrixDetail({ title: 'Schedule Commerce Slot', stat, key, orders })}
                     />
                     
@@ -2427,6 +2518,7 @@ export default function App() {
                       data={filteredSchedule} 
                       keyField="storeID" 
                       themeColor="bg-emerald-500" 
+                      statuses={SCHEDULE_STATUSES}
                       onCellClick={(stat, key, orders) => setMatrixDetail({ title: 'Schedule Commerce Store', stat, key, orders })}
                     />
                   </div>
@@ -2520,7 +2612,7 @@ export default function App() {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart 
                       data={(() => {
-                        const all = [...matrixData.quick, ...matrixData.schedule];
+                        const all = [...(matrixData?.quick || []), ...(matrixData?.schedule || [])];
                         const counts: Record<string, number> = {};
                         all.forEach(item => {
                           const s = item.status || "Unknown";
@@ -2565,7 +2657,7 @@ export default function App() {
                       <Pie
                         data={(() => {
                           let low = 0, mid = 0, high = 0;
-                          matrixData.quick.forEach(item => {
+                          (matrixData?.quick || []).forEach(item => {
                             const b = item.bucket || "";
                             if (b.includes("60Min+") || b.includes("45-50") || b.includes("50-55") || b.includes("55-60")) high++;
                             else if (b.includes("20-25") || b.includes("25-30") || b.includes("30-35") || b.includes("35-40") || b.includes("40-45")) mid++;
@@ -2586,7 +2678,7 @@ export default function App() {
                       >
                         {(() => {
                           let low = 0, mid = 0, high = 0;
-                          matrixData.quick.forEach(item => {
+                          (matrixData?.quick || []).forEach(item => {
                             const b = item.bucket || "";
                             if (b.includes("60Min+") || b.includes("45-50") || b.includes("50-55") || b.includes("55-60")) high++;
                             else if (b.includes("20-25") || b.includes("25-30") || b.includes("30-35") || b.includes("35-40") || b.includes("40-45")) mid++;
@@ -2620,7 +2712,7 @@ export default function App() {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart 
                       data={(() => {
-                        const all = [...matrixData.quick, ...matrixData.schedule];
+                        const all = [...(matrixData?.quick || []), ...(matrixData?.schedule || [])];
                         const counts: Record<string, number> = {};
                         all.forEach(item => {
                           counts[item.storeID] = (counts[item.storeID] || 0) + 1;
