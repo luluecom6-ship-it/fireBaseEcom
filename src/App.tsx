@@ -54,7 +54,7 @@ import { cn } from "@/src/lib/utils";
 import { User, AttendanceRecord, OrderRecord, AdminData, MatrixData, MatrixItem, EscalationRule, ActiveAlert, AlertLog } from "./types";
 
 // --- CONFIGURATION ---
-const API_URL ="https://script.google.com/macros/s/AKfycbzvWqhiniCiTdZOzdXegzX-5xC4VSE_Y8KQCgep7tR_do8IaAJzJXW6aKLKAim6ehXt/exec";
+const API_URL ="https://script.google.com/macros/s/AKfycbwSPyMTGqUwXl7o6dX9GdczgEhHi-GO2tPNbdUKU7sAQ9Olf4swVi46TN_JcqPcVF7E/exec";
 
 // --- UTILS ---
 const fixImageUrl = (url: string) => {
