@@ -1,0 +1,556 @@
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { 
+  Clock, RefreshCw, Package, Users, UserCheck, TrendingUp, 
+  ShieldCheck, AlertTriangle, History, Save, X, AlertCircle 
+} from 'lucide-react';
+import { 
+  User, AdminData, EscalationRule, OrderRecord 
+} from '../types';
+import { Header } from '../components/layout/Header';
+import { STATUSES, AGE_BUCKETS } from '../constants';
+import { fixImageUrl, getImages } from '../utils/formatters';
+import { cn } from '../lib/utils';
+import { useSystemConfig } from '../hooks/useSystemConfig';
+
+interface AdminProps {
+  user: User;
+  adminData: AdminData;
+  onRefetch: (manual?: boolean) => Promise<void>;
+  onResetAttendance: (empId: string, date: string) => Promise<void>;
+  onViewImage: (url: string | null) => void;
+  navigateTo: (page: any) => void;
+  escalationRules: EscalationRule[];
+  setEscalationRules: React.Dispatch<React.SetStateAction<EscalationRule[]>>;
+  maxImages: number;
+  setMaxImages: (num: number) => void;
+  onSaveConfig: () => Promise<void>;
+  isSavingConfig: boolean;
+}
+
+export const Admin: React.FC<AdminProps> = ({
+  user,
+  adminData,
+  onRefetch,
+  onResetAttendance,
+  onViewImage,
+  navigateTo,
+  escalationRules,
+  setEscalationRules,
+  maxImages,
+  setMaxImages,
+  onSaveConfig,
+  isSavingConfig
+}) => {
+  const [filterDate, setFilterDate] = useState(new Date().toISOString().split("T")[0]);
+  const [adminStoreFilter, setAdminStoreFilter] = useState("All");
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [showDailyOrdersModal, setShowDailyOrdersModal] = useState(false);
+
+  const filteredOrders = adminData.orders.filter(o => o.timestamp.includes(filterDate));
+  const filteredAttendance = adminData.attendance.filter(a => a.timestamp.includes(filterDate));
+  const activeStaff = adminData.attendance.filter(a => a.type === "In" && a.timestamp.includes(filterDate) && !adminData.users.find(u => u.empId === a.empId && u.role === 'admin')).length;
+
+  return (
+    <motion.div 
+      key="admin"
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      className="min-h-screen bg-slate-50 pb-20"
+    >
+      <Header title="Admin Intelligence" showBack onBack={() => navigateTo("dashboard")} user={user} />
+      
+      <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="text-center sm:text-left">
+            <h2 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">System Admin</h2>
+            <p className="text-slate-500 font-bold text-xs mt-1">Manage escalation rules and system settings</p>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <div className="flex-1 sm:flex-none bg-white p-3 sm:p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
+              <Clock className="text-blue-600" size={18} />
+              <input 
+                type="date" 
+                value={filterDate} 
+                onChange={(e) => setFilterDate(e.target.value)} 
+                className="font-black text-slate-700 outline-none bg-transparent text-sm"
+              />
+            </div>
+            <motion.button 
+              whileTap={{ rotate: 180 }}
+              onClick={() => onRefetch(true)}
+              className="h-11 w-11 sm:h-14 sm:w-14 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center text-blue-600"
+            >
+              <RefreshCw size={20} />
+            </motion.button>
+          </div>
+        </div>
+
+        {/* Metrics Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          {[
+            { id: "orders", label: "Daily Orders", val: filteredOrders.length, icon: Package, color: "text-blue-600", bg: "bg-blue-50" },
+            { id: "active", label: "Active Staff", val: activeStaff, icon: Users, color: "text-emerald-600", bg: "bg-emerald-50" },
+            { id: "total", label: "Total Staff", val: adminData.users.filter(u => u.role !== 'admin').length, icon: UserCheck, color: "text-purple-600", bg: "bg-purple-50" },
+            { id: "efficiency", label: "Efficiency", val: "94%", icon: TrendingUp, color: "text-amber-600", bg: "bg-amber-50" },
+          ].map((m, i) => (
+            <motion.div 
+              key={i}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.1 }}
+              onClick={() => m.id === "orders" && setShowDailyOrdersModal(true)}
+              className={cn(
+                "bg-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] shadow-sm border border-slate-100",
+                m.id === "orders" && "cursor-pointer hover:border-blue-200 hover:shadow-md transition-all"
+              )}
+            >
+              <div className={cn("h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl flex items-center justify-center mb-3 sm:mb-4", m.bg, m.color)}>
+                <m.icon size={20} className="sm:hidden" />
+                <m.icon size={24} className="hidden sm:block" />
+              </div>
+              <p className="text-[8px] sm:text-[10px] uppercase font-black text-slate-400 tracking-widest">{m.label}</p>
+              <p className="text-xl sm:text-3xl font-black text-slate-800 tracking-tighter mt-1">{m.val}</p>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* System Settings */}
+        {user.role === "admin" && (
+          <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden p-5 sm:p-6">
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
+              <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
+                <ShieldCheck size={18} className="text-blue-600 sm:hidden" />
+                <ShieldCheck size={20} className="text-blue-600 hidden sm:block" />
+                System Configuration
+              </h4>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+              <div className="p-4 sm:p-5 bg-slate-50 rounded-2xl sm:rounded-3xl border border-slate-100">
+                <div className="flex items-center justify-between mb-3 sm:mb-4">
+                  <div>
+                    <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Max Images Per Order</p>
+                    <p className="text-[10px] sm:text-xs font-bold text-slate-600 mt-1">Currently set to {maxImages}</p>
+                  </div>
+                  <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl bg-blue-600 flex items-center justify-center text-white font-black text-sm sm:text-base">
+                    {maxImages}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4].map(num => (
+                    <button
+                      key={num}
+                      onClick={() => setMaxImages(num)}
+                      className={cn(
+                        "flex-1 py-1.5 sm:py-2 rounded-lg sm:rounded-xl font-black text-[10px] sm:text-xs transition-all",
+                        maxImages === num 
+                          ? "bg-blue-600 text-white shadow-lg shadow-blue-200" 
+                          : "bg-white text-slate-400 border border-slate-200 hover:border-blue-300"
+                      )}
+                    >
+                      {num}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Escalation Matrix Configuration */}
+        {user.role === 'admin' && (
+          <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+            <div className="p-4 sm:p-6 bg-slate-50/50 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
+                <AlertTriangle size={18} className="text-red-600 sm:hidden" />
+                <AlertTriangle size={20} className="text-red-600 hidden sm:block" />
+                Escalation Matrix
+              </h4>
+              <div className="flex flex-wrap items-center gap-2">
+                <button 
+                  onClick={() => navigateTo("alerts")}
+                  className="px-3 py-1.5 sm:px-4 sm:py-2 bg-slate-100 text-slate-700 rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center gap-1.5 sm:gap-2"
+                >
+                  <History size={12} sm:size={14} /> History
+                </button>
+                <button 
+                  onClick={onSaveConfig}
+                  disabled={isSavingConfig}
+                  className={cn(
+                    "px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 sm:gap-2",
+                    isSavingConfig ? "bg-slate-100 text-slate-400" : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-200"
+                  )}
+                >
+                  <Save size={12} sm:size={14} /> {isSavingConfig ? "Syncing..." : "Save"}
+                </button>
+                <button 
+                  onClick={() => {
+                    const newRule: EscalationRule = {
+                      id: Math.random().toString(36).substr(2, 9),
+                      status: STATUSES[0],
+                      bucket: AGE_BUCKETS[0],
+                      escalationUser: 'New Supervisor',
+                      isActive: true
+                    };
+                    setEscalationRules([...escalationRules, newRule]);
+                  }}
+                  className="px-3 py-1.5 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all"
+                >
+                  Add Rule
+                </button>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left min-w-[600px]">
+                <thead>
+                  <tr className="bg-slate-50/50 border-b border-slate-100">
+                    <th className="p-3 sm:p-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+                    <th className="p-3 sm:p-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Bucket</th>
+                    <th className="p-3 sm:p-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Escalation To</th>
+                    <th className="p-3 sm:p-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Active</th>
+                    <th className="p-3 sm:p-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {escalationRules.map(rule => (
+                    <tr key={rule.id} className="hover:bg-slate-50/30 transition-colors">
+                      <td className="p-3 sm:p-4">
+                        <select 
+                          value={rule.status}
+                          onChange={(e) => setEscalationRules(prev => prev.map(r => r.id === rule.id ? { ...r, status: e.target.value } : r))}
+                          className="w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-[10px] sm:text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                        >
+                          {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </td>
+                      <td className="p-3 sm:p-4">
+                        <select 
+                          value={rule.bucket}
+                          onChange={(e) => setEscalationRules(prev => prev.map(r => r.id === rule.id ? { ...r, bucket: e.target.value } : r))}
+                          className="w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-[10px] sm:text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                        >
+                          {AGE_BUCKETS.map(b => <option key={b} value={b}>{b}</option>)}
+                        </select>
+                      </td>
+                      <td className="p-3 sm:p-4">
+                        <input 
+                          type="text"
+                          value={rule.escalationUser}
+                          onChange={(e) => setEscalationRules(prev => prev.map(r => r.id === rule.id ? { ...r, escalationUser: e.target.value } : r))}
+                          className="w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-[10px] sm:text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                        />
+                      </td>
+                      <td className="p-3 sm:p-4 text-center">
+                        <button 
+                          onClick={() => setEscalationRules(prev => prev.map(r => r.id === rule.id ? { ...r, isActive: !r.isActive } : r))}
+                          className={cn(
+                            "h-5 w-8 sm:h-6 sm:w-10 rounded-full relative transition-all",
+                            rule.isActive ? "bg-emerald-500" : "bg-slate-200"
+                          )}
+                        >
+                          <div className={cn("absolute top-0.5 sm:top-1 h-3.5 w-3.5 sm:h-4 sm:w-4 bg-white rounded-full transition-all", rule.isActive ? "right-0.5 sm:right-1" : "left-0.5 sm:left-1")}></div>
+                        </button>
+                      </td>
+                      <td className="p-3 sm:p-4 text-center">
+                        <button 
+                          onClick={() => setEscalationRules(prev => prev.filter(r => r.id !== rule.id))}
+                          className="text-red-400 hover:text-red-600 transition-colors"
+                        >
+                          <X size={16} sm:size={18} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Staff Table */}
+        <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+          <div className="p-4 sm:p-6 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between">
+            <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
+              <Users size={18} className="text-blue-600 sm:hidden" />
+              <Users size={20} className="text-blue-600 hidden sm:block" />
+              Operational Staff
+            </h4>
+            <span className="px-2 py-0.5 sm:px-3 sm:py-1 bg-blue-100 text-blue-700 rounded-full text-[8px] sm:text-[10px] font-black uppercase tracking-widest">Live Status</span>
+          </div>
+          <div className="divide-y divide-slate-50">
+            {adminData.users.filter(u => u.role !== 'admin').map((u, i) => {
+              const inRecord = adminData.attendance.find(a => a.empId === u.empId && a.type === "In" && a.timestamp.includes(filterDate));
+              const outRecord = [...adminData.attendance].reverse().find(a => a.empId === u.empId && a.type === "Out" && a.timestamp.includes(filterDate));
+              
+              const isToday = filterDate === new Date().toISOString().split("T")[0];
+              let duration = "--";
+              if (inRecord) {
+                const start = new Date(inRecord.timestamp).getTime();
+                let end = outRecord ? new Date(outRecord.timestamp).getTime() : (isToday ? new Date().getTime() : null);
+                
+                if (end) {
+                  const diffMs = end - start;
+                  if (diffMs > 0) {
+                    const hrs = Math.floor(diffMs / (1000 * 60 * 60));
+                    const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                    duration = `${hrs}h ${mins}m`;
+                  } else {
+                    duration = "0h 0m";
+                  }
+                }
+              }
+
+              const formatTime = (ts: string) => new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+
+              return (
+                <motion.div 
+                  key={`${u.empId}-${i}`} 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: i * 0.05 }}
+                  onClick={() => setSelectedUser(u)} 
+                  className="p-4 sm:p-6 flex items-center justify-between hover:bg-slate-50 cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-3 sm:gap-4">
+                    <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 font-black text-sm sm:text-base">
+                      {u.name.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="font-black text-slate-800 tracking-tight text-sm sm:text-base">{u.name}</p>
+                      <p className="text-[9px] sm:text-xs text-slate-400 font-bold uppercase tracking-widest mt-0.5">{u.storeId} • {u.empId}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-4 sm:gap-8">
+                    <div className="hidden sm:flex items-center gap-4">
+                      <div className="text-right">
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Login</p>
+                        <p className="text-[10px] font-bold text-slate-700 leading-none mt-1">{inRecord ? formatTime(inRecord.timestamp) : "--:--"}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Logout</p>
+                        <p className="text-[10px] font-bold text-slate-700 leading-none mt-1">{outRecord ? formatTime(outRecord.timestamp) : "--:--"}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex flex-col items-end min-w-[50px] sm:min-w-[60px] sm:border-l border-slate-100 sm:pl-4">
+                      <p className="text-[7px] sm:text-[8px] font-black text-slate-400 uppercase tracking-widest">Duration</p>
+                      <p className={cn(
+                        "text-[10px] sm:text-xs font-black tracking-tight mt-1 leading-none",
+                        outRecord ? "text-blue-600" : (inRecord ? "text-emerald-600" : "text-slate-300")
+                      )}>{duration}</p>
+                      {inRecord && !outRecord && isToday && (
+                        <span className="text-[6px] sm:text-[7px] font-black text-emerald-500 uppercase tracking-widest animate-pulse mt-1">Active</span>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Modals */}
+      <AnimatePresence>
+        {selectedUser && (
+          <motion.div 
+            key="selected-user-modal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-4 sm:p-6"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="w-full max-w-md rounded-[2rem] sm:rounded-[3rem] bg-white p-6 sm:p-8 shadow-2xl relative"
+            >
+              <button onClick={() => setSelectedUser(null)} className="absolute top-4 right-4 sm:top-6 sm:right-6 p-2 hover:bg-slate-100 rounded-full transition-colors">
+                <X size={20} sm:size={24} />
+              </button>
+              
+              <div className="mb-6 sm:mb-8">
+                <h3 className="text-xl sm:text-2xl font-black tracking-tight">{selectedUser.name}</h3>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] sm:text-xs mt-1">Staff Profile Details</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
+                {["In", "Out"].map(type => {
+                  const record = adminData.attendance.find(a => a.empId === selectedUser.empId && a.type === type && a.timestamp.includes(filterDate));
+                  return (
+                    <div key={type} className="space-y-2 sm:space-y-3">
+                      <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">{type} Verification</p>
+                      {record ? (
+                        <motion.div 
+                          whileHover={{ scale: 1.05 }}
+                          onClick={() => onViewImage(fixImageUrl(record.imageUrl))}
+                          className="relative aspect-square overflow-hidden rounded-2xl sm:rounded-3xl border-4 border-slate-50 shadow-lg cursor-zoom-in"
+                        >
+                          <img src={fixImageUrl(record.imageUrl)} className="w-full h-full object-cover" alt={type} />
+                          <div className="absolute bottom-0 inset-x-0 bg-black/50 p-1.5 sm:p-2 text-[8px] sm:text-[10px] text-white font-black text-center backdrop-blur-sm">
+                            {new Date(record.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                          </div>
+                        </motion.div>
+                      ) : (
+                        <div className="aspect-square flex flex-col items-center justify-center bg-slate-50 rounded-2xl sm:rounded-3xl border-2 border-dashed border-slate-100 text-slate-300">
+                          <AlertCircle size={20} sm:size={24} className="mb-1 sm:mb-2" />
+                          <span className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest">No Log</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="space-y-3 sm:space-y-4">
+                {(() => {
+                  const inRec = adminData.attendance.find(a => a.empId === selectedUser.empId && a.type === "In" && a.timestamp.includes(filterDate));
+                  const outRec = [...adminData.attendance].reverse().find(a => a.empId === selectedUser.empId && a.type === "Out" && a.timestamp.includes(filterDate));
+                  const isToday = filterDate === new Date().toISOString().split("T")[0];
+                  let dur = "--";
+                  if (inRec) {
+                    const start = new Date(inRec.timestamp).getTime();
+                    let end = outRec ? new Date(outRec.timestamp).getTime() : (isToday ? new Date().getTime() : null);
+                    if (end) {
+                      const diff = end - start;
+                      if (diff > 0) {
+                        const hrs = Math.floor(diff / (1000 * 60 * 60));
+                        const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                        dur = `${hrs}h ${mins}m`;
+                      } else {
+                        dur = "0h 0m";
+                      }
+                    }
+                  }
+                  return (
+                    <div className="p-3 sm:p-4 bg-blue-50 rounded-xl sm:rounded-2xl flex items-center justify-between border border-blue-100">
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <Clock className="text-blue-600" size={16} sm:size={18} />
+                        <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-blue-900">Work Duration</span>
+                      </div>
+                      <span className="font-black text-blue-700 text-sm sm:text-base">{dur}</span>
+                    </div>
+                  );
+                })()}
+
+                <div className="p-3 sm:p-4 bg-slate-50 rounded-xl sm:rounded-2xl flex items-center justify-between">
+                  <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">Orders Today</span>
+                  <span className="font-black text-blue-600 text-sm sm:text-base">{adminData.orders.filter(o => o.pickerName === selectedUser.name && o.timestamp.includes(filterDate)).length}</span>
+                </div>
+
+                {adminData.attendance.some(a => a.empId === selectedUser.empId && a.timestamp.includes(filterDate)) && (
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => onResetAttendance(selectedUser.empId, filterDate)}
+                    className="w-full flex items-center justify-center gap-2 p-3 sm:p-4 bg-red-50 text-red-600 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all border border-red-100"
+                  >
+                    <RefreshCw size={14} sm:size={16} /> Reset Attendance
+                  </motion.button>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {showDailyOrdersModal && (
+          <motion.div 
+            key="daily-orders-modal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-4 sm:p-6"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="w-full max-w-2xl h-[80vh] rounded-[2rem] sm:rounded-[3rem] bg-white flex flex-col shadow-2xl relative overflow-hidden"
+            >
+              <div className="p-6 sm:p-8 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10">
+                <div>
+                  <h3 className="text-xl sm:text-2xl font-black tracking-tight">Daily Orders</h3>
+                  <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] sm:text-xs mt-1">
+                    {new Date(filterDate).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 sm:gap-4">
+                  <select 
+                    value={adminStoreFilter}
+                    onChange={(e) => setAdminStoreFilter(e.target.value)}
+                    className="bg-slate-50 border-none rounded-lg sm:rounded-xl px-3 py-1.5 sm:px-4 sm:py-2 font-black text-[9px] sm:text-xs uppercase tracking-widest text-slate-600 outline-none"
+                  >
+                    <option value="All">All Stores</option>
+                    {Array.from(new Set(adminData.orders.map(o => String(o.storeId)))).sort().map(store => (
+                      <option key={store} value={store}>{store}</option>
+                    ))}
+                  </select>
+                  <button onClick={() => setShowDailyOrdersModal(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                    <X size={20} sm:size={24} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-3 sm:space-y-4">
+                {adminData.orders
+                  .filter(o => o.timestamp.includes(filterDate))
+                  .filter(o => adminStoreFilter === "All" || String(o.storeId) === adminStoreFilter)
+                  .length > 0 ? (
+                  adminData.orders
+                    .filter(o => o.timestamp.includes(filterDate))
+                    .filter(o => adminStoreFilter === "All" || String(o.storeId) === adminStoreFilter)
+                    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                    .map((order, i) => (
+                      <motion.div 
+                        key={`${order.orderId}-${order.timestamp}-${i}`}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                        className="bg-slate-50 rounded-xl sm:rounded-2xl p-3 sm:p-4 flex items-center gap-3 sm:gap-4 border border-slate-100"
+                      >
+                        <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-1 max-w-[100px] sm:max-w-[150px] scrollbar-hide">
+                          {getImages(order.imageUrl).map((img, idx) => (
+                            <div 
+                              key={idx}
+                              onClick={() => onViewImage(fixImageUrl(img))}
+                              className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg overflow-hidden cursor-zoom-in flex-shrink-0 border border-white shadow-sm bg-slate-100"
+                            >
+                              <img src={fixImageUrl(img)} className="w-full h-full object-cover" alt="Order" />
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-start">
+                            <p className="font-black text-slate-800 truncate tracking-tight text-xs sm:text-sm">{order.orderId}</p>
+                            <span className="text-[8px] sm:text-[10px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-md uppercase tracking-widest">{order.storeId}</span>
+                          </div>
+                          <div className="mt-1 flex flex-col gap-0.5">
+                            <p className="text-[10px] sm:text-xs text-slate-600 font-bold flex items-center gap-1">
+                              <UserCheck size={10} className="text-slate-400" />
+                              {order.pickerName || (order as any).picker || "Unknown"}
+                            </p>
+                            <p className="text-[8px] sm:text-[10px] text-slate-400 font-medium flex items-center gap-1">
+                              <Clock size={8} />
+                              {new Date(order.timestamp).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+                            </p>
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-slate-300 space-y-4">
+                    <Package size={48} className="opacity-20" />
+                    <p className="font-black uppercase tracking-widest text-[10px] sm:text-xs">No orders found</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+};

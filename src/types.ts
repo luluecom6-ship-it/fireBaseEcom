@@ -80,3 +80,18 @@ export interface EscalationRule {
   escalationUser: string;
   isActive: boolean;
 }
+
+export interface Toast {
+  message: string;
+  type: 'success' | 'error' | 'info';
+  id: number;
+}
+
+export type AttendanceStatus = 'In' | 'Out' | 'None';
+
+export interface MatrixDetail {
+  title: string;
+  stat: string;
+  key: string;
+  orders: MatrixItem[];
+}

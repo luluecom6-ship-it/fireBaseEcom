@@ -1,0 +1,280 @@
+import React, { useEffect, useRef, useMemo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { AlertTriangle, X, CheckCircle2, Zap, ArrowUpCircle } from 'lucide-react';
+import { User, ActiveAlert } from '../../types';
+import { cn } from '../../lib/utils';
+
+interface AlertOverlayProps {
+  user: User | null;
+  activeAlerts: ActiveAlert[];
+  minimizedAlerts: string[];
+  expandedAlertId: string | null;
+  setExpandedAlertId: (id: string | null) => void;
+  adminHiddenAlerts: string[];
+  handleAlertAction: (alert: ActiveAlert, action: 'acknowledge' | 'escalate' | 'hide') => Promise<void>;
+  setMinimizedAlerts: React.Dispatch<React.SetStateAction<string[]>>;
+  isBuzzerMuted: boolean;
+  setIsBuzzerMuted: (muted: boolean) => void;
+}
+
+export const AlertOverlay: React.FC<AlertOverlayProps> = ({
+  user,
+  activeAlerts,
+  minimizedAlerts,
+  expandedAlertId,
+  setExpandedAlertId,
+  adminHiddenAlerts,
+  handleAlertAction,
+  setMinimizedAlerts,
+  isBuzzerMuted,
+  setIsBuzzerMuted
+}) => {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [hasInteracted, setHasInteracted] = React.useState(false);
+
+  const filteredAlerts = useMemo(() => {
+    if (!user) return [];
+    
+    const filtered = activeAlerts.filter(a => {
+      const role = String(user.role || "").toLowerCase();
+      
+      // Admin/Supervisor see everything
+      if (role === 'admin' || role === 'supervisor') {
+        if (role === 'admin' && adminHiddenAlerts.includes(a.id)) return false;
+        return true;
+      }
+      
+      // Others (Picker, Store, Manager) only see their store
+      const isStoreMatch = String(a.storeId || "").trim().toLowerCase() === String(user.storeId || "").trim().toLowerCase();
+      if (!isStoreMatch) return false;
+
+      // Role specific visibility
+      if (role === 'manager') {
+        // Managers see escalated alerts OR alerts for their store
+        return true; 
+      }
+      
+      if (['picker', 'store'].includes(role)) return true;
+      
+      return false;
+    });
+    
+    // Unique by orderId, keeping the latest one
+    const unique: ActiveAlert[] = [];
+    const seen = new Set();
+    [...filtered].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).forEach(a => {
+      if (!seen.has(a.orderId)) {
+        unique.push(a);
+        seen.add(a.orderId);
+      }
+    });
+    return unique;
+  }, [activeAlerts, user, adminHiddenAlerts]);
+
+  const shouldBuzz = useMemo(() => 
+    filteredAlerts.some(a => (a.buzzerStarted || a.managerBuzzerStarted) && !isBuzzerMuted),
+  [filteredAlerts, isBuzzerMuted]);
+
+  useEffect(() => {
+    const handleInteraction = () => {
+      if (!hasInteracted) {
+        setHasInteracted(true);
+        
+        // Initialize and "unlock" audio on first interaction
+        if (!audioRef.current) {
+          audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+          audioRef.current.loop = true;
+        }
+        
+        audioRef.current.play().then(() => {
+          // If there's no active alert right now, pause it immediately
+          if (!shouldBuzz) {
+            audioRef.current?.pause();
+          }
+        }).catch(e => {
+          // Ignore "interrupted by pause" errors as they are expected when we unlock 
+          // but no alert is currently active
+          if (e.name === 'AbortError' || e.message?.includes('interrupted')) {
+            return;
+          }
+          console.error("Initial audio unlock failed:", e);
+          setHasInteracted(false); // Try again on next interaction
+        });
+      }
+    };
+    
+    window.addEventListener('click', handleInteraction, { once: true });
+    window.addEventListener('touchstart', handleInteraction, { once: true });
+    window.addEventListener('keydown', handleInteraction, { once: true });
+    
+    return () => {
+      window.removeEventListener('click', handleInteraction);
+      window.removeEventListener('touchstart', handleInteraction);
+      window.removeEventListener('keydown', handleInteraction);
+    };
+  }, [hasInteracted, shouldBuzz]);
+
+  useEffect(() => {
+    if (shouldBuzz) {
+      if (!audioRef.current) {
+        audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+        audioRef.current.loop = true;
+      }
+      audioRef.current.play().catch(e => {
+        // If autoplay is blocked, we'll wait for the next interaction which is handled by the global listeners
+        if (e.name !== 'AbortError' && !e.message?.includes('interrupted')) {
+          console.warn("Autoplay blocked, waiting for user interaction to resume audio.");
+        }
+      });
+    } else {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+    }
+
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+    };
+  }, [shouldBuzz]);
+
+  if (!user) return null;
+
+  return (
+    <>
+      <AnimatePresence>
+        {filteredAlerts.map((alert) => {
+        const isMinimized = minimizedAlerts.includes(alert.id) && expandedAlertId !== alert.id;
+        
+        if (isMinimized) {
+          return (
+            <motion.div
+              key={`min-${alert.id}`}
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0, opacity: 0 }}
+              onClick={() => setExpandedAlertId(alert.id)}
+              className={cn(
+                "fixed bottom-24 right-8 h-14 w-14 rounded-full flex items-center justify-center cursor-pointer shadow-2xl border-4 z-[100] group",
+                alert.escalation === "TRUE" ? "bg-red-600 border-red-400 text-white" : "bg-amber-500 border-amber-300 text-white"
+              )}
+            >
+              <div className="absolute -top-2 -right-2 bg-white text-slate-800 text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-md border border-slate-100">
+                {alert.orderId.slice(-4)}
+              </div>
+              <AlertTriangle size={24} className="group-hover:scale-110 transition-transform" />
+            </motion.div>
+          );
+        }
+
+        return (
+          <div key={alert.id} className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/20 backdrop-blur-sm pointer-events-auto" onClick={() => setExpandedAlertId(null)}>
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className={cn(
+                "w-full max-w-lg p-6 sm:p-8 rounded-[2.5rem] sm:rounded-[3rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.3)] border-4 flex flex-col gap-4 sm:gap-6 relative",
+                alert.escalation === "TRUE" ? "bg-red-600 border-red-400 text-white" : (alert.buzzerStarted || alert.managerBuzzerStarted ? "bg-amber-500 border-amber-300 text-white" : "bg-white border-blue-100 text-slate-800")
+              )}
+            >
+              <button 
+                onClick={() => setExpandedAlertId(null)}
+                className="absolute top-4 right-4 sm:top-6 sm:right-6 p-2 hover:bg-black/10 rounded-full transition-colors"
+              >
+                <X size={20} />
+              </button>
+
+              <div className="flex items-center gap-4 sm:gap-6">
+                <div className={cn("h-16 w-16 sm:h-20 sm:w-20 rounded-2xl sm:rounded-[2rem] flex items-center justify-center animate-pulse shadow-inner", alert.escalation === "TRUE" ? "bg-white/20" : "bg-blue-50 text-blue-600")}>
+                  <AlertTriangle size={32} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] opacity-60">
+                    {alert.escalation === "TRUE" ? "🔥 Escalated Alert" : (alert.buzzerStarted || alert.managerBuzzerStarted ? "🔔 Critical Alert" : "⚠️ New Alert")}
+                  </p>
+                  <h4 className="text-xs sm:text-sm font-black tracking-tight mt-1 break-all">Order {alert.orderId}</h4>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                <div className="bg-black/10 p-2 sm:p-3 rounded-xl">
+                  <p className="text-[8px] font-black uppercase tracking-widest opacity-60 mb-0.5">Store ID</p>
+                  <p className="font-black text-xs sm:text-sm">{alert.storeId}</p>
+                </div>
+                <div className="bg-black/10 p-2 sm:p-3 rounded-xl">
+                  <p className="text-[8px] font-black uppercase tracking-widest opacity-60 mb-0.5">Trigger</p>
+                  <p className="font-black text-xs sm:text-sm">{alert.statusTrigger}</p>
+                </div>
+                <div className="bg-black/10 p-2 sm:p-3 rounded-xl">
+                  <p className="text-[8px] font-black uppercase tracking-widest opacity-60 mb-0.5">Ageing</p>
+                  <p className="font-black text-xs sm:text-sm">{alert.bucket}</p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <motion.button 
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => handleAlertAction(alert, 'acknowledge')}
+                    className={cn(
+                      "p-5 rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl flex items-center justify-center gap-2",
+                      alert.escalation === "TRUE" ? "bg-white text-red-600" : "bg-emerald-500 text-white"
+                    )}
+                  >
+                    <CheckCircle2 size={20} /> {user.role === 'manager' ? 'Accept' : 'Acknowledge'}
+                  </motion.button>
+                  
+                  {alert.escalation !== "TRUE" && (
+                    <motion.button 
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => handleAlertAction(alert, 'escalate')}
+                      className="bg-amber-100 text-amber-700 p-5 rounded-2xl font-black uppercase tracking-widest text-xs shadow-sm flex items-center justify-center gap-2 border border-amber-200"
+                    >
+                      <ArrowUpCircle size={20} /> Escalate
+                    </motion.button>
+                  )}
+                  
+                  {alert.escalation === "TRUE" && user.role === 'manager' && (
+                    <motion.button 
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => handleAlertAction(alert, 'hide')}
+                      className="bg-red-700 text-white p-5 rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl flex items-center justify-center gap-2"
+                    >
+                      <X size={20} /> Reject
+                    </motion.button>
+                  )}
+                </div>
+                
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => setMinimizedAlerts(prev => [...prev, alert.id])}
+                    className="flex-1 p-4 bg-black/5 rounded-2xl font-black uppercase tracking-widest text-[10px] opacity-60 hover:opacity-100 transition-opacity"
+                  >
+                    Minimize
+                  </button>
+                  {(alert.buzzerStarted || alert.managerBuzzerStarted) && (
+                    <button 
+                      onClick={() => {
+                        setIsBuzzerMuted(true);
+                        handleAlertAction(alert, 'acknowledge');
+                      }}
+                      className="p-4 bg-black/5 rounded-2xl font-black uppercase tracking-widest text-[10px] opacity-60 hover:opacity-100 transition-opacity flex items-center gap-2"
+                    >
+                      <Zap size={14} className={isBuzzerMuted ? "text-slate-400" : "text-amber-500"} />
+                      {isBuzzerMuted ? "Unmute" : "Mute & Acknowledge"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        );
+      })}
+    </AnimatePresence>
+    </>
+  );
+};
