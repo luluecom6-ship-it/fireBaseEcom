@@ -25,25 +25,42 @@ export const Matrix: React.FC<MatrixProps> = ({
   navigateTo,
   user
 }) => {
-  const [storeFilter, setStoreFilter] = React.useState<string>("");
+  const [storeFilter, setStoreFilter] = React.useState<string>(() => {
+    if (user && user.role !== 'admin' && user.role !== 'supervisor') {
+      return String(user.storeId || "");
+    }
+    return "";
+  });
   
   const allQuick = matrixData?.quick || [];
   const allSchedule = matrixData?.schedule || [];
 
   const storeIds = React.useMemo(() => {
     const ids = new Set<string>();
-    allQuick.forEach(item => ids.add(item.storeID));
-    allSchedule.forEach(item => ids.add(item.storeID));
+    allQuick.forEach(item => {
+      if (item.storeID) ids.add(String(item.storeID));
+    });
+    allSchedule.forEach(item => {
+      if (item.storeID) ids.add(String(item.storeID));
+    });
     return Array.from(ids).sort();
   }, [allQuick, allSchedule]);
   
-  const filteredQuick = storeFilter 
-    ? allQuick.filter(d => d.storeID.toLowerCase().includes(storeFilter.toLowerCase()))
-    : allQuick;
+  const filteredQuick = React.useMemo(() => {
+    if (!storeFilter) return allQuick;
+    const filterStr = String(storeFilter).toLowerCase().trim();
+    return allQuick.filter(d => 
+      String(d.storeID || "").toLowerCase().includes(filterStr)
+    );
+  }, [allQuick, storeFilter]);
     
-  const filteredSchedule = storeFilter 
-    ? allSchedule.filter(d => d.storeID.toLowerCase().includes(storeFilter.toLowerCase()))
-    : allSchedule;
+  const filteredSchedule = React.useMemo(() => {
+    if (!storeFilter) return allSchedule;
+    const filterStr = String(storeFilter).toLowerCase().trim();
+    return allSchedule.filter(d => 
+      String(d.storeID || "").toLowerCase().includes(filterStr)
+    );
+  }, [allSchedule, storeFilter]);
     
   const totalOrders = filteredQuick.length + filteredSchedule.length;
 

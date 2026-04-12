@@ -87,7 +87,11 @@ export interface Toast {
   id: number;
 }
 
-export type AttendanceStatus = 'In' | 'Out' | 'None';
+export interface AttendanceStatus {
+  inTime: string | null;
+  outTime: string | null;
+  missingPunchOut?: boolean;
+}
 
 export interface MatrixDetail {
   title: string;

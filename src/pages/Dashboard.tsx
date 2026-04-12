@@ -2,7 +2,8 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { 
   LogOut, Clock, Package, Search, ShieldCheck, 
-  History, LayoutDashboard, BarChart3, ArrowRight 
+  History, LayoutDashboard, BarChart3, ArrowRight,
+  AlertCircle
 } from 'lucide-react';
 import { User, AttendanceStatus } from '../types';
 import { RealTimeClock } from '../components/common/RealTimeClock';
@@ -72,6 +73,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
           layout
           className="bg-white rounded-[1.5rem] p-5 sm:p-8 text-slate-800 shadow-2xl border border-blue-100 relative z-10"
         >
+          {attendanceStatus.missingPunchOut && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-100 rounded-xl flex items-center gap-3 text-amber-700">
+              <AlertCircle size={18} className="shrink-0" />
+              <p className="text-[10px] font-black uppercase tracking-widest">Previous shift missing punch out - Session Reset</p>
+            </div>
+          )}
+
           {!attendanceStatus.inTime ? (
             <div className="text-center py-2">
               <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
@@ -213,6 +221,27 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <ArrowRight size={20} />
           </div>
         </motion.div>
+
+        {user.role !== "admin" && user.role !== "supervisor" && (
+          <motion.div 
+            whileHover={{ y: -5 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => navigateTo("attendance-history")}
+            className="bg-white p-3 sm:p-8 rounded-xl sm:rounded-[2.5rem] shadow-xl border border-slate-100 flex flex-col sm:flex-row items-center gap-2 sm:gap-6 cursor-pointer group"
+          >
+            <div className="h-10 w-10 sm:h-20 sm:w-20 rounded-xl sm:rounded-3xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300">
+              <History size={20} className="sm:hidden" />
+              <History size={36} className="hidden sm:block" />
+            </div>
+            <div className="flex-1 text-center sm:text-left">
+              <h4 className="font-black text-slate-800 text-[11px] sm:text-xl tracking-tight">Attendance</h4>
+              <p className="text-slate-500 text-[8px] sm:text-sm font-bold mt-0.5">My History</p>
+            </div>
+            <div className="hidden sm:flex h-10 w-10 rounded-full bg-slate-50 items-center justify-center text-slate-300 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-all">
+              <ArrowRight size={20} />
+            </div>
+          </motion.div>
+        )}
 
         {(user.role === "admin" || user.role === "supervisor") && (
           <motion.div 

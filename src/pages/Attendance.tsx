@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { X, Camera, RefreshCw } from 'lucide-react';
+import { X, Camera, RefreshCw, AlertCircle } from 'lucide-react';
 import { User, AttendanceStatus } from '../types';
 import { Header } from '../components/layout/Header';
 import { cn } from '../lib/utils';
@@ -9,7 +9,7 @@ import { useCamera } from '../hooks/useCamera';
 interface AttendanceProps {
   user: User | null;
   attendanceStatus: AttendanceStatus;
-  onAttendanceSubmit: (image: string) => Promise<void>;
+  onAttendanceSubmit: (image: string) => Promise<boolean>;
   loading: boolean;
   navigateTo: (page: any) => void;
 }
@@ -51,6 +51,15 @@ export const Attendance: React.FC<AttendanceProps> = ({
     }
   };
 
+  const handleSubmit = async () => {
+    if (imagePreviews.length === 0) return;
+    const success = await onAttendanceSubmit(imagePreviews[0]);
+    if (success) {
+      // After successful submission, navigate back to dashboard
+      navigateTo("dashboard");
+    }
+  };
+
   return (
     <motion.div 
       key="attendance"
@@ -62,6 +71,18 @@ export const Attendance: React.FC<AttendanceProps> = ({
       <Header title="Biometric Attendance" showBack onBack={() => navigateTo("dashboard")} user={user} />
       
       <div className="p-4 max-w-2xl mx-auto space-y-4">
+        {attendanceStatus.missingPunchOut && (
+          <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-center gap-4 text-amber-700">
+            <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+              <AlertCircle size={20} />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest leading-tight">Session Reset</p>
+              <p className="text-xs font-bold mt-0.5">Your previous shift exceeded 24 hours without a punch out. Please start a new session.</p>
+            </div>
+          </div>
+        )}
+
         <div className="bg-white p-5 rounded-[1.5rem] shadow-xl border border-slate-100 space-y-5">
           <div className="space-y-2">
             <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Biometric Selfie</label>
@@ -185,7 +206,7 @@ export const Attendance: React.FC<AttendanceProps> = ({
           <motion.button 
             whileTap={{ scale: 0.95 }}
             disabled={loading || imagePreviews.length === 0}
-            onClick={() => onAttendanceSubmit(imagePreviews[0])}
+            onClick={handleSubmit}
             className={cn(
               "w-full rounded-[1.25rem] sm:rounded-[1.5rem] p-5 sm:p-6 font-black text-white shadow-2xl transition-all text-lg sm:text-xl flex items-center justify-center gap-3",
               (imagePreviews.length === 0) 

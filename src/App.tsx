@@ -39,10 +39,11 @@ import { Search } from "./pages/Search";
 import { Matrix } from "./pages/Matrix";
 import { Analytics } from "./pages/Analytics";
 import { Alerts } from "./pages/Alerts";
+import { AttendanceHistory } from "./pages/AttendanceHistory";
 
 export default function App() {
   // Navigation
-  const [page, setPage] = useState<"login" | "dashboard" | "upload" | "attendance" | "admin" | "search" | "matrix" | "analytics" | "alerts">("login");
+  const [page, setPage] = useState<"login" | "dashboard" | "upload" | "attendance" | "admin" | "search" | "matrix" | "analytics" | "alerts" | "attendance-history">("login");
   
   // Auth Hook
   const { user, loading: authLoading, login, logout, setUser } = useAuth();
@@ -220,6 +221,14 @@ export default function App() {
             setMaxImages={setMaxImages}
             onSaveConfig={saveSystemConfig}
             isSavingConfig={isSavingConfig}
+            navigateTo={navigateTo}
+            onViewImage={setFullImage}
+          />
+        );
+      case "attendance-history":
+        return (
+          <AttendanceHistory 
+            user={user}
             navigateTo={navigateTo}
             onViewImage={setFullImage}
           />

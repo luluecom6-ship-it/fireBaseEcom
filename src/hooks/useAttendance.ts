@@ -8,7 +8,11 @@ export function useAttendance(
   showToast: (msg: string, type?: 'success' | 'error') => void,
   setLoading: (loading: boolean) => void
 ) {
-  const [attendanceStatus, setAttendanceStatus] = useState<AttendanceStatus>({ inTime: null, outTime: null });
+  const [attendanceStatus, setAttendanceStatus] = useState<AttendanceStatus>({ 
+    inTime: null, 
+    outTime: null,
+    missingPunchOut: false
+  });
   const [hoursWorked, setHoursWorked] = useState("00:00");
   const [isShiftComplete, setIsShiftComplete] = useState(false);
 
@@ -55,9 +59,34 @@ export function useAttendance(
       const latestRecord = sortedAsc[sortedAsc.length - 1];
       const isCurrentlyOut = latestRecord.type === "Out";
       
+      const inTime = firstIn.timestamp;
+      const outTime = isCurrentlyOut ? latestRecord.timestamp : null;
+
+      // 24-Hour Reset Logic
+      if (!isCurrentlyOut) {
+        const inDate = parseServerDate(inTime);
+        const now = new Date();
+        const diffMs = now.getTime() - inDate.getTime();
+        const diffHrs = diffMs / (1000 * 60 * 60);
+        
+        // If it's been more than 24 hours, OR if it's a different calendar day and > 16 hours
+        // we reset to allow Punch In for the new day.
+        const isDifferentDay = inDate.toDateString() !== now.toDateString();
+        
+        if (diffHrs >= 24 || (isDifferentDay && diffHrs >= 16)) {
+          setAttendanceStatus({
+            inTime: null,
+            outTime: null,
+            missingPunchOut: true
+          });
+          return;
+        }
+      }
+      
       setAttendanceStatus({
-        inTime: firstIn.timestamp,
-        outTime: isCurrentlyOut ? latestRecord.timestamp : null
+        inTime,
+        outTime,
+        missingPunchOut: false
       });
     } catch (e) {
       console.error("Failed to fetch attendance status", e);
@@ -114,7 +143,7 @@ export function useAttendance(
   const handleAttendanceSubmit = useCallback(async (image: string) => {
     if (!user || !image) return;
     setLoading(true);
-    const type = (attendanceStatus.inTime && !attendanceStatus.outTime) ? "Out" : "In";
+    const type = (attendanceStatus.inTime && !attendanceStatus.outTime && !attendanceStatus.missingPunchOut) ? "Out" : "In";
     try {
       const params = new URLSearchParams();
       params.append("action", "attendance");
@@ -132,9 +161,11 @@ export function useAttendance(
       
       await fetchStatus(user.empId);
       showToast(`Punch ${type} Successful`, "success");
+      return true;
     } catch (e) { 
       console.error("Attendance error:", e);
       showToast("Punch failed. Please try again.", "error");
+      return false;
     } finally {
       setLoading(false);
     }

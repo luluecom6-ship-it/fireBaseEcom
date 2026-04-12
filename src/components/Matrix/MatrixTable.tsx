@@ -14,6 +14,8 @@ interface MatrixTableProps {
   isQuick?: boolean;
 }
 
+const normalize = (s: string) => (s || "").toString().toUpperCase().replace(/\s+/g, '').trim();
+
 export const MatrixTable: React.FC<MatrixTableProps> = ({
   title,
   headers,
@@ -65,9 +67,9 @@ export const MatrixTable: React.FC<MatrixTableProps> = ({
                 <td className="p-2.5 text-left font-black text-slate-700 border-r border-slate-200 sticky left-0 bg-white z-10 shadow-[1px_0_3px_rgba(0,0,0,0.02)] uppercase">{stat}</td>
                 {headers.map(h => {
                   const matches = (data || []).filter(d => {
-                    const dStatus = (d.status || "").toUpperCase().trim();
-                    const sStatus = stat.toUpperCase().trim();
-                    const keyMatch = String(d[keyField] || "").toUpperCase().trim() === String(h || "").toUpperCase().trim();
+                    const dStatus = normalize(d.status);
+                    const sStatus = normalize(stat);
+                    const keyMatch = normalize(String(d[keyField] || "")) === normalize(String(h || ""));
                     
                     if (!keyMatch) return false;
 
@@ -104,7 +106,7 @@ export const MatrixTable: React.FC<MatrixTableProps> = ({
             <tr className="bg-[#f8fafc] font-black">
               <td className="p-2.5 text-left text-slate-900 border-r border-slate-200 sticky left-0 bg-[#f8fafc] z-10">TOTAL</td>
               {headers.map(h => {
-                const matches = (data || []).filter(d => String(d[keyField] || "").toUpperCase().trim() === String(h || "").toUpperCase().trim());
+                const matches = (data || []).filter(d => normalize(String(d[keyField] || "")) === normalize(String(h || "")));
                 const count = matches.length;
                 return (
                   <td key={h} className="p-2.5 text-center text-slate-900 border-r border-slate-200">
