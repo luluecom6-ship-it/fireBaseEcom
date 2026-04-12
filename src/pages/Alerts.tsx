@@ -8,7 +8,6 @@ import { cn } from '../lib/utils';
 
 interface AlertsProps {
   alertLogs: AlertLog[];
-  onRefetch: () => Promise<void>;
   onViewImage: (url: string | null) => void;
   navigateTo: (page: any) => void;
   user: User | null;
@@ -16,7 +15,6 @@ interface AlertsProps {
 
 export const Alerts: React.FC<AlertsProps> = ({
   alertLogs,
-  onRefetch,
   onViewImage,
   navigateTo,
   user
@@ -26,7 +24,8 @@ export const Alerts: React.FC<AlertsProps> = ({
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await onRefetch();
+    // Real-time sync handles this now
+    await new Promise(resolve => setTimeout(resolve, 500));
     setIsRefreshing(false);
   };
 

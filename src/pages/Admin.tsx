@@ -26,6 +26,8 @@ interface AdminProps {
   setMaxImages: (num: number) => void;
   onSaveConfig: () => Promise<void>;
   isSavingConfig: boolean;
+  onGoogleLogin: () => void;
+  isFirebaseAuthenticated: boolean;
 }
 
 export const Admin: React.FC<AdminProps> = ({
@@ -40,7 +42,9 @@ export const Admin: React.FC<AdminProps> = ({
   maxImages,
   setMaxImages,
   onSaveConfig,
-  isSavingConfig
+  isSavingConfig,
+  onGoogleLogin,
+  isFirebaseAuthenticated
 }) => {
   const [filterDate, setFilterDate] = useState(new Date().toISOString().split("T")[0]);
   const [adminStoreFilter, setAdminStoreFilter] = useState("All");
@@ -116,6 +120,30 @@ export const Admin: React.FC<AdminProps> = ({
             </motion.div>
           ))}
         </div>
+
+        {/* Firebase Auth Warning */}
+        {user.role === 'admin' && !isFirebaseAuthenticated && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3"
+          >
+            <AlertCircle className="text-amber-600 shrink-0 mt-0.5" size={18} />
+            <div className="flex-1">
+              <p className="text-amber-900 font-black text-xs uppercase tracking-widest">Firebase Authentication Required</p>
+              <p className="text-amber-700 text-[10px] sm:text-xs font-bold mt-1">
+                To save system configurations, you must be signed in with your Google Admin account.
+              </p>
+              <button 
+                onClick={onGoogleLogin}
+                className="mt-3 px-4 py-2 bg-amber-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-700 transition-all flex items-center gap-2"
+              >
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="h-3 w-3 brightness-0 invert" referrerPolicy="no-referrer" />
+                Link Google Admin Account
+              </button>
+            </div>
+          </motion.div>
+        )}
 
         {/* System Settings */}
         {user.role === "admin" && (

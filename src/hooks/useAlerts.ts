@@ -2,6 +2,8 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { User, AlertLog, ActiveAlert } from '../types';
 import { API_URL } from '../constants';
 import { robustFetch, parseServerDate } from '../utils/api';
+import { db, auth } from '../firebase';
+import { collection, query, onSnapshot, doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 export function useAlerts(
   user: User | null,
@@ -20,24 +22,33 @@ export function useAlerts(
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastAlertCountRef = useRef(0);
 
+  const handleFirestoreError = useCallback((error: any, operationType: string, path: string) => {
+    const errInfo = {
+      error: error instanceof Error ? error.message : String(error),
+      operationType,
+      path,
+      authInfo: {
+        userId: auth.currentUser?.uid,
+        isAnonymous: auth.currentUser?.isAnonymous,
+      }
+    };
+    console.error('Firestore Error Detail:', JSON.stringify(errInfo));
+    if (showToast) showToast(`Firestore Error (${operationType}): ${error.message}`, "error");
+  }, [showToast]);
+
   useEffect(() => {
-    // Preload buzzer sound
-    audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-    audioRef.current.loop = false; // Just play once for notification
+    // Preload notification sound
+    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3');
+    audio.loop = false;
+    audio.crossOrigin = "anonymous";
+    audio.preload = "auto";
+    audioRef.current = audio;
   }, []);
 
   const requestNotificationPermission = useCallback(async () => {
     if (!("Notification" in window)) return false;
-    
-    // If already granted, just return true
     if (Notification.permission === "granted") return true;
-    
-    // If denied, we can't request again without user going to settings
-    if (Notification.permission === "denied") {
-      console.warn("Notifications are blocked by the user.");
-      return false;
-    }
-
+    if (Notification.permission === "denied") return false;
     try {
       const permission = await Notification.requestPermission();
       return permission === "granted";
@@ -48,29 +59,10 @@ export function useAlerts(
   }, []);
 
   const showSystemNotification = useCallback((title: string, body: string, id: string) => {
-    if (Notification.permission === "granted" && !notifiedSystemRef.current.has(id)) {
+    if (!notifiedSystemRef.current.has(id)) {
       notifiedSystemRef.current.add(id);
-      
-      // Play notification sound
       if (audioRef.current && !isBuzzerMuted) {
         audioRef.current.play().catch(e => console.warn("Audio play blocked:", e));
-      }
-
-      const options = {
-        body,
-        icon: '/favicon.ico',
-        tag: id,
-        requireInteraction: true,
-        silent: false
-      };
-
-      // Use Service Worker if available for better background support
-      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.ready.then(registration => {
-          registration.showNotification(title, options);
-        });
-      } else {
-        new Notification(title, options);
       }
     }
   }, [isBuzzerMuted]);
@@ -81,211 +73,167 @@ export function useAlerts(
     
     pendingActionsRef.current.add(actionKey);
     try {
+      const now = new Date().toISOString();
+      const alertId = alert.id || `${alert.orderId}|${alert.statusTrigger}`.toLowerCase().trim();
+      const alertRef = doc(db, 'alerts', alertId);
+
+      if (action === 'trigger') {
+        const triggerDate = new Date(now);
+        triggerDate.setMinutes(triggerDate.getMinutes() + 1);
+        const notificationTime = triggerDate.toISOString();
+
+        await setDoc(alertRef, {
+          timestamp: now,
+          orderId: alert.orderId || "",
+          eventType: 'trigger',
+          storeId: alert.storeId || "",
+          userId: user?.empId || "",
+          bucket: alert.bucket || "",
+          notificationTime,
+          storeStaffName: "",
+          status: "Pending",
+          escalation: "FALSE",
+          managerName: "",
+          managerStatus: "Pending",
+          orderCreatedAt: alert.orderCreatedAt || now,
+          statusTrigger: alert.statusTrigger || "",
+          triggeredAt: now,
+          updatedAt: serverTimestamp()
+        });
+      } else if (action === 'acknowledge') {
+        if (user?.role === 'manager') {
+          await updateDoc(alertRef, {
+            managerName: user.name,
+            managerStatus: "Accepted",
+            updatedAt: serverTimestamp()
+          });
+        } else {
+          await updateDoc(alertRef, {
+            storeStaffName: user?.name || "Staff",
+            status: "Acknowledged",
+            updatedAt: serverTimestamp()
+          });
+        }
+      } else if (action === 'escalate') {
+        await updateDoc(alertRef, {
+          escalation: "TRUE",
+          updatedAt: serverTimestamp()
+        });
+      }
+
+      // Legacy logging
       const params = new URLSearchParams();
       params.append('action', 'logalertv2');
-      const now = new Date().toISOString();
-      
-      // Use existing timestamp for follow-up actions to keep them grouped
       params.append('timestamp', alert.timestamp || now);
       params.append('orderId', alert.orderId || "");
       params.append('eventType', action);
       params.append('storeId', alert.storeId || "");
       params.append('userId', user?.empId || "");
       params.append('bucket', alert.bucket || "");
-      
-      // notificationTime is when the buzzer should start (1 min after trigger)
-      let notificationTime = alert.notificationTime || now;
-      if (action === 'trigger') {
-        const triggerDate = new Date(now);
-        triggerDate.setMinutes(triggerDate.getMinutes() + 1); // Buzzer starts in 1 min
-        notificationTime = triggerDate.toISOString();
-      }
-      params.append('notificationTime', notificationTime);
-      
-      if (action === 'acknowledge' && user?.role !== 'manager') {
-        params.append('storeStaffName', user?.name || "");
-        params.append('status', "Acknowledged");
-      } else {
-        params.append('storeStaffName', alert.storeStaffName || "");
-        params.append('status', alert.status || "Pending");
-      }
-
-      params.append('escalation', (action === 'escalate' || alert.escalation === 'TRUE') ? "TRUE" : "FALSE");
-      
-      if (action === 'acknowledge' && user?.role === 'manager') {
-        params.append('managerName', user?.name || "");
-        params.append('managerStatus', "Accepted");
-      } else {
-        params.append('managerName', alert.managerName || "");
-        params.append('managerStatus', alert.managerStatus || "Pending");
-      }
-
+      params.append('notificationTime', alert.notificationTime || now);
+      params.append('storeStaffName', user?.role !== 'manager' && action === 'acknowledge' ? user?.name || "" : alert.storeStaffName || "");
+      params.append('status', action === 'acknowledge' && user?.role !== 'manager' ? "Acknowledged" : alert.status || "Pending");
+      params.append('escalation', action === 'escalate' ? "TRUE" : alert.escalation || "FALSE");
+      params.append('managerName', action === 'acknowledge' && user?.role === 'manager' ? user?.name || "" : alert.managerName || "");
+      params.append('managerStatus', action === 'acknowledge' && user?.role === 'manager' ? "Accepted" : alert.managerStatus || "Pending");
       params.append('orderCreatedAt', alert.orderCreatedAt || "");
       params.append('statusTrigger', alert.statusTrigger || "");
 
-      await robustFetch(API_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        body: params
-      });
-      
-      setTimeout(() => {
-        pendingActionsRef.current.delete(actionKey);
-        fetchAlertLogs();
-      }, 2000);
-    } catch (e) {
-      console.error("Failed to log alert action", e);
+      await robustFetch(API_URL, { method: 'POST', mode: 'no-cors', body: params });
+      setTimeout(() => pendingActionsRef.current.delete(actionKey), 2000);
+    } catch (error) {
+      handleFirestoreError(error, 'write', `alerts/${alert.id || 'new'}`);
     }
-  }, [user, API_URL]); // Removed fetchAlertLogs from dependencies to avoid circular ref, we call it inside setTimeout
+  }, [user, API_URL, handleFirestoreError]);
 
-  const fetchAlertLogs = useCallback(async () => {
+  // Firestore Real-time Sync for Alerts
+  useEffect(() => {
     if (!user) return;
-    try {
-      const baseUrl = API_URL.trim();
-      const urlObj = new URL(baseUrl);
-      urlObj.searchParams.set('action', 'getAlertLogs');
-      urlObj.searchParams.set('_t', Date.now().toString());
-      
-      const res = await robustFetch(urlObj.toString());
-      const text = await res.text();
-      
-      let response;
-      try {
-        response = JSON.parse(text);
-      } catch (e) {
-        throw new Error("Invalid JSON response from server");
-      }
 
-      const result = response.status === "success" ? response.data : response;
-      const logs = Array.isArray(result) ? result : (Array.isArray(result?.data) ? result.data : []);
-
-      if (logs.length > 0 || response.status === "success") {
-        const mappedData: AlertLog[] = logs.map((item: any) => {
-          const orderId = item.orderId || "";
-          const statusTrigger = item['Status Trigger'] || item.statusTrigger || "";
-          
-          return {
-            id: `${orderId}|${statusTrigger}`.toLowerCase().trim(),
-            timestamp: item.timestamp || "",
-            orderId: orderId,
-            eventType: item.eventType || "",
-            storeId: item.storeId || "",
-            userId: item.userId || "",
-            notificationTime: item['Notification Time'] || item.notificationTime || "",
-            storeStaffName: item['StoreStaff Name'] || item.storeStaffName || "",
-            status: item.Status || item.status || "Pending",
-            escalation: String(item.Escalation || item.escalation).toUpperCase() === "TRUE" ? "TRUE" : "FALSE",
-            managerName: item['Manager Name'] || item.managerName || "",
-            statusTrigger: statusTrigger,
-            managerStatus: item['Manager Status'] || item.managerStatus || "Pending",
-            orderCreatedAt: item['Order Created At'] || item.orderCreatedAt || item.timestamp || "",
-            triggeredAt: item.timestamp || "",
-            bucket: item.bucket || item['Bucket'] || ""
-          };
-        }).filter((log: AlertLog) => {
-          // Filter by role and storeId
-          const role = user.role.toLowerCase();
-          if (role === 'admin' || role === 'supervisor') return true;
-          
-          // For picker, store, manager (and others), only show their store's alerts
-          return String(log.storeId).trim().toLowerCase() === String(user.storeId).trim().toLowerCase();
+    const alertsRef = collection(db, 'alerts');
+    const unsubscribe = onSnapshot(query(alertsRef), (snapshot) => {
+      const logs: AlertLog[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        logs.push({
+          id: doc.id,
+          timestamp: data.timestamp || "",
+          orderId: data.orderId || "",
+          eventType: data.eventType || "",
+          storeId: data.storeId || "",
+          userId: data.userId || "",
+          notificationTime: data.notificationTime || "",
+          storeStaffName: data.storeStaffName || "",
+          status: data.status || "Pending",
+          escalation: data.escalation || "FALSE",
+          managerName: data.managerName || "",
+          statusTrigger: data.statusTrigger || "",
+          managerStatus: data.managerStatus || "Pending",
+          orderCreatedAt: data.orderCreatedAt || "",
+          triggeredAt: data.triggeredAt || "",
+          bucket: data.bucket || ""
         });
+      });
+
+      const filteredLogs = logs.filter((log: AlertLog) => {
+        const role = user.role.toLowerCase();
+        if (role === 'admin' || role === 'supervisor') return true;
+        return String(log.storeId).trim().toLowerCase() === String(user.storeId).trim().toLowerCase();
+      });
+
+      setAlertLogs(filteredLogs);
+
+      const active = filteredLogs.filter((l: AlertLog) => {
+        if (l.status === "Acknowledged" || l.managerStatus === "Accepted") return false;
+        const triggeredTime = parseServerDate(l.timestamp).getTime();
+        const now = new Date().getTime();
+        const ageMins = isNaN(triggeredTime) ? 0 : (now - triggeredTime) / (1000 * 60);
+        return ageMins <= 60;
+      }).map((l: AlertLog) => {
+        const triggeredTime = parseServerDate(l.timestamp).getTime();
+        const now = new Date().getTime();
+        const diffMins = isNaN(triggeredTime) ? 0 : (now - triggeredTime) / (1000 * 60);
+        const buzzerStarted = l.status !== "Acknowledged";
         
-        const consolidated: Record<string, AlertLog> = {};
-        const sortedLogs = [...mappedData].sort((a, b) => 
-          parseServerDate(a.timestamp).getTime() - parseServerDate(b.timestamp).getTime()
-        );
-
-        sortedLogs.forEach(log => {
-          if (!log.orderId || !log.statusTrigger) return;
-          const key = log.id;
-          if (!consolidated[key]) {
-            consolidated[key] = { ...log };
-          } else {
-            if (log.status === "Acknowledged") {
-              consolidated[key].status = "Acknowledged";
-              consolidated[key].storeStaffName = log.storeStaffName;
-            }
-            if (log.escalation === "TRUE") {
-              consolidated[key].escalation = "TRUE";
-            }
-            if (log.managerStatus === "Accepted") {
-              consolidated[key].managerStatus = "Accepted";
-              consolidated[key].managerName = log.managerName;
-            }
-            if (parseServerDate(log.timestamp).getTime() < parseServerDate(consolidated[key].timestamp).getTime()) {
-              consolidated[key].timestamp = log.timestamp;
-              consolidated[key].triggeredAt = log.timestamp;
-            }
-          }
-        });
-
-        const finalLogs = Object.values(consolidated);
-        setAlertLogs(finalLogs);
-
-        const active = finalLogs.filter((l: AlertLog) => {
-          const triggeredTime = parseServerDate(l.timestamp).getTime();
-          const now = new Date().getTime();
-          const ageMins = isNaN(triggeredTime) ? 0 : (now - triggeredTime) / (1000 * 60);
-          
-          // Remove alerts older than 60 mins
-          if (ageMins > 60) return false;
-          
-          // Remove acknowledged or accepted alerts
-          if (l.status === "Acknowledged" || l.managerStatus === "Accepted") return false;
-          
-          return true;
-        }).map((l: AlertLog) => {
-          const triggeredTime = parseServerDate(l.timestamp).getTime();
-          const now = new Date().getTime();
-          const diffMins = isNaN(triggeredTime) ? 0 : (now - triggeredTime) / (1000 * 60);
-          
-          // 1 min sound alert if not acknowledged
-          const buzzerStarted = diffMins >= 1 && diffMins < 2 && l.status !== "Acknowledged";
-          
-          // Auto-escalate to manager after 1 min if not acknowledged
-          if (diffMins >= 1 && l.escalation !== "TRUE" && !notifiedEscalationsRef.current.has(l.id)) {
-            notifiedEscalationsRef.current.add(l.id);
-            // We'll trigger the escalation call here
-            setTimeout(() => logAlertAction(l, 'escalate'), 0);
-          }
-
-          return {
-            ...l,
-            buzzerStarted,
-            managerBuzzerStarted: diffMins >= 2 && diffMins < 3 && l.managerStatus !== "Accepted"
-          };
-        });
-
-        // If we have more active alerts than before, or new alert IDs, clear minimized status
-        const currentAlertIds = new Set(active.map(a => a.id));
-        const hasNewAlerts = active.length > lastAlertCountRef.current || 
-                           active.some(a => !notifiedSystemRef.current.has(a.id));
-        
-        if (hasNewAlerts && active.length > 0) {
-          setMinimizedAlerts([]);
-          setExpandedAlertId(null);
+        if (diffMins >= 1 && l.escalation !== "TRUE" && !notifiedEscalationsRef.current.has(l.id)) {
+          notifiedEscalationsRef.current.add(l.id);
+          setTimeout(() => logAlertAction(l, 'escalate'), 0);
         }
-        lastAlertCountRef.current = active.length;
 
-        // Trigger system notifications for new active alerts
-        active.forEach(alert => {
-          if (!notifiedSystemRef.current.has(alert.id)) {
-            showSystemNotification(
-              `⚠️ ALERT: ${alert.statusTrigger}`,
-              `Order ${alert.orderId} at Store ${alert.storeId} is in ${alert.bucket} bucket.`,
-              alert.id
-            );
-          }
-        });
+        return {
+          ...l,
+          buzzerStarted,
+          managerBuzzerStarted: diffMins >= 2 && l.managerStatus !== "Accepted"
+        };
+      });
 
-        setActiveAlerts(active);
-        setMinimizedAlerts(prev => prev.filter(id => active.some(a => a.id === id)));
+      const hasNewAlerts = active.length > lastAlertCountRef.current || 
+                         active.some(a => !notifiedSystemRef.current.has(a.id));
+      
+      if (hasNewAlerts && active.length > 0) {
+        setMinimizedAlerts([]);
+        setExpandedAlertId(null);
       }
-    } catch (e) {
-      console.error("Failed to fetch alert logs", e);
-    }
-  }, [user, minimizedAlerts, logAlertAction]);
+      lastAlertCountRef.current = active.length;
+
+      active.forEach(alert => {
+        if (!notifiedSystemRef.current.has(alert.id)) {
+          showSystemNotification(
+            `⚠️ ALERT: ${alert.statusTrigger}`,
+            `Order ${alert.orderId} at Store ${alert.storeId} is in ${alert.bucket} bucket.`,
+            alert.id
+          );
+        }
+      });
+
+      setActiveAlerts(active);
+      setMinimizedAlerts(prev => prev.filter(id => active.some(a => a.id === id)));
+    }, (error) => {
+      handleFirestoreError(error, 'list', 'alerts');
+    });
+
+    return () => unsubscribe();
+  }, [user, logAlertAction, showSystemNotification, handleFirestoreError]);
 
   const handleAlertAction = useCallback(async (alert: ActiveAlert, action: 'acknowledge' | 'escalate' | 'hide') => {
     if (action === 'hide') {
@@ -296,7 +244,6 @@ export function useAlerts(
       }
       return;
     }
-    
     await logAlertAction(alert, action);
     showToast(`Alert ${action === 'acknowledge' ? 'Acknowledged' : 'Escalated'}`, "success");
   }, [user, logAlertAction, showToast]);
@@ -310,18 +257,37 @@ export function useAlerts(
     showToast("Test alert triggered!", "success");
   }, [showSystemNotification, showToast]);
 
-  useEffect(() => {
-    if (user) {
-      fetchAlertLogs();
-      const interval = setInterval(fetchAlertLogs, 15000); // Poll every 15s
-      return () => clearInterval(interval);
-    }
-  }, [user, fetchAlertLogs]);
-
   return { 
     activeAlerts, alertLogs, minimizedAlerts, setMinimizedAlerts, 
     expandedAlertId, setExpandedAlertId, adminHiddenAlerts, setAdminHiddenAlerts,
-    isBuzzerMuted, setIsBuzzerMuted, fetchAlertLogs, handleAlertAction, logAlertAction, 
-    notifiedEscalationsRef, requestNotificationPermission, testAlert
+    isBuzzerMuted, setIsBuzzerMuted, handleAlertAction, logAlertAction, 
+    notifiedEscalationsRef, requestNotificationPermission, testAlert,
+    testBuzzer: () => {
+      const testId = "test-buzzer-" + Date.now();
+      const testAlert: ActiveAlert = {
+        id: testId,
+        orderId: "TEST-9999",
+        timestamp: new Date().toISOString(),
+        eventType: "trigger",
+        storeId: user?.storeId || "TEST",
+        userId: user?.empId || "TEST",
+        notificationTime: new Date().toISOString(),
+        storeStaffName: user?.name || "Test User",
+        status: "Pending",
+        escalation: "FALSE",
+        managerName: "",
+        statusTrigger: "TEST BUZZER",
+        managerStatus: "Pending",
+        orderCreatedAt: new Date().toISOString(),
+        triggeredAt: new Date().toISOString(),
+        bucket: "0-5 MIN",
+        buzzerStarted: true,
+        managerBuzzerStarted: false
+      };
+      setActiveAlerts(prev => [testAlert, ...prev]);
+      setExpandedAlertId(testId);
+      setMinimizedAlerts([]);
+      showToast("Test buzzer triggered!", "success");
+    }
   };
 }

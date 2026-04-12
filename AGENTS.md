@@ -1,6 +1,6 @@
-# Project Context: Version 3.2
+# Project Context: Version 3.3 (Firebase Enabled)
 
-Whenever the user refers to **Version 3.2**, it refers to the application state as of April 12, 2026, with the following core features and structure:
+Whenever the user refers to **Version 3.3**, it refers to the application state as of April 12, 2026, with the following core features and structure:
 
 ## Core Features
 1. **Matrix Intelligence Dashboard**:
@@ -9,39 +9,32 @@ Whenever the user refers to **Version 3.2**, it refers to the application state 
    - Store-based filtering (defaults to user's store for non-admins).
    - Normalized key matching for robust data display.
 
-2. **PWA & Background Notifications**:
-   - **Progressive Web App (PWA)**: Installable on home screen (Android/iOS) with offline caching.
-   - **Background Alerts**: System-level notifications via Service Worker (sw.js).
-   - **Auditory Buzzer**: Real-time buzzer sound triggered even in background tabs.
-   - **Auto-Permission**: Seamless notification permission request on first user interaction.
+2. **Firebase & Cloud Messaging (FCM)**:
+   - **Real-time Configuration**: Escalation Matrix rules migrated to Firebase Firestore for instant, cross-device synchronization.
+   - **FCM Notifications**: Integrated Firebase Cloud Messaging for robust background and foreground alerts.
+   - **Service Worker**: `firebase-messaging-sw.js` handles background notification delivery even when the app is closed.
+   - **Auto-Permission**: Notification permission requested immediately upon app launch.
 
-3. **Biometric Attendance System**:
+3. **Programmatic Buzzer System**:
+   - **Mathematical Sound**: Replaced external MP3 files with Web Audio API generated sounds for 100% reliability and zero network dependency.
+   - **Smooth Pulse**: Sine-wave based alarm (C5 to E5) with a 2Hz pulse for a professional, non-aggressive alert.
+   - **Audio Unlock**: Seamless user interaction handling to comply with browser autoplay policies.
+
+4. **Biometric Attendance System**:
    - Facial verification via camera or manual upload.
-   - **24-Hour Reset Logic**: Automatically resets attendance status if a punch-out is missing after 24 hours or if a new calendar day starts after a 16h shift.
+   - **24-Hour Reset Logic**: Automatically resets attendance status if a punch-out is missing after 24 hours.
    - Real-time hours worked calculation and shift progress tracking.
-   - Automatic redirect to home page after successful punch.
 
-4. **Attendance History**:
-   - Available for all roles (Picker, Store, Manager, Supervisor, Admin).
-   - Monthly filtering and grouping by date.
-   - Detailed view of punch images and verification timestamps.
-
-5. **Order Management**:
-   - Barcode scanning/manual entry for Order IDs.
-   - Duplicate detection with detailed "Existing Order" information.
-   - Search functionality with role-based visibility.
-
-6. **Alert & Escalation System**:
-   - Real-time alert logs with buzzer notifications.
-   - Manager acknowledgment workflow.
-   - Configurable escalation rules and system parameters.
+5. **Attendance History & Order Management**:
+   - Monthly filtering and grouping for attendance.
+   - Barcode scanning and duplicate detection for Order IDs.
+   - Role-based visibility for search results.
 
 ## Technical Architecture
 - **Frontend**: React 18+, Vite, Tailwind CSS, Framer Motion (motion/react).
-- **State Management**: Custom hooks (`useAuth`, `useAttendance`, `useMatrixData`, `useOrders`, `useAlerts`, `useAdmin`, `usePWA`).
-- **PWA/Service Worker**: `manifest.json` for app identity, `sw.js` for background notifications and asset caching.
-- **API Integration**: `robustFetch` utility with retry logic and `parseServerDate` for cross-platform date handling.
-- **Navigation**: State-based routing within `App.tsx`.
+- **Backend**: Hybrid approach using Google Apps Script (Legacy) and Firebase Firestore (Real-time Config).
+- **State Management**: Custom hooks with Firestore `onSnapshot` for live updates.
+- **PWA/Service Worker**: `manifest.json` for app identity, `sw.js` for caching, and `firebase-messaging-sw.js` for FCM.
 
 ## Persistence Instruction
-This file serves as the definitive reference for Version 3.2. All future modifications should build upon this baseline unless otherwise specified.
+This file serves as the definitive reference for Version 3.3. All future modifications should build upon this baseline unless otherwise specified.

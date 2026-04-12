@@ -23,6 +23,9 @@ import { useSystemConfig } from "./hooks/useSystemConfig";
 import { useAttendance } from "./hooks/useAttendance";
 import { useToast } from "./hooks/useToast";
 
+// --- FIREBASE / FCM ---
+import { auth, requestForToken, onMessageListener } from "./firebase";
+
 // --- COMPONENTS ---
 import { Loader } from "./components/common/Loader";
 import { Header } from "./components/layout/Header";
@@ -46,7 +49,7 @@ export default function App() {
   const [page, setPage] = useState<"login" | "dashboard" | "upload" | "attendance" | "admin" | "search" | "matrix" | "analytics" | "alerts" | "attendance-history">("login");
   
   // Auth Hook
-  const { user, loading: authLoading, login, logout, setUser } = useAuth();
+  const { user, loading: authLoading, login, loginWithGoogle, logout, setUser } = useAuth();
   
   // Toast Hook
   const { toast, showToast } = useToast();
@@ -76,15 +79,17 @@ export default function App() {
   } = useAdmin(user, showToast, setLoading);
 
   const { 
-    activeAlerts, alertLogs, fetchAlertLogs, handleAlertAction, logAlertAction,
+    activeAlerts, alertLogs, handleAlertAction, logAlertAction,
     minimizedAlerts, setMinimizedAlerts, expandedAlertId, setExpandedAlertId,
-    adminHiddenAlerts, isBuzzerMuted, setIsBuzzerMuted, requestNotificationPermission, testAlert
+    adminHiddenAlerts, isBuzzerMuted, setIsBuzzerMuted, requestNotificationPermission, testAlert, testBuzzer
   } = useAlerts(user, showToast);
 
   const { 
     escalationRules, setEscalationRules, maxImages, setMaxImages, 
-    fetchSystemConfig, saveSystemConfig, isSavingConfig 
+    saveSystemConfig, isSavingConfig 
   } = useSystemConfig(showToast);
+
+  const isFirebaseAuthenticated = !!auth.currentUser;
 
   useAlertTrigger(user, matrixData, escalationRules, alertLogs, logAlertAction);
 
@@ -95,6 +100,18 @@ export default function App() {
 
   // Auto-request notification permission on first interaction
   useEffect(() => {
+    // Request FCM token on launch
+    requestForToken().then(token => {
+      if (token) {
+        console.log("FCM Token acquired on launch:", token);
+      }
+    });
+
+    // Listen for foreground messages
+    onMessageListener().then((payload: any) => {
+      showToast(`${payload.notification.title}: ${payload.notification.body}`, "info");
+    });
+
     if (!user) return;
     
     const handleFirstInteraction = async () => {
@@ -120,11 +137,10 @@ export default function App() {
     if (user) {
       if (page === "login") setPage("dashboard");
       fetchStatus(user.empId);
-      fetchSystemConfig();
     } else {
       setPage("login");
     }
-  }, [user, fetchStatus, fetchSystemConfig]);
+  }, [user, fetchStatus]);
 
   // Navigation Helper
   const navigateTo = useCallback((target: typeof page) => {
@@ -144,7 +160,7 @@ export default function App() {
 
   const renderPage = () => {
     if (!user || page === "login") {
-      return <Login onLogin={handleLogin} loading={authLoading} />;
+      return <Login onLogin={handleLogin} onGoogleLogin={loginWithGoogle} loading={authLoading} />;
     }
 
     switch (page) {
@@ -158,12 +174,12 @@ export default function App() {
             isShiftComplete={isShiftComplete}
             navigateTo={navigateTo}
             fetchAdminData={fetchAdminData}
-            fetchAlertLogs={fetchAlertLogs}
             fetchMatrixData={fetchMatrixData}
             isMatrixLoading={isMatrixLoading}
             setShowEarlyPunchOutConfirm={setShowEarlyPunchOutConfirm}
             requestNotificationPermission={requestNotificationPermission}
             testAlert={testAlert}
+            testBuzzer={testBuzzer}
           />
         );
       case "upload":
@@ -226,7 +242,6 @@ export default function App() {
         return (
           <Alerts 
             alertLogs={alertLogs}
-            onRefetch={fetchAlertLogs}
             onViewImage={setFullImage}
             navigateTo={navigateTo}
             user={user}
@@ -247,6 +262,8 @@ export default function App() {
             isSavingConfig={isSavingConfig}
             navigateTo={navigateTo}
             onViewImage={setFullImage}
+            onGoogleLogin={loginWithGoogle}
+            isFirebaseAuthenticated={isFirebaseAuthenticated}
           />
         );
       case "attendance-history":
@@ -258,7 +275,7 @@ export default function App() {
           />
         );
       default:
-        return <Dashboard user={user} onLogout={logout} attendanceStatus={attendanceStatus} hoursWorked={hoursWorked} isShiftComplete={isShiftComplete} navigateTo={navigateTo} fetchAdminData={fetchAdminData} fetchAlertLogs={fetchAlertLogs} fetchMatrixData={fetchMatrixData} isMatrixLoading={isMatrixLoading} setShowEarlyPunchOutConfirm={setShowEarlyPunchOutConfirm} />;
+        return <Dashboard user={user} onLogout={logout} attendanceStatus={attendanceStatus} hoursWorked={hoursWorked} isShiftComplete={isShiftComplete} navigateTo={navigateTo} fetchAdminData={fetchAdminData} fetchMatrixData={fetchMatrixData} isMatrixLoading={isMatrixLoading} setShowEarlyPunchOutConfirm={setShowEarlyPunchOutConfirm} />;
     }
   };
 

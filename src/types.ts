@@ -4,6 +4,7 @@ export interface User {
   role: 'picker' | 'supervisor' | 'driver' | 'admin' | 'user' | 'store' | 'manager';
   storeId: string;
   status: string;
+  email?: string;
 }
 
 export interface AlertLog {

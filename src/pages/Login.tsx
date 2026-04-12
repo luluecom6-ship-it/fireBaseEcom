@@ -4,10 +4,11 @@ import { Package, ArrowRight } from 'lucide-react';
 
 interface LoginProps {
   onLogin: (username: string, password: string) => void;
+  onGoogleLogin: () => void;
   loading: boolean;
 }
 
-export const Login: React.FC<LoginProps> = ({ onLogin, loading }) => {
+export const Login: React.FC<LoginProps> = ({ onLogin, onGoogleLogin, loading }) => {
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -68,8 +69,29 @@ export const Login: React.FC<LoginProps> = ({ onLogin, loading }) => {
             {loading ? "Authenticating..." : "Access System"} <ArrowRight size={20} />
           </motion.button>
         </form>
+
+        <div className="relative my-8">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-slate-100"></div>
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-white px-4 text-slate-400 font-bold tracking-widest">Or continue with</span>
+          </div>
+        </div>
+
+        <motion.button 
+          whileHover={{ scale: loading ? 1 : 1.02 }}
+          whileTap={{ scale: loading ? 1 : 0.98 }}
+          onClick={onGoogleLogin}
+          disabled={loading}
+          className="w-full rounded-2xl border-2 border-slate-100 p-5 font-bold text-slate-700 hover:bg-slate-50 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+        >
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="h-5 w-5" referrerPolicy="no-referrer" />
+          Sign in with Google
+        </motion.button>
+
         <p className="mt-8 text-center text-xs text-slate-400 font-medium">
-          Authorized Personnel Only • v2.4.0
+          Authorized Personnel Only • v3.3.0
         </p>
       </div>
     </motion.div>

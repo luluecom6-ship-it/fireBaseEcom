@@ -1,0 +1,49 @@
+{
+  "entities": {
+    "SystemConfig": {
+      "title": "System Configuration",
+      "description": "Global settings for the warehouse management system.",
+      "type": "object",
+      "properties": {
+        "escalationRules": {
+          "type": "array",
+          "description": "List of rules for triggering alerts based on status and ageing."
+        },
+        "maxImages": {
+          "type": "number",
+          "description": "Maximum number of images allowed for biometric attendance."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "Alert": {
+      "title": "Real-time Alert",
+      "description": "An active alert for an order that requires attention.",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string" },
+        "storeId": { "type": "string" },
+        "statusTrigger": { "type": "string" },
+        "bucket": { "type": "string" },
+        "status": { "type": "string", "enum": ["Pending", "Acknowledged"] },
+        "managerStatus": { "type": "string", "enum": ["Pending", "Accepted"] },
+        "escalation": { "type": "string", "enum": ["TRUE", "FALSE"] },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/system/config": {
+      "schema": "SystemConfig",
+      "description": "Singleton document for system-wide settings."
+    },
+    "/alerts/{alertId}": {
+      "schema": "Alert",
+      "description": "Collection of active alerts synchronized across all devices."
+    }
+  }
+}

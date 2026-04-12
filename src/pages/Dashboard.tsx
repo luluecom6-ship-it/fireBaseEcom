@@ -19,12 +19,12 @@ interface DashboardProps {
   isShiftComplete: boolean;
   navigateTo: (page: any) => void;
   fetchAdminData: (isManual?: boolean) => Promise<void>;
-  fetchAlertLogs: () => Promise<void>;
   fetchMatrixData: () => Promise<void>;
   isMatrixLoading: boolean;
   setShowEarlyPunchOutConfirm: (show: boolean) => void;
   requestNotificationPermission: () => Promise<boolean>;
   testAlert: () => void;
+  testBuzzer: () => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -35,12 +35,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
   isShiftComplete,
   navigateTo,
   fetchAdminData,
-  fetchAlertLogs,
   fetchMatrixData,
   isMatrixLoading,
   setShowEarlyPunchOutConfirm,
   requestNotificationPermission,
-  testAlert
+  testAlert,
+  testBuzzer
 }) => {
   const { isInstallable, showInstallPrompt } = usePWA();
   const [isIOS, setIsIOS] = useState(false);
@@ -122,14 +122,24 @@ export const Dashboard: React.FC<DashboardProps> = ({
             )}
 
             {notifPermission === "granted" && (
-              <motion.button
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                onClick={testAlert}
-                className="mt-3 px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 rounded-lg flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all text-emerald-200"
-              >
-                <Zap size={12} /> Test Background Alert
-              </motion.button>
+              <div className="flex flex-wrap gap-2 mt-3">
+                <motion.button
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  onClick={testAlert}
+                  className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 rounded-lg flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all text-emerald-200"
+                >
+                  <Zap size={12} /> Test Background Alert
+                </motion.button>
+                <motion.button
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  onClick={testBuzzer}
+                  className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 rounded-lg flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all text-amber-200"
+                >
+                  <Zap size={12} /> Test Audio Buzzer
+                </motion.button>
+              </div>
             )}
 
             {notifPermission === "denied" && (
@@ -360,7 +370,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <motion.div 
               whileHover={{ y: -5 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => { fetchAlertLogs(); navigateTo("alerts"); }}
+              onClick={() => navigateTo("alerts")}
               className="bg-white p-3 sm:p-8 rounded-xl sm:rounded-[2.5rem] shadow-xl border border-slate-100 flex flex-col sm:flex-row items-center gap-2 sm:gap-6 cursor-pointer group"
             >
               <div className="h-10 w-10 sm:h-20 sm:w-20 rounded-xl sm:rounded-3xl bg-red-50 text-red-600 flex items-center justify-center group-hover:bg-red-600 group-hover:text-white transition-all duration-300">
