@@ -78,7 +78,7 @@ export default function App() {
   const { 
     activeAlerts, alertLogs, fetchAlertLogs, handleAlertAction, logAlertAction,
     minimizedAlerts, setMinimizedAlerts, expandedAlertId, setExpandedAlertId,
-    adminHiddenAlerts, isBuzzerMuted, setIsBuzzerMuted
+    adminHiddenAlerts, isBuzzerMuted, setIsBuzzerMuted, requestNotificationPermission, testAlert
   } = useAlerts(user, showToast);
 
   const { 
@@ -92,6 +92,28 @@ export default function App() {
     attendanceStatus, hoursWorked, isShiftComplete, 
     handleAttendanceSubmit, fetchStatus 
   } = useAttendance(user, showToast, setLoading);
+
+  // Auto-request notification permission on first interaction
+  useEffect(() => {
+    if (!user) return;
+    
+    const handleFirstInteraction = async () => {
+      if ("Notification" in window && Notification.permission === "default") {
+        await requestNotificationPermission();
+      }
+      // Remove listener after first attempt
+      window.removeEventListener('click', handleFirstInteraction);
+      window.removeEventListener('touchstart', handleFirstInteraction);
+    };
+
+    window.addEventListener('click', handleFirstInteraction);
+    window.addEventListener('touchstart', handleFirstInteraction);
+
+    return () => {
+      window.removeEventListener('click', handleFirstInteraction);
+      window.removeEventListener('touchstart', handleFirstInteraction);
+    };
+  }, [user, requestNotificationPermission]);
 
   // Initial Data Fetch
   useEffect(() => {
@@ -140,6 +162,8 @@ export default function App() {
             fetchMatrixData={fetchMatrixData}
             isMatrixLoading={isMatrixLoading}
             setShowEarlyPunchOutConfirm={setShowEarlyPunchOutConfirm}
+            requestNotificationPermission={requestNotificationPermission}
+            testAlert={testAlert}
           />
         );
       case "upload":

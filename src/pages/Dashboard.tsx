@@ -1,12 +1,13 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { 
   LogOut, Clock, Package, Search, ShieldCheck, 
   History, LayoutDashboard, BarChart3, ArrowRight,
-  AlertCircle
+  AlertCircle, Zap, X, Download
 } from 'lucide-react';
 import { User, AttendanceStatus } from '../types';
 import { RealTimeClock } from '../components/common/RealTimeClock';
+import { usePWA } from '../hooks/usePWA';
 import { parseServerDate } from '../utils/api';
 import { cn } from '../lib/utils';
 
@@ -22,6 +23,8 @@ interface DashboardProps {
   fetchMatrixData: () => Promise<void>;
   isMatrixLoading: boolean;
   setShowEarlyPunchOutConfirm: (show: boolean) => void;
+  requestNotificationPermission: () => Promise<boolean>;
+  testAlert: () => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -35,8 +38,50 @@ export const Dashboard: React.FC<DashboardProps> = ({
   fetchAlertLogs,
   fetchMatrixData,
   isMatrixLoading,
-  setShowEarlyPunchOutConfirm
+  setShowEarlyPunchOutConfirm,
+  requestNotificationPermission,
+  testAlert
 }) => {
+  const { isInstallable, showInstallPrompt } = usePWA();
+  const [isIOS, setIsIOS] = useState(false);
+
+  useEffect(() => {
+    const checkIOS = () => {
+      const userAgent = window.navigator.userAgent.toLowerCase();
+      return /iphone|ipad|ipod/.test(userAgent);
+    };
+    setIsIOS(checkIOS());
+  }, []);
+
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>(
+    "Notification" in window ? Notification.permission : "default"
+  );
+
+  useEffect(() => {
+    // Check permission status periodically or on focus
+    const checkPermission = () => {
+      if ("Notification" in window) {
+        setNotifPermission(Notification.permission);
+      }
+    };
+    
+    window.addEventListener('focus', checkPermission);
+    const interval = setInterval(checkPermission, 2000);
+    
+    return () => {
+      window.removeEventListener('focus', checkPermission);
+      clearInterval(interval);
+    };
+  }, []);
+
+  const handleEnableNotifications = async () => {
+    const granted = await requestNotificationPermission();
+    if (granted) setNotifPermission("granted");
+    else if (Notification.permission === "denied") {
+      setNotifPermission("denied");
+    }
+  };
+
   return (
     <motion.div 
       key="dashboard"
@@ -64,6 +109,52 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <LogOut size={10} /> Logout
               </button>
             </div>
+            
+            {notifPermission === "default" && (
+              <motion.button
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                onClick={handleEnableNotifications}
+                className="mt-3 px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all"
+              >
+                <AlertCircle size={12} /> Enable System Alerts
+              </motion.button>
+            )}
+
+            {notifPermission === "granted" && (
+              <motion.button
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                onClick={testAlert}
+                className="mt-3 px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 rounded-lg flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all text-emerald-200"
+              >
+                <Zap size={12} /> Test Background Alert
+              </motion.button>
+            )}
+
+            {notifPermission === "denied" && (
+              <div className="mt-3 px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-red-400">
+                <X size={12} /> Alerts Blocked (Check Browser Settings)
+              </div>
+            )}
+
+            {isInstallable && (
+              <motion.button
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                onClick={showInstallPrompt}
+                className="mt-3 px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 rounded-lg flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all text-blue-200 w-full justify-center"
+              >
+                <Download size={12} /> Install Mobile App
+              </motion.button>
+            )}
+
+            {isIOS && !isInstallable && (
+              <div className="mt-3 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-[9px] text-white/50 leading-tight">
+                <span className="font-bold text-white/80 block mb-1">iOS INSTALL TIP:</span>
+                Tap <span className="text-blue-400">Share</span> then <span className="text-blue-400">"Add to Home Screen"</span> to install as an app.
+              </div>
+            )}
           </div>
           <RealTimeClock />
         </div>

@@ -16,7 +16,8 @@ export function useAlertTrigger(
     const activeRules = escalationRules.filter(r => r.isActive);
     if (activeRules.length === 0) return;
 
-    const allItems = [...(matrixData.quick || []), ...(matrixData.schedule || [])].filter(item => {
+    // Only process Quick commerce orders for alerts
+    const allItems = [...(matrixData.quick || [])].filter(item => {
       const role = user.role.toLowerCase();
       if (role === 'admin' || role === 'supervisor') return true;
       return String(item.storeID).trim() === String(user.storeId).trim();

@@ -16,6 +16,63 @@ export function useAlerts(
   
   const pendingActionsRef = useRef<Set<string>>(new Set());
   const notifiedEscalationsRef = useRef<Set<string>>(new Set());
+  const notifiedSystemRef = useRef<Set<string>>(new Set());
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    // Preload buzzer sound
+    audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+    audioRef.current.loop = false; // Just play once for notification
+  }, []);
+
+  const requestNotificationPermission = useCallback(async () => {
+    if (!("Notification" in window)) return false;
+    
+    // If already granted, just return true
+    if (Notification.permission === "granted") return true;
+    
+    // If denied, we can't request again without user going to settings
+    if (Notification.permission === "denied") {
+      console.warn("Notifications are blocked by the user.");
+      return false;
+    }
+
+    try {
+      const permission = await Notification.requestPermission();
+      return permission === "granted";
+    } catch (error) {
+      console.error("Error requesting notification permission:", error);
+      return false;
+    }
+  }, []);
+
+  const showSystemNotification = useCallback((title: string, body: string, id: string) => {
+    if (Notification.permission === "granted" && !notifiedSystemRef.current.has(id)) {
+      notifiedSystemRef.current.add(id);
+      
+      // Play notification sound
+      if (audioRef.current && !isBuzzerMuted) {
+        audioRef.current.play().catch(e => console.warn("Audio play blocked:", e));
+      }
+
+      const options = {
+        body,
+        icon: '/favicon.ico',
+        tag: id,
+        requireInteraction: true,
+        silent: false
+      };
+
+      // Use Service Worker if available for better background support
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.ready.then(registration => {
+          registration.showNotification(title, options);
+        });
+      } else {
+        new Notification(title, options);
+      }
+    }
+  }, [isBuzzerMuted]);
 
   const logAlertAction = useCallback(async (alert: Partial<AlertLog>, action: 'trigger' | 'acknowledge' | 'escalate') => {
     const actionKey = `${alert.orderId}|${alert.statusTrigger}|${action}`.toLowerCase().trim();
@@ -198,6 +255,18 @@ export function useAlerts(
             managerBuzzerStarted: diffMins >= 2 && diffMins < 3 && l.managerStatus !== "Accepted"
           };
         });
+
+        // Trigger system notifications for new active alerts
+        active.forEach(alert => {
+          if (!notifiedSystemRef.current.has(alert.id)) {
+            showSystemNotification(
+              `⚠️ ALERT: ${alert.statusTrigger}`,
+              `Order ${alert.orderId} at Store ${alert.storeId} is in ${alert.bucket} bucket.`,
+              alert.id
+            );
+          }
+        });
+
         setActiveAlerts(active);
         setMinimizedAlerts(prev => prev.filter(id => active.some(a => a.id === id)));
       }
@@ -220,6 +289,15 @@ export function useAlerts(
     showToast(`Alert ${action === 'acknowledge' ? 'Acknowledged' : 'Escalated'}`, "success");
   }, [user, logAlertAction, showToast]);
 
+  const testAlert = useCallback(() => {
+    showSystemNotification(
+      "🔔 TEST ALERT",
+      "This is a test notification to verify background alerts are working.",
+      "test-alert-" + Date.now()
+    );
+    showToast("Test alert triggered!", "success");
+  }, [showSystemNotification, showToast]);
+
   useEffect(() => {
     if (user) {
       fetchAlertLogs();
@@ -231,6 +309,7 @@ export function useAlerts(
   return { 
     activeAlerts, alertLogs, minimizedAlerts, setMinimizedAlerts, 
     expandedAlertId, setExpandedAlertId, adminHiddenAlerts, setAdminHiddenAlerts,
-    isBuzzerMuted, setIsBuzzerMuted, fetchAlertLogs, handleAlertAction, logAlertAction, notifiedEscalationsRef 
+    isBuzzerMuted, setIsBuzzerMuted, fetchAlertLogs, handleAlertAction, logAlertAction, 
+    notifiedEscalationsRef, requestNotificationPermission, testAlert
   };
 }
