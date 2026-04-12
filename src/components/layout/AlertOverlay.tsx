@@ -45,7 +45,13 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
       }
       
       // Others (Picker, Store, Manager) only see their store
-      const isStoreMatch = String(a.storeId || "").trim().toLowerCase() === String(user.storeId || "").trim().toLowerCase();
+      const userStoreId = String(user.storeId || "").trim().toLowerCase();
+      const alertStoreId = String(a.storeId || "").trim().toLowerCase();
+      
+      // If user has no storeId, they might be a global user or misconfigured
+      if (!userStoreId) return true; 
+      
+      const isStoreMatch = alertStoreId === userStoreId;
       if (!isStoreMatch) return false;
 
       // Role specific visibility
@@ -77,42 +83,33 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
 
   useEffect(() => {
     const handleInteraction = () => {
-      if (!hasInteracted) {
-        setHasInteracted(true);
-        
-        // Initialize and "unlock" audio on first interaction
-        if (!audioRef.current) {
-          audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-          audioRef.current.loop = true;
-        }
-        
-        audioRef.current.play().then(() => {
-          // If there's no active alert right now, pause it immediately
-          if (!shouldBuzz) {
-            audioRef.current?.pause();
-          }
-        }).catch(e => {
-          // Ignore "interrupted by pause" errors as they are expected when we unlock 
-          // but no alert is currently active
-          if (e.name === 'AbortError' || e.message?.includes('interrupted')) {
-            return;
-          }
-          console.error("Initial audio unlock failed:", e);
-          setHasInteracted(false); // Try again on next interaction
-        });
+      // Initialize and "unlock" audio on interaction
+      if (!audioRef.current) {
+        audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+        audioRef.current.loop = true;
       }
+      
+      audioRef.current.play().then(() => {
+        setHasInteracted(true);
+        // If there's no active alert right now, pause it immediately
+        if (!shouldBuzz) {
+          audioRef.current?.pause();
+        }
+      }).catch(e => {
+        if (e.name !== 'AbortError' && !e.message?.includes('interrupted')) {
+          console.error("Audio unlock failed:", e);
+        }
+      });
     };
     
-    window.addEventListener('click', handleInteraction, { once: true });
-    window.addEventListener('touchstart', handleInteraction, { once: true });
-    window.addEventListener('keydown', handleInteraction, { once: true });
+    window.addEventListener('click', handleInteraction);
+    window.addEventListener('touchstart', handleInteraction);
     
     return () => {
       window.removeEventListener('click', handleInteraction);
       window.removeEventListener('touchstart', handleInteraction);
-      window.removeEventListener('keydown', handleInteraction);
     };
-  }, [hasInteracted, shouldBuzz]);
+  }, [shouldBuzz]);
 
   useEffect(() => {
     if (shouldBuzz) {
@@ -197,6 +194,11 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
                     {alert.escalation === "TRUE" ? "🔥 Escalated Alert" : (alert.buzzerStarted || alert.managerBuzzerStarted ? "🔔 Critical Alert" : "⚠️ New Alert")}
                   </p>
                   <h4 className="text-xs sm:text-sm font-black tracking-tight mt-1 break-all">Order {alert.orderId}</h4>
+                  {!hasInteracted && (
+                    <p className="text-[8px] text-amber-200 font-bold mt-1 animate-pulse">
+                      ⚠️ CLICK ANYWHERE TO UNLOCK AUDIO
+                    </p>
+                  )}
                 </div>
               </div>
 

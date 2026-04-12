@@ -18,6 +18,7 @@ export function useAlerts(
   const notifiedEscalationsRef = useRef<Set<string>>(new Set());
   const notifiedSystemRef = useRef<Set<string>>(new Set());
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const lastAlertCountRef = useRef(0);
 
   useEffect(() => {
     // Preload buzzer sound
@@ -255,6 +256,17 @@ export function useAlerts(
             managerBuzzerStarted: diffMins >= 2 && diffMins < 3 && l.managerStatus !== "Accepted"
           };
         });
+
+        // If we have more active alerts than before, or new alert IDs, clear minimized status
+        const currentAlertIds = new Set(active.map(a => a.id));
+        const hasNewAlerts = active.length > lastAlertCountRef.current || 
+                           active.some(a => !notifiedSystemRef.current.has(a.id));
+        
+        if (hasNewAlerts && active.length > 0) {
+          setMinimizedAlerts([]);
+          setExpandedAlertId(null);
+        }
+        lastAlertCountRef.current = active.length;
 
         // Trigger system notifications for new active alerts
         active.forEach(alert => {

@@ -18,7 +18,7 @@ export function useOrders(
   const [isSearching, setIsSearching] = useState(false);
 
   const validateOrderId = useCallback((id: string) => {
-    const regex = /^(Lulu-)?\d{12}(INP1)?$/i;
+    const regex = /^((Lulu|Jee)-)?\d{12}(INP1)?$/i;
     return regex.test(id.trim());
   }, []);
 

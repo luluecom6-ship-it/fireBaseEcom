@@ -6,7 +6,8 @@ import './index.css';
 // Register Service Worker
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(err => {
+    // Add versioning to force update if needed
+    navigator.serviceWorker.register('/sw.js?v=3.2').catch(err => {
       console.error('ServiceWorker registration failed: ', err);
     });
   });

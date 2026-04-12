@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lulu-ecom-v1';
+const CACHE_NAME = 'jee-ecom-v1';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -9,7 +9,10 @@ const ASSETS_TO_CACHE = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
+      // Cache assets individually so one failure doesn't block the whole SW
+      return Promise.allSettled(
+        ASSETS_TO_CACHE.map(asset => cache.add(asset))
+      );
     })
   );
   self.skipWaiting();
@@ -31,7 +34,25 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Simple cache-first strategy for static assets, network-first for others
+  const url = new URL(event.request.url);
+  
+  // Network-first strategy for the root and index.html to ensure latest version
+  if (url.pathname === '/' || url.pathname === '/index.html') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          const clonedResponse = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, clonedResponse);
+          });
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Cache-first for other static assets
   if (ASSETS_TO_CACHE.some(asset => event.request.url.includes(asset))) {
     event.respondWith(
       caches.match(event.request).then((response) => {
