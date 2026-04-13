@@ -15,6 +15,8 @@ interface AlertOverlayProps {
   setMinimizedAlerts: React.Dispatch<React.SetStateAction<string[]>>;
   isBuzzerMuted: boolean;
   setIsBuzzerMuted: (muted: boolean) => void;
+  lastBroadcast: { id: string, title: string, body: string } | null;
+  setLastBroadcast: (broadcast: { id: string, title: string, body: string } | null) => void;
 }
 
 export const AlertOverlay: React.FC<AlertOverlayProps> = ({
@@ -27,7 +29,9 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
   handleAlertAction,
   setMinimizedAlerts,
   isBuzzerMuted,
-  setIsBuzzerMuted
+  setIsBuzzerMuted,
+  lastBroadcast,
+  setLastBroadcast
 }) => {
   const audioContextRef = useRef<AudioContext | null>(null);
   const oscillatorRef = useRef<OscillatorNode | null>(null);
@@ -80,6 +84,35 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
       gainRef.current = gain;
     } catch (e) {
       console.error("Failed to start programmatic buzzer:", e);
+    }
+  };
+
+  const playBroadcastSound = () => {
+    if (!hasInteracted) return;
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const ctx = audioContextRef.current;
+      if (ctx.state === 'suspended') ctx.resume();
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime); // A5 note
+      osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.2); // E6 note
+
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.05);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.4);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.5);
+    } catch (e) {
+      console.error("Failed to play broadcast sound:", e);
     }
   };
 
@@ -161,6 +194,12 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
     }
   }, [shouldBuzz, hasInteracted]);
 
+  useEffect(() => {
+    if (lastBroadcast && hasInteracted) {
+      playBroadcastSound();
+    }
+  }, [lastBroadcast, hasInteracted]);
+
   // Determine which alert should be expanded as an overlay
   // 1. If expandedAlertId is set, use it
   // 2. Otherwise, use the first alert that isn't minimized
@@ -200,6 +239,48 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
             </p>
             <div className="mt-12 px-8 py-4 bg-white text-red-600 rounded-full font-black uppercase tracking-widest text-sm shadow-2xl">
               Unlock Audio Now
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
+      {/* Broadcast Alert Overlay */}
+      <AnimatePresence>
+        {lastBroadcast && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            className="fixed inset-0 z-[150] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm"
+          >
+            <div className="bg-white w-full max-w-md rounded-[2rem] p-8 shadow-2xl border-4 border-emerald-500 relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-8 opacity-5">
+                <Zap size={120} className="text-emerald-600" />
+              </div>
+              
+              <div className="relative">
+                <div className="h-12 w-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-6">
+                  <Zap size={24} />
+                </div>
+                
+                <h3 className="text-2xl font-black text-slate-800 tracking-tight leading-tight">
+                  {lastBroadcast.title}
+                </h3>
+                
+                <div className="mt-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <p className="text-slate-600 font-bold text-sm leading-relaxed">
+                    {lastBroadcast.body}
+                  </p>
+                </div>
+                
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setLastBroadcast(null)}
+                  className="w-full mt-8 py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition-all"
+                >
+                  Got it
+                </motion.button>
+              </div>
             </div>
           </motion.div>
         )}

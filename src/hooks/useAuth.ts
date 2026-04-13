@@ -4,10 +4,50 @@ import { API_URL } from '../constants';
 import { robustFetch } from '../utils/api';
 import { auth, googleProvider, signInWithPopup, signOut, onAuthStateChanged, db } from '../firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isFirebaseAuthenticated, setIsFirebaseAuthenticated] = useState(false);
+
+  const loginWithEmail = useCallback(async (email: string, pass: string) => {
+    setLoading(true);
+    try {
+      const result = await signInWithEmailAndPassword(auth, email, pass);
+      const fbUser = result.user;
+      
+      const userRef = doc(db, 'users', fbUser.uid);
+      const userSnap = await getDoc(userRef);
+      
+      if (userSnap.exists()) {
+        const userData = userSnap.data() as User;
+        setUser(userData);
+        localStorage.setItem("lulu_user", JSON.stringify(userData));
+        return { success: true, user: userData };
+      } else {
+        // Handle case where auth exists but no Firestore profile
+        const isDefaultAdmin = fbUser.email === "luluecom6@gmail.com" || fbUser.email === "505011@sa.lulumea.com";
+        const userData: User = {
+          empId: fbUser.uid,
+          name: fbUser.displayName || fbUser.email?.split('@')[0] || "Staff",
+          role: isDefaultAdmin ? "admin" : "picker", // Default to picker for staff email
+          storeId: "ALL",
+          email: fbUser.email || "",
+          status: "Active"
+        };
+        await setDoc(userRef, { ...userData, updatedAt: new Date().toISOString() });
+        setUser(userData);
+        localStorage.setItem("lulu_user", JSON.stringify(userData));
+        return { success: true, user: userData };
+      }
+    } catch (error: any) {
+      console.error("Email Login Error:", error);
+      return { success: false, message: error.message || "Login Failed" };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   const loginWithGoogle = useCallback(async () => {
     setLoading(true);
@@ -23,10 +63,16 @@ export function useAuth() {
       
       if (userSnap.exists()) {
         userData = userSnap.data() as User;
+        // Ensure admin status is synced if email matches default admin
+        const isDefaultAdmin = fbUser.email === "luluecom6@gmail.com" || fbUser.email === "505011@sa.lulumea.com";
+        if (isDefaultAdmin && userData.role !== 'admin') {
+          userData.role = 'admin';
+          await setDoc(userRef, { ...userData, updatedAt: new Date().toISOString() });
+        }
       } else {
         // Inherit role from legacy session if available, otherwise check default admin email
         const legacyRole = user?.role;
-        const isDefaultAdmin = fbUser.email === "luluecom6@gmail.com";
+        const isDefaultAdmin = fbUser.email === "luluecom6@gmail.com" || fbUser.email === "505011@sa.lulumea.com";
         
         userData = {
           empId: fbUser.uid,
@@ -93,6 +139,7 @@ export function useAuth() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      setIsFirebaseAuthenticated(!!fbUser);
       if (fbUser) {
         const userRef = doc(db, 'users', fbUser.uid);
         const userSnap = await getDoc(userRef);
@@ -121,5 +168,5 @@ export function useAuth() {
     return () => unsubscribe();
   }, [logout]);
 
-  return { user, loading, login, loginWithGoogle, logout, setUser };
+  return { user, loading, isFirebaseAuthenticated, login, loginWithEmail, loginWithGoogle, logout, setUser };
 }

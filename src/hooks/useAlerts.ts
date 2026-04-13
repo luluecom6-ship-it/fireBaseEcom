@@ -2,8 +2,8 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { User, AlertLog, ActiveAlert } from '../types';
 import { API_URL } from '../constants';
 import { robustFetch, parseServerDate } from '../utils/api';
-import { db, auth } from '../firebase';
-import { collection, query, onSnapshot, doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { db, auth, requestForToken } from '../firebase';
+import { collection, query, onSnapshot, doc, setDoc, updateDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 
 export function useAlerts(
   user: User | null,
@@ -15,11 +15,75 @@ export function useAlerts(
   const [expandedAlertId, setExpandedAlertId] = useState<string | null>(null);
   const [adminHiddenAlerts, setAdminHiddenAlerts] = useState<string[]>([]);
   const [isBuzzerMuted, setIsBuzzerMuted] = useState(false);
+  const [lastBroadcast, setLastBroadcast] = useState<{ id: string, title: string, body: string } | null>(null);
   
   const pendingActionsRef = useRef<Set<string>>(new Set());
   const notifiedEscalationsRef = useRef<Set<string>>(new Set());
   const notifiedSystemRef = useRef<Set<string>>(new Set());
   const lastAlertCountRef = useRef(0);
+
+  // FCM Token Registration
+  useEffect(() => {
+    if (!user) return;
+
+    const registerToken = async () => {
+      try {
+        const token = await requestForToken();
+        if (token) {
+          const tokenRef = doc(db, 'fcm_tokens', user.empId);
+          await setDoc(tokenRef, {
+            token,
+            userId: user.empId,
+            role: user.role,
+            storeId: user.storeId,
+            updatedAt: serverTimestamp()
+          }, { merge: true });
+          console.log("FCM Token registered for user:", user.empId);
+        }
+      } catch (error) {
+        console.error("Error registering FCM token:", error);
+      }
+    };
+
+    registerToken();
+  }, [user]);
+
+  // Push Notification Listener (for online users)
+  useEffect(() => {
+    if (!user) return;
+
+    const q = query(collection(db, 'push_queue'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === "added") {
+          const data = change.doc.data();
+          const userRole = String(user.role || "").toLowerCase();
+          const isTarget = data.targetRoles?.some((r: string) => String(r).toLowerCase() === userRole);
+          
+          console.log(`Broadcast received: ${change.doc.id}. Target: ${isTarget}. User Role: ${userRole}`);
+          
+          // Check if it's a recent broadcast (within last 30 mins)
+          const timestamp = data.timestamp?.toMillis() || Date.now();
+          const isRecent = (Date.now() - timestamp) < (30 * 60 * 1000); 
+          
+          // Use session storage to avoid showing the same broadcast multiple times in one session
+          const sessionKey = `broadcast_seen_${change.doc.id}`;
+          const alreadySeen = sessionStorage.getItem(sessionKey);
+
+          if (isTarget && isRecent && !alreadySeen) {
+            console.log("Displaying broadcast alert for user");
+            showToast(`${data.title}: ${data.body}`, "success");
+            setLastBroadcast({ id: change.doc.id, title: data.title, body: data.body });
+            sessionStorage.setItem(sessionKey, "true");
+          }
+        }
+      });
+    }, (error) => {
+      console.error("Push queue listener error:", error);
+    });
+
+    return () => unsubscribe();
+  }, [user, showToast]);
 
   const handleFirestoreError = useCallback((error: any, operationType: string, path: string) => {
     const errInfo = {
@@ -169,8 +233,14 @@ export function useAlerts(
         // Admin and Supervisor see everything
         if (role === 'admin' || role === 'supervisor') return true;
         
+        const userStoreId = String(user.storeId || "").trim().toLowerCase();
+        const logStoreId = String(log.storeId || "").trim().toLowerCase();
+
+        // If user is assigned to "ALL" stores, they see everything
+        if (userStoreId === 'all') return true;
+        
         // Managers, Pickers, and Store staff ONLY see their store
-        return String(log.storeId).trim().toLowerCase() === String(user.storeId).trim().toLowerCase();
+        return logStoreId === userStoreId;
       });
 
       setAlertLogs(filteredLogs);
@@ -254,6 +324,7 @@ export function useAlerts(
     expandedAlertId, setExpandedAlertId, adminHiddenAlerts, setAdminHiddenAlerts,
     isBuzzerMuted, setIsBuzzerMuted, handleAlertAction, logAlertAction, 
     notifiedEscalationsRef, requestNotificationPermission, testAlert,
+    lastBroadcast, setLastBroadcast,
     testBuzzer: () => {
       const testId = "test-buzzer-" + Date.now();
       const testAlert: ActiveAlert = {

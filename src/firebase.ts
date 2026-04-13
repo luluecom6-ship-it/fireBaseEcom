@@ -5,6 +5,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
 import firebaseConfig from "../firebase-applet-config.json";
 
 // Initialize Firebase
+console.log("Initializing Firebase with Project ID:", firebaseConfig.projectId);
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const messaging = getMessaging(app);

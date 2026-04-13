@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Clock, RefreshCw, Package, Users, UserCheck, TrendingUp, 
-  ShieldCheck, AlertTriangle, History, Save, X, AlertCircle 
+  ShieldCheck, AlertTriangle, History, Save, X, AlertCircle, Send
 } from 'lucide-react';
 import { 
   User, AdminData, EscalationRule, OrderRecord 
@@ -12,6 +12,8 @@ import { STATUSES, AGE_BUCKETS } from '../constants';
 import { fixImageUrl, getImages } from '../utils/formatters';
 import { cn } from '../lib/utils';
 import { useSystemConfig } from '../hooks/useSystemConfig';
+import { db } from '../firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 interface AdminProps {
   user: User;
@@ -27,6 +29,7 @@ interface AdminProps {
   onSaveConfig: () => Promise<void>;
   isSavingConfig: boolean;
   onGoogleLogin: () => void;
+  onEmailLogin: (email: string, pass: string) => Promise<void>;
   isFirebaseAuthenticated: boolean;
 }
 
@@ -44,12 +47,39 @@ export const Admin: React.FC<AdminProps> = ({
   onSaveConfig,
   isSavingConfig,
   onGoogleLogin,
+  onEmailLogin,
   isFirebaseAuthenticated
 }) => {
   const [filterDate, setFilterDate] = useState(new Date().toISOString().split("T")[0]);
   const [adminStoreFilter, setAdminStoreFilter] = useState("All");
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showDailyOrdersModal, setShowDailyOrdersModal] = useState(false);
+  const [broadcastMessage, setBroadcastMessage] = useState("");
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [showEmailLogin, setShowEmailLogin] = useState(false);
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPass, setAdminPass] = useState("");
+
+  const handleBroadcast = async () => {
+    if (!broadcastMessage.trim() || !isFirebaseAuthenticated) return;
+    setIsBroadcasting(true);
+    try {
+      const notificationId = `broadcast-${Date.now()}`;
+      await setDoc(doc(db, 'push_queue', notificationId), {
+        title: "📢 SYSTEM BROADCAST",
+        body: broadcastMessage,
+        targetRoles: ['picker', 'supervisor', 'manager'],
+        timestamp: serverTimestamp(),
+        status: 'pending',
+        sender: user.name
+      });
+      setBroadcastMessage("");
+    } catch (error) {
+      console.error("Error sending broadcast:", error);
+    } finally {
+      setIsBroadcasting(false);
+    }
+  };
 
   const filteredOrders = adminData.orders.filter(o => o.timestamp.includes(filterDate));
   const filteredAttendance = adminData.attendance.filter(a => a.timestamp.includes(filterDate));
@@ -126,36 +156,90 @@ export const Admin: React.FC<AdminProps> = ({
           <motion.div 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3"
+            className="bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-6"
           >
-            <AlertCircle className="text-amber-600 shrink-0 mt-0.5" size={18} />
-            <div className="flex-1">
-              <p className="text-amber-900 font-black text-xs uppercase tracking-widest">Firebase Authentication Required</p>
-              <p className="text-amber-700 text-[10px] sm:text-xs font-bold mt-1">
-                To save system configurations, you must be signed in with your Google Admin account.
-              </p>
-              <button 
-                onClick={onGoogleLogin}
-                className="mt-3 px-4 py-2 bg-amber-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-700 transition-all flex items-center gap-2"
-              >
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="h-3 w-3 brightness-0 invert" referrerPolicy="no-referrer" />
-                Link Google Admin Account
-              </button>
+            <div className="flex items-start gap-3">
+              <AlertCircle className="text-amber-600 shrink-0 mt-0.5" size={18} />
+              <div className="flex-1">
+                <p className="text-amber-900 font-black text-xs uppercase tracking-widest">Firebase Authentication Required</p>
+                <p className="text-amber-700 text-[10px] sm:text-xs font-bold mt-1">
+                  To save system configurations or send broadcasts, you must be signed in with an authorized Firebase account.
+                </p>
+                
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button 
+                    onClick={onGoogleLogin}
+                    className="px-4 py-2.5 bg-white text-slate-700 border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm"
+                  >
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="h-3 w-3" referrerPolicy="no-referrer" />
+                    Link Google Admin
+                  </button>
+                  
+                  <button 
+                    onClick={() => setShowEmailLogin(!showEmailLogin)}
+                    className="px-4 py-2.5 bg-amber-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-700 transition-all flex items-center gap-2 shadow-lg shadow-amber-200"
+                  >
+                    <ShieldCheck size={14} />
+                    {showEmailLogin ? "Cancel Email Login" : "Staff Email Login"}
+                  </button>
+                </div>
+
+                <AnimatePresence>
+                  {showEmailLogin && (
+                    <motion.div 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="mt-6 pt-6 border-t border-amber-200 space-y-4 overflow-hidden"
+                    >
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] font-black uppercase tracking-widest text-amber-800 ml-1">Admin Email</label>
+                          <input 
+                            type="email"
+                            value={adminEmail}
+                            onChange={(e) => setAdminEmail(e.target.value)}
+                            className="w-full bg-white border border-amber-200 rounded-xl p-3 text-xs font-bold text-slate-700 outline-none focus:border-amber-500"
+                            placeholder="e.g. admin@lulumea.com"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] font-black uppercase tracking-widest text-amber-800 ml-1">Password</label>
+                          <input 
+                            type="password"
+                            value={adminPass}
+                            onChange={(e) => setAdminPass(e.target.value)}
+                            className="w-full bg-white border border-amber-200 rounded-xl p-3 text-xs font-bold text-slate-700 outline-none focus:border-amber-500"
+                            placeholder="••••••••"
+                          />
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => onEmailLogin(adminEmail, adminPass)}
+                        disabled={!adminEmail || !adminPass}
+                        className="w-full sm:w-auto px-8 py-3 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all disabled:opacity-50"
+                      >
+                        Verify Admin Credentials
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           </motion.div>
         )}
 
         {/* System Settings */}
         {user.role === "admin" && (
-          <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden p-5 sm:p-6">
-            <div className="flex items-center justify-between mb-4 sm:mb-6">
-              <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
-                <ShieldCheck size={18} className="text-blue-600 sm:hidden" />
-                <ShieldCheck size={20} className="text-blue-600 hidden sm:block" />
-                System Configuration
-              </h4>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+            <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden p-5 sm:p-6">
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
+                  <ShieldCheck size={18} className="text-blue-600 sm:hidden" />
+                  <ShieldCheck size={20} className="text-blue-600 hidden sm:block" />
+                  System Configuration
+                </h4>
+              </div>
               <div className="p-4 sm:p-5 bg-slate-50 rounded-2xl sm:rounded-3xl border border-slate-100">
                 <div className="flex items-center justify-between mb-3 sm:mb-4">
                   <div>
@@ -182,6 +266,37 @@ export const Admin: React.FC<AdminProps> = ({
                     </button>
                   ))}
                 </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden p-5 sm:p-6">
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
+                  <Send size={18} className="text-emerald-600 sm:hidden" />
+                  <Send size={20} className="text-emerald-600 hidden sm:block" />
+                  Broadcast Notification
+                </h4>
+              </div>
+              <div className="space-y-3">
+                <textarea 
+                  value={broadcastMessage}
+                  onChange={(e) => setBroadcastMessage(e.target.value)}
+                  placeholder="Type message to all staff..."
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-xs font-bold text-slate-700 outline-none focus:border-emerald-500 min-h-[80px] resize-none"
+                />
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleBroadcast}
+                  disabled={isBroadcasting || !broadcastMessage.trim() || !isFirebaseAuthenticated}
+                  className={cn(
+                    "w-full py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2",
+                    (isBroadcasting || !broadcastMessage.trim() || !isFirebaseAuthenticated)
+                      ? "bg-slate-100 text-slate-400"
+                      : "bg-emerald-600 text-white shadow-lg shadow-emerald-200 hover:bg-emerald-700"
+                  )}
+                >
+                  {isBroadcasting ? "Sending..." : "Send Broadcast"} <Send size={14} />
+                </motion.button>
               </div>
             </div>
           </div>

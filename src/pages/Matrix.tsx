@@ -27,7 +27,8 @@ export const Matrix: React.FC<MatrixProps> = ({
 }) => {
   const [storeFilter, setStoreFilter] = React.useState<string>(() => {
     if (user && user.role !== 'admin' && user.role !== 'supervisor') {
-      return String(user.storeId || "");
+      const sid = String(user.storeId || "").trim();
+      return sid.toLowerCase() === 'all' ? "" : sid;
     }
     return "";
   });
@@ -49,6 +50,7 @@ export const Matrix: React.FC<MatrixProps> = ({
   const filteredQuick = React.useMemo(() => {
     if (!storeFilter) return allQuick;
     const filterStr = String(storeFilter).toLowerCase().trim();
+    if (filterStr === 'all') return allQuick;
     return allQuick.filter(d => 
       String(d.storeID || "").toLowerCase().includes(filterStr)
     );
@@ -57,6 +59,7 @@ export const Matrix: React.FC<MatrixProps> = ({
   const filteredSchedule = React.useMemo(() => {
     if (!storeFilter) return allSchedule;
     const filterStr = String(storeFilter).toLowerCase().trim();
+    if (filterStr === 'all') return allSchedule;
     return allSchedule.filter(d => 
       String(d.storeID || "").toLowerCase().includes(filterStr)
     );

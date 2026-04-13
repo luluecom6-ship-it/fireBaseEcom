@@ -33,7 +33,12 @@ export const Alerts: React.FC<AlertsProps> = ({
     const dateMatch = log.timestamp.includes(filterDate);
     if (!dateMatch) return false;
     if (user?.role === 'admin' || user?.role === 'supervisor') return true;
-    return log.storeId === user?.storeId;
+    
+    const userStoreId = String(user?.storeId || "").trim().toLowerCase();
+    const logStoreId = String(log.storeId || "").trim().toLowerCase();
+
+    if (userStoreId === 'all') return true;
+    return logStoreId === userStoreId;
   });
 
   return (

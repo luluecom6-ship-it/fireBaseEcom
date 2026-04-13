@@ -4,12 +4,12 @@ importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compa
 // Initialize the Firebase app in the service worker by passing in
 // your app's Firebase config object.
 firebase.initializeApp({
-  apiKey: "AIzaSyA7PoNtBzgg1gW0w6giXk-YwOYHf0Ev9pQ",
-  authDomain: "myecomlulu.firebaseapp.com",
-  projectId: "myecomlulu",
-  storageBucket: "myecomlulu.firebasestorage.app",
-  messagingSenderId: "38939626534",
-  appId: "1:38939626534:web:fcab3b22d010d58dbfeae7"
+  projectId: "project-d87150f3-9d9a-4b8c-9cc",
+  appId: "1:387076740220:web:cc27e07403d215983f25f9",
+  apiKey: "AIzaSyA1mwAIzM49juSc3iJ2JwPwVWtb8Am5t3E",
+  authDomain: "project-d87150f3-9d9a-4b8c-9cc.firebaseapp.com",
+  storageBucket: "project-d87150f3-9d9a-4b8c-9cc.firebasestorage.app",
+  messagingSenderId: "387076740220"
 });
 
 // Retrieve an instance of Firebase Messaging so that it can handle background

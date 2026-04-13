@@ -27,6 +27,25 @@ export const Analytics: React.FC<AnalyticsProps> = ({
   navigateTo,
   user
 }) => {
+  const filteredMatrixData = React.useMemo(() => {
+    if (!matrixData) return null;
+    if (user?.role === 'admin' || user?.role === 'supervisor') return matrixData;
+    
+    const userStoreId = String(user?.storeId || "").trim().toLowerCase();
+    if (userStoreId === 'all') return matrixData;
+
+    const filterItems = (items: any[]) => 
+      items.filter(item => String(item.storeID || "").trim().toLowerCase() === userStoreId);
+
+    return {
+      ...matrixData,
+      quick: filterItems(matrixData.quick || []),
+      schedule: filterItems(matrixData.schedule || [])
+    };
+  }, [matrixData, user]);
+
+  const displayData = filteredMatrixData;
+
   return (
     <motion.div 
       key="analytics"
@@ -54,7 +73,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
           </motion.button>
         </div>
 
-        {!matrixData ? (
+        {!displayData ? (
           <div className="bg-white p-12 sm:p-20 rounded-[2rem] sm:rounded-[3rem] shadow-xl border border-slate-100 text-center">
             <BarChart3 size={48} className="mx-auto text-slate-200 mb-6" />
             <h3 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">No Analytics Data</h3>
@@ -69,14 +88,14 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                   <Zap className="text-amber-500" size={14} />
                   <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Quick Vol</span>
                 </div>
-                <p className="text-xl sm:text-3xl font-black text-slate-900">{(matrixData?.quick || []).length}</p>
+                <p className="text-xl sm:text-3xl font-black text-slate-900">{(displayData?.quick || []).length}</p>
               </div>
               <div className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] shadow-sm border border-slate-100">
                 <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
                   <Clock className="text-emerald-500" size={14} />
                   <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Schedule Vol</span>
                 </div>
-                <p className="text-xl sm:text-3xl font-black text-slate-900">{(matrixData?.schedule || []).length}</p>
+                <p className="text-xl sm:text-3xl font-black text-slate-900">{(displayData?.schedule || []).length}</p>
               </div>
               <div className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] shadow-sm border border-slate-100">
                 <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
@@ -84,7 +103,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                   <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">High Risk</span>
                 </div>
                 <p className="text-xl sm:text-3xl font-black text-slate-900">
-                  {(matrixData?.quick || []).filter(d => d.bucket.includes("45Min+") || d.bucket.includes("60Min+") || d.bucket.includes("45-50") || d.bucket.includes("50-55") || d.bucket.includes("55-60")).length}
+                  {(displayData?.quick || []).filter(d => d.bucket.includes("45Min+") || d.bucket.includes("60Min+") || d.bucket.includes("45-50") || d.bucket.includes("50-55") || d.bucket.includes("55-60")).length}
                 </p>
               </div>
               <div className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] shadow-sm border border-slate-100">
@@ -93,7 +112,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                   <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Stores</span>
                 </div>
                 <p className="text-xl sm:text-3xl font-black text-slate-900">
-                  {new Set([...(matrixData?.quick || []).map(d => d.storeID), ...(matrixData?.schedule || []).map(d => d.storeID)]).size}
+                  {new Set([...(displayData?.quick || []).map(d => d.storeID), ...(displayData?.schedule || []).map(d => d.storeID)]).size}
                 </p>
               </div>
             </div>
@@ -109,7 +128,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart 
                       data={(() => {
-                        const all = [...(matrixData?.quick || []), ...(matrixData?.schedule || [])];
+                        const all = [...(displayData?.quick || []), ...(displayData?.schedule || [])];
                         const counts: Record<string, number> = {};
                         all.forEach(item => {
                           const s = item.status || "Unknown";
@@ -154,7 +173,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                       <Pie
                         data={(() => {
                           let low = 0, mid = 0, high = 0;
-                          (matrixData?.quick || []).forEach(item => {
+                          (displayData?.quick || []).forEach(item => {
                             const b = item.bucket || "";
                             if (b.includes("60Min+") || b.includes("45-50") || b.includes("50-55") || b.includes("55-60")) high++;
                             else if (b.includes("20-25") || b.includes("25-30") || b.includes("30-35") || b.includes("35-40") || b.includes("40-45")) mid++;
@@ -175,7 +194,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                       >
                         {(() => {
                           let low = 0, mid = 0, high = 0;
-                          (matrixData?.quick || []).forEach(item => {
+                          (displayData?.quick || []).forEach(item => {
                             const b = item.bucket || "";
                             if (b.includes("60Min+") || b.includes("45-50") || b.includes("50-55") || b.includes("55-60")) high++;
                             else if (b.includes("20-25") || b.includes("25-30") || b.includes("30-35") || b.includes("35-40") || b.includes("40-45")) mid++;

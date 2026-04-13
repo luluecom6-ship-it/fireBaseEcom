@@ -49,10 +49,28 @@ export default function App() {
   const [page, setPage] = useState<"login" | "dashboard" | "upload" | "attendance" | "admin" | "search" | "matrix" | "analytics" | "alerts" | "attendance-history">("login");
   
   // Auth Hook
-  const { user, loading: authLoading, login, loginWithGoogle, logout, setUser } = useAuth();
+  const { 
+    user, 
+    loading: authLoading, 
+    isFirebaseAuthenticated,
+    login, 
+    loginWithEmail, 
+    loginWithGoogle, 
+    logout, 
+    setUser 
+  } = useAuth();
   
   // Toast Hook
   const { toast, showToast } = useToast();
+
+  const handleEmailLogin = async (email: string, pass: string) => {
+    const res = await loginWithEmail(email, pass);
+    if (res.success) {
+      showToast("Firebase Login Successful", "success");
+    } else {
+      showToast(res.message || "Login Failed", "error");
+    }
+  };
 
   // Global States (shared across pages or needed for modals)
   const [fullImage, setFullImage] = useState<string | null>(null);
@@ -81,15 +99,14 @@ export default function App() {
   const { 
     activeAlerts, alertLogs, handleAlertAction, logAlertAction,
     minimizedAlerts, setMinimizedAlerts, expandedAlertId, setExpandedAlertId,
-    adminHiddenAlerts, isBuzzerMuted, setIsBuzzerMuted, requestNotificationPermission, testAlert, testBuzzer
+    adminHiddenAlerts, isBuzzerMuted, setIsBuzzerMuted, requestNotificationPermission, testAlert, testBuzzer,
+    lastBroadcast, setLastBroadcast
   } = useAlerts(user, showToast);
 
   const { 
     escalationRules, setEscalationRules, maxImages, setMaxImages, 
     saveSystemConfig, isSavingConfig 
   } = useSystemConfig(user, showToast);
-
-  const isFirebaseAuthenticated = !!auth.currentUser;
 
   useAlertTrigger(user, matrixData, escalationRules, alertLogs, logAlertAction);
 
@@ -164,7 +181,14 @@ export default function App() {
 
   const renderPage = () => {
     if (!user || page === "login") {
-      return <Login onLogin={handleLogin} onGoogleLogin={loginWithGoogle} loading={authLoading} />;
+      return (
+        <Login 
+          onLogin={handleLogin} 
+          onEmailLogin={handleEmailLogin}
+          onGoogleLogin={loginWithGoogle} 
+          loading={authLoading} 
+        />
+      );
     }
 
     switch (page) {
@@ -267,6 +291,7 @@ export default function App() {
             navigateTo={navigateTo}
             onViewImage={setFullImage}
             onGoogleLogin={loginWithGoogle}
+            onEmailLogin={handleEmailLogin}
             isFirebaseAuthenticated={isFirebaseAuthenticated}
           />
         );
@@ -298,6 +323,8 @@ export default function App() {
         setMinimizedAlerts={setMinimizedAlerts}
         isBuzzerMuted={isBuzzerMuted}
         setIsBuzzerMuted={setIsBuzzerMuted}
+        lastBroadcast={lastBroadcast}
+        setLastBroadcast={setLastBroadcast}
       />
 
       <AnimatePresence mode="wait">
