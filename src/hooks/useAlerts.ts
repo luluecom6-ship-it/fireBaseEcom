@@ -165,7 +165,11 @@ export function useAlerts(
 
       const filteredLogs = logs.filter((log: AlertLog) => {
         const role = user.role.toLowerCase();
+        
+        // Admin and Supervisor see everything
         if (role === 'admin' || role === 'supervisor') return true;
+        
+        // Managers, Pickers, and Store staff ONLY see their store
         return String(log.storeId).trim().toLowerCase() === String(user.storeId).trim().toLowerCase();
       });
 

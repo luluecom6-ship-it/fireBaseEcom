@@ -111,25 +111,12 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
         return true;
       }
       
-      // Others (Picker, Store, Manager) only see their store
+      // Managers, Pickers, and Store staff only see their store
       const userStoreId = String(user.storeId || "").trim().toLowerCase();
       const alertStoreId = String(a.storeId || "").trim().toLowerCase();
       
-      // If user has no storeId, they might be a global user or misconfigured
       if (!userStoreId) return true; 
-      
-      const isStoreMatch = alertStoreId === userStoreId;
-      if (!isStoreMatch) return false;
-
-      // Role specific visibility
-      if (role === 'manager') {
-        // Managers see escalated alerts OR alerts for their store
-        return true; 
-      }
-      
-      if (['picker', 'store'].includes(role)) return true;
-      
-      return false;
+      return alertStoreId === userStoreId;
     });
     
     // Unique by orderId, keeping the latest one
