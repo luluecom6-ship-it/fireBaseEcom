@@ -99,7 +99,7 @@ export default function App() {
   const { 
     activeAlerts, alertLogs, handleAlertAction, logAlertAction,
     minimizedAlerts, setMinimizedAlerts, expandedAlertId, setExpandedAlertId,
-    adminHiddenAlerts, isBuzzerMuted, setIsBuzzerMuted, requestNotificationPermission, testAlert, testBuzzer,
+    adminHiddenAlerts, requestNotificationPermission, testAlert, testBuzzer,
     lastBroadcast, setLastBroadcast
   } = useAlerts(user, showToast);
 
@@ -293,6 +293,8 @@ export default function App() {
             onGoogleLogin={loginWithGoogle}
             onEmailLogin={handleEmailLogin}
             isFirebaseAuthenticated={isFirebaseAuthenticated}
+            showToast={showToast}
+            isAdminLoading={loading}
           />
         );
       case "attendance-history":
@@ -321,8 +323,6 @@ export default function App() {
         adminHiddenAlerts={adminHiddenAlerts}
         handleAlertAction={handleAlertAction}
         setMinimizedAlerts={setMinimizedAlerts}
-        isBuzzerMuted={isBuzzerMuted}
-        setIsBuzzerMuted={setIsBuzzerMuted}
         lastBroadcast={lastBroadcast}
         setLastBroadcast={setLastBroadcast}
       />

@@ -22,6 +22,7 @@ export function useAuth() {
       
       if (userSnap.exists()) {
         const userData = userSnap.data() as User;
+        if (userData.role) userData.role = userData.role.toLowerCase() as any;
         setUser(userData);
         localStorage.setItem("lulu_user", JSON.stringify(userData));
         return { success: true, user: userData };
@@ -63,6 +64,7 @@ export function useAuth() {
       
       if (userSnap.exists()) {
         userData = userSnap.data() as User;
+        if (userData.role) userData.role = userData.role.toLowerCase() as any;
         // Ensure admin status is synced if email matches default admin
         const isDefaultAdmin = fbUser.email === "luluecom6@gmail.com" || fbUser.email === "505011@sa.lulumea.com";
         if (isDefaultAdmin && userData.role !== 'admin') {
@@ -116,6 +118,7 @@ export function useAuth() {
       const userData = data.status === "success" ? data : (data.empId ? data : null);
       
       if (userData && (userData.status === "success" || userData.empId)) {
+        if (userData.role) userData.role = userData.role.toLowerCase() as any;
         setUser(userData);
         localStorage.setItem("lulu_user", JSON.stringify(userData));
         localStorage.setItem("lulu_login_time", new Date().getTime().toString());
@@ -144,7 +147,16 @@ export function useAuth() {
         const userRef = doc(db, 'users', fbUser.uid);
         const userSnap = await getDoc(userRef);
         if (userSnap.exists()) {
-          setUser(userSnap.data() as User);
+          const userData = userSnap.data() as User;
+          const originalRole = userData.role;
+          if (userData.role) userData.role = userData.role.toLowerCase() as any;
+          
+          // Proactively sync normalized role back to Firestore if it changed
+          if (originalRole !== userData.role) {
+            await setDoc(userRef, { role: userData.role }, { merge: true });
+          }
+          
+          setUser(userData);
         }
       } else {
         const savedUser = localStorage.getItem("lulu_user");

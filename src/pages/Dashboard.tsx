@@ -348,7 +348,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <motion.div 
             whileHover={{ y: -5 }}
             whileTap={{ scale: 0.98 }}
-            onClick={async () => { await fetchAdminData(true); navigateTo("admin"); }}
+            onClick={() => { fetchAdminData(true); navigateTo("admin"); }}
             className="bg-white p-3 sm:p-8 rounded-xl sm:rounded-[2.5rem] shadow-xl border border-slate-100 flex flex-col sm:flex-row items-center gap-2 sm:gap-6 cursor-pointer group"
           >
             <div className="h-10 w-10 sm:h-20 sm:w-20 rounded-xl sm:rounded-3xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all duration-300">
@@ -389,7 +389,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <motion.div 
               whileHover={{ y: -5 }}
               whileTap={{ scale: 0.98 }}
-              onClick={async () => { await fetchMatrixData(); navigateTo("matrix"); }}
+              onClick={() => { fetchMatrixData(); navigateTo("matrix"); }}
               className="bg-white p-3 sm:p-8 rounded-xl sm:rounded-[2.5rem] shadow-xl border border-slate-100 flex flex-col sm:flex-row items-center gap-2 sm:gap-6 cursor-pointer group"
             >
               <div className="h-10 w-10 sm:h-20 sm:w-20 rounded-xl sm:rounded-3xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition-all duration-300">
@@ -408,7 +408,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <motion.div 
               whileHover={{ y: -5 }}
               whileTap={{ scale: 0.98 }}
-              onClick={async () => { await fetchMatrixData(); navigateTo("analytics"); }}
+              onClick={() => { fetchMatrixData(); navigateTo("analytics"); }}
               className="bg-white p-3 sm:p-8 rounded-xl sm:rounded-[2.5rem] shadow-xl border border-slate-100 flex flex-col sm:flex-row items-center gap-2 sm:gap-6 cursor-pointer group"
             >
               <div className="h-10 w-10 sm:h-20 sm:w-20 rounded-xl sm:rounded-3xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all duration-300">

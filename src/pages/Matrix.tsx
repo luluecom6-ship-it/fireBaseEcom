@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { RefreshCw, LayoutDashboard, TrendingUp, Clock, X, ChevronDown } from 'lucide-react';
 import { MatrixData, User } from '../types';
 import { Header } from '../components/layout/Header';
@@ -83,6 +83,19 @@ export const Matrix: React.FC<MatrixProps> = ({
     >
       <Header title="Matrix Intelligence" showBack onBack={() => navigateTo("dashboard")} user={user} />
       
+      {/* Top Loading Bar */}
+      <AnimatePresence>
+        {isMatrixLoading && (
+          <motion.div 
+            initial={{ scaleX: 0, opacity: 0 }}
+            animate={{ scaleX: 1, opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed top-[64px] left-0 right-0 h-1 bg-blue-600 origin-left z-50"
+            transition={{ duration: 0.5, ease: "easeInOut" }}
+          />
+        )}
+      </AnimatePresence>
+
       <div className="p-4 sm:p-6 max-w-[1600px] mx-auto space-y-6">
         {/* Header Section */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">

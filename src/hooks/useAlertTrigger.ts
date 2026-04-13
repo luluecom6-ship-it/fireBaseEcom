@@ -19,9 +19,14 @@ export function useAlertTrigger(
 
     // Only process Quick commerce orders for alerts
     const allItems = [...(matrixData.quick || [])].filter(item => {
-      const role = user.role.toLowerCase();
+      const role = String(user.role || "").toLowerCase().trim();
       if (role === 'admin' || role === 'supervisor') return true;
-      return String(item.storeID).trim() === String(user.storeId).trim();
+      
+      const userStoreId = String(user.storeId || "").trim().toLowerCase();
+      const itemStoreId = String(item.storeID || "").trim().toLowerCase();
+      
+      if (userStoreId === 'all') return true;
+      return itemStoreId === userStoreId;
     });
 
     allItems.forEach(item => {

@@ -31,6 +31,8 @@ interface AdminProps {
   onGoogleLogin: () => void;
   onEmailLogin: (email: string, pass: string) => Promise<void>;
   isFirebaseAuthenticated: boolean;
+  showToast: (msg: string, type?: 'success' | 'error') => void;
+  isAdminLoading: boolean;
 }
 
 export const Admin: React.FC<AdminProps> = ({
@@ -48,31 +50,35 @@ export const Admin: React.FC<AdminProps> = ({
   isSavingConfig,
   onGoogleLogin,
   onEmailLogin,
-  isFirebaseAuthenticated
+  isFirebaseAuthenticated,
+  showToast,
+  isAdminLoading
 }) => {
   const [filterDate, setFilterDate] = useState(new Date().toISOString().split("T")[0]);
   const [adminStoreFilter, setAdminStoreFilter] = useState("All");
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showDailyOrdersModal, setShowDailyOrdersModal] = useState(false);
   const [broadcastMessage, setBroadcastMessage] = useState("");
+  const [targetRoles, setTargetRoles] = useState<string[]>(['picker', 'supervisor', 'manager', 'store']);
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [showEmailLogin, setShowEmailLogin] = useState(false);
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPass, setAdminPass] = useState("");
 
   const handleBroadcast = async () => {
-    if (!broadcastMessage.trim() || !isFirebaseAuthenticated) return;
+    if (!broadcastMessage.trim() || !isFirebaseAuthenticated || targetRoles.length === 0) return;
     setIsBroadcasting(true);
     try {
       const notificationId = `broadcast-${Date.now()}`;
       await setDoc(doc(db, 'push_queue', notificationId), {
         title: "📢 SYSTEM BROADCAST",
         body: broadcastMessage,
-        targetRoles: ['picker', 'supervisor', 'manager'],
+        targetRoles: targetRoles,
         timestamp: serverTimestamp(),
-        status: 'sent',
+        status: 'pending',
         sender: user.name
       });
+      showToast("Broadcast sent successfully!", "success");
       setBroadcastMessage("");
     } catch (error) {
       console.error("Error sending broadcast:", error);
@@ -95,6 +101,19 @@ export const Admin: React.FC<AdminProps> = ({
     >
       <Header title="Admin Intelligence" showBack onBack={() => navigateTo("dashboard")} user={user} />
       
+      {/* Top Loading Bar */}
+      <AnimatePresence>
+        {isAdminLoading && (
+          <motion.div 
+            initial={{ scaleX: 0, opacity: 0 }}
+            animate={{ scaleX: 1, opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed top-[64px] left-0 right-0 h-1 bg-blue-600 origin-left z-50"
+            transition={{ duration: 0.5, ease: "easeInOut" }}
+          />
+        )}
+      </AnimatePresence>
+
       <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-4 sm:space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="text-center sm:text-left">
@@ -278,19 +297,40 @@ export const Admin: React.FC<AdminProps> = ({
                 </h4>
               </div>
               <div className="space-y-3">
+                <div className="flex flex-wrap gap-2 mb-1">
+                  {['picker', 'supervisor', 'manager', 'store', 'driver', 'admin', 'user'].map(role => (
+                    <button
+                      key={role}
+                      type="button"
+                      onClick={() => {
+                        setTargetRoles(prev => 
+                          prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]
+                        );
+                      }}
+                      className={cn(
+                        "px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border",
+                        targetRoles.includes(role) 
+                          ? "bg-emerald-600 text-white border-emerald-600 shadow-sm" 
+                          : "bg-white text-slate-400 border-slate-200 hover:border-emerald-300"
+                      )}
+                    >
+                      {role}
+                    </button>
+                  ))}
+                </div>
                 <textarea 
                   value={broadcastMessage}
                   onChange={(e) => setBroadcastMessage(e.target.value)}
-                  placeholder="Type message to all staff..."
+                  placeholder="Type message to selected roles..."
                   className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-xs font-bold text-slate-700 outline-none focus:border-emerald-500 min-h-[80px] resize-none"
                 />
                 <motion.button
                   whileTap={{ scale: 0.95 }}
                   onClick={handleBroadcast}
-                  disabled={isBroadcasting || !broadcastMessage.trim() || !isFirebaseAuthenticated}
+                  disabled={isBroadcasting || !broadcastMessage.trim() || !isFirebaseAuthenticated || targetRoles.length === 0}
                   className={cn(
                     "w-full py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2",
-                    (isBroadcasting || !broadcastMessage.trim() || !isFirebaseAuthenticated)
+                    (isBroadcasting || !broadcastMessage.trim() || !isFirebaseAuthenticated || targetRoles.length === 0)
                       ? "bg-slate-100 text-slate-400"
                       : "bg-emerald-600 text-white shadow-lg shadow-emerald-200 hover:bg-emerald-700"
                   )}

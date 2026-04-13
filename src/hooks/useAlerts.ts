@@ -14,7 +14,6 @@ export function useAlerts(
   const [minimizedAlerts, setMinimizedAlerts] = useState<string[]>([]);
   const [expandedAlertId, setExpandedAlertId] = useState<string | null>(null);
   const [adminHiddenAlerts, setAdminHiddenAlerts] = useState<string[]>([]);
-  const [isBuzzerMuted, setIsBuzzerMuted] = useState(false);
   const [lastBroadcast, setLastBroadcast] = useState<{ id: string, title: string, body: string } | null>(null);
   
   const pendingActionsRef = useRef<Set<string>>(new Set());
@@ -45,14 +44,22 @@ export function useAlerts(
     const allLogs = Array.from(mergedMap.values());
 
     return allLogs.filter((log: AlertLog) => {
-      const role = user.role.toLowerCase();
-      if (role === 'admin' || role === 'supervisor') return true;
-      
+      const role = String(user.role || "").toLowerCase().trim();
       const userStoreId = String(user.storeId || "").trim().toLowerCase();
       const logStoreId = String(log.storeId || "").trim().toLowerCase();
 
-      if (userStoreId === 'all') return true;
-      return logStoreId === userStoreId;
+      // Admin and Supervisor see everything. Manager only sees their store.
+      const isPrivileged = role === 'admin' || role === 'supervisor';
+      const isAllStore = userStoreId === 'all';
+      const isStoreMatch = logStoreId === userStoreId;
+
+      const shouldShow = isPrivileged || isAllStore || isStoreMatch;
+
+      if (!shouldShow && Math.random() < 0.01) { // Log occasionally to avoid spam
+        console.log(`[AlertFilter] Filtered out log ${log.orderId}. UserRole: ${role}, UserStore: ${userStoreId}, LogStore: ${logStoreId}`);
+      }
+
+      return shouldShow;
     });
   }, [user]);
 
@@ -134,7 +141,7 @@ export function useAlerts(
           await setDoc(tokenRef, {
             token,
             userId: user.empId,
-            role: user.role,
+            role: user.role.toLowerCase(),
             storeId: user.storeId,
             updatedAt: serverTimestamp()
           }, { merge: true });
@@ -157,10 +164,15 @@ export function useAlerts(
       snapshot.docChanges().forEach((change) => {
         if (change.type === "added") {
           const data = change.doc.data();
-          const userRole = String(user.role || "").toLowerCase();
-          const isTarget = data.targetRoles?.some((r: string) => String(r).toLowerCase() === userRole);
+          const userRole = String(user.role || "").toLowerCase().trim();
           
-          console.log(`Broadcast received: ${change.doc.id}. Target: ${isTarget}. User Role: ${userRole}`);
+          // Normalize target roles to lowercase and trimmed strings
+          const targetRoles = Array.isArray(data.targetRoles) 
+            ? data.targetRoles.map((r: any) => String(r).toLowerCase().trim())
+            : [];
+          
+          // If targetRoles is missing or empty, assume it's for everyone
+          const isTarget = targetRoles.length === 0 || targetRoles.includes(userRole);
           
           // Check if it's a recent broadcast (within last 2 hours to handle clock skew)
           const timestamp = data.timestamp?.toMillis() || Date.now();
@@ -170,11 +182,15 @@ export function useAlerts(
           const sessionKey = `broadcast_seen_${change.doc.id}`;
           const alreadySeen = sessionStorage.getItem(sessionKey);
 
+          console.log(`[Broadcast] ID: ${change.doc.id}, UserRole: "${userRole}", TargetRoles: ${JSON.stringify(targetRoles)}, IsTarget: ${isTarget}, IsRecent: ${isRecent}, AlreadySeen: ${!!alreadySeen}`);
+
           if (isTarget && isRecent && !alreadySeen) {
-            console.log("Displaying broadcast alert for user");
+            console.log(`[Broadcast] Displaying: ${data.title}`);
             showToast(`${data.title}: ${data.body}`, "success");
             setLastBroadcast({ id: change.doc.id, title: data.title, body: data.body });
             sessionStorage.setItem(sessionKey, "true");
+          } else if (!isTarget) {
+            console.log(`[Broadcast] Role mismatch. User is "${userRole}", Targets are: ${JSON.stringify(targetRoles)}`);
           }
         }
       });
@@ -393,6 +409,11 @@ export function useAlerts(
       }
       return;
     }
+    
+    // For acknowledge and escalate, we also want the alert to "go off" (minimize) immediately
+    setMinimizedAlerts(prev => [...prev, alert.id]);
+    setExpandedAlertId(null);
+    
     await logAlertAction(alert, action);
     showToast(`Alert ${action === 'acknowledge' ? 'Acknowledged' : 'Escalated'}`, "success");
   }, [user, logAlertAction, showToast]);
@@ -409,7 +430,7 @@ export function useAlerts(
   return { 
     activeAlerts, alertLogs, minimizedAlerts, setMinimizedAlerts, 
     expandedAlertId, setExpandedAlertId, adminHiddenAlerts, setAdminHiddenAlerts,
-    isBuzzerMuted, setIsBuzzerMuted, handleAlertAction, logAlertAction, 
+    handleAlertAction, logAlertAction, 
     notifiedEscalationsRef, requestNotificationPermission, testAlert,
     lastBroadcast, setLastBroadcast,
     testBuzzer: () => {

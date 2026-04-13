@@ -13,8 +13,6 @@ interface AlertOverlayProps {
   adminHiddenAlerts: string[];
   handleAlertAction: (alert: ActiveAlert, action: 'acknowledge' | 'escalate' | 'hide') => Promise<void>;
   setMinimizedAlerts: React.Dispatch<React.SetStateAction<string[]>>;
-  isBuzzerMuted: boolean;
-  setIsBuzzerMuted: (muted: boolean) => void;
   lastBroadcast: { id: string, title: string, body: string } | null;
   setLastBroadcast: (broadcast: { id: string, title: string, body: string } | null) => void;
 }
@@ -28,8 +26,6 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
   adminHiddenAlerts,
   handleAlertAction,
   setMinimizedAlerts,
-  isBuzzerMuted,
-  setIsBuzzerMuted,
   lastBroadcast,
   setLastBroadcast
 }) => {
@@ -137,9 +133,9 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
     if (!user) return [];
     
     const filtered = activeAlerts.filter(a => {
-      const role = String(user.role || "").toLowerCase();
+      const role = String(user.role || "").toLowerCase().trim();
       
-      // Admin/Supervisor see everything
+      // Admin and Supervisor see everything. Manager only sees their store.
       if (role === 'admin' || role === 'supervisor') {
         if (role === 'admin' && adminHiddenAlerts.includes(a.id)) return false;
         return true;
@@ -149,7 +145,7 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
       const userStoreId = String(user.storeId || "").trim().toLowerCase();
       const alertStoreId = String(a.storeId || "").trim().toLowerCase();
       
-      if (!userStoreId) return true; 
+      if (!userStoreId || userStoreId === 'all') return true; 
       return alertStoreId === userStoreId;
     });
     
@@ -166,8 +162,8 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
   }, [activeAlerts, user, adminHiddenAlerts]);
 
   const shouldBuzz = useMemo(() => 
-    filteredAlerts.some(a => (a.buzzerStarted || a.managerBuzzerStarted) && !isBuzzerMuted),
-  [filteredAlerts, isBuzzerMuted]);
+    filteredAlerts.some(a => (a.buzzerStarted || a.managerBuzzerStarted)),
+  [filteredAlerts]);
 
   useEffect(() => {
     const handleInteraction = () => {
@@ -408,28 +404,16 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
                   </div>
                   
                   <div className="flex gap-2">
-                    <button 
-                      onClick={() => {
-                        setMinimizedAlerts(prev => [...prev, alert.id]);
-                        setExpandedAlertId(null);
-                      }}
-                      className="flex-1 p-4 bg-black/5 rounded-2xl font-black uppercase tracking-widest text-[10px] opacity-60 hover:opacity-100 transition-opacity"
-                    >
-                      Minimize
-                    </button>
-                    {(alert.buzzerStarted || alert.managerBuzzerStarted) && (
-                      <button 
-                        onClick={() => {
-                          setIsBuzzerMuted(true);
-                          handleAlertAction(alert, 'acknowledge');
-                        }}
-                        className="p-4 bg-black/5 rounded-2xl font-black uppercase tracking-widest text-[10px] opacity-60 hover:opacity-100 transition-opacity flex items-center gap-2"
-                      >
-                        <Zap size={14} className={isBuzzerMuted ? "text-slate-400" : "text-amber-500"} />
-                        {isBuzzerMuted ? "Unmute" : "Mute & Acknowledge"}
-                      </button>
-                    )}
-                  </div>
+    <button 
+      onClick={() => {
+        setMinimizedAlerts(prev => [...prev, alert.id]);
+        setExpandedAlertId(null);
+      }}
+      className="flex-1 p-4 bg-black/5 rounded-2xl font-black uppercase tracking-widest text-[10px] opacity-60 hover:opacity-100 transition-opacity"
+    >
+      Minimize
+    </button>
+  </div>
                 </div>
               </motion.div>
             </div>
