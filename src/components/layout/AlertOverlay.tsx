@@ -55,25 +55,26 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
 
-      osc.type = 'sine'; 
-      osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5 note
-      osc.frequency.exponentialRampToValueAtTime(659.25, ctx.currentTime + 0.5); // E5 note
+      // "Car Door Chime" Style: Triangle wave for a warmer "ding"
+      osc.type = 'triangle'; 
+      osc.frequency.setValueAtTime(987.77, ctx.currentTime); // B5 note
       
-      // Create a "Medium-Long Beep" pattern: 1s ON, 0.5s OFF
       const now = ctx.currentTime;
       gain.gain.setValueAtTime(0, now);
       
-      // We'll use a repeating schedule for the gain
-      const beepDuration = 1.0; // 1 second beep
-      const silenceDuration = 0.5; // 0.5 second silence
-      const cycleTotal = beepDuration + silenceDuration;
+      // Pattern: Rhythmic "Ding... Ding..." every 0.8 seconds
+      const cycleTotal = 0.8; 
+      const chimeDuration = 0.4; // Decay time
       
-      // Schedule the next 60 seconds of beeps (plenty for an alert)
-      for (let i = 0; i < 40; i++) {
+      // Schedule 100 cycles (80 seconds of alerting)
+      for (let i = 0; i < 100; i++) {
         const startTime = now + (i * cycleTotal);
-        gain.gain.linearRampToValueAtTime(0.15, startTime + 0.1); // Fade in
-        gain.gain.setValueAtTime(0.15, startTime + beepDuration - 0.1);
-        gain.gain.linearRampToValueAtTime(0, startTime + beepDuration); // Fade out
+        // Attack
+        gain.gain.linearRampToValueAtTime(0.2, startTime + 0.02); 
+        // Decay
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + chimeDuration);
+        // Silence until next cycle
+        gain.gain.setValueAtTime(0, startTime + chimeDuration + 0.01);
       }
 
       osc.connect(gain);
@@ -83,7 +84,7 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
       oscillatorRef.current = osc;
       gainRef.current = gain;
     } catch (e) {
-      console.error("Failed to start programmatic buzzer:", e);
+      console.error("Failed to start car door chime buzzer:", e);
     }
   };
 
@@ -99,18 +100,18 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
 
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, ctx.currentTime); // A5 note
-      osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.2); // E6 note
+      // Short "Ding" for broadcast
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(1174.66, ctx.currentTime); // D6 note
 
       gain.gain.setValueAtTime(0, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.05);
-      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.4);
+      gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
 
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start();
-      osc.stop(ctx.currentTime + 0.5);
+      osc.stop(ctx.currentTime + 0.4);
     } catch (e) {
       console.error("Failed to play broadcast sound:", e);
     }
@@ -215,14 +216,17 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
 
   return (
     <>
-      {/* Aggressive Unlock UI: Full-screen flashing red overlay if audio is locked but we should be buzzing */}
+      {/* Aggressive Unlock UI: Full-screen flashing red/emerald overlay if audio is locked but we should be buzzing or have a broadcast */}
       <AnimatePresence>
-        {shouldBuzz && !hasInteracted && (
+        {((shouldBuzz && !hasInteracted) || (lastBroadcast && !hasInteracted)) && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] bg-red-600 flex flex-col items-center justify-center p-8 text-center cursor-pointer animate-pulse"
+            className={cn(
+              "fixed inset-0 z-[200] flex flex-col items-center justify-center p-8 text-center cursor-pointer animate-pulse",
+              lastBroadcast ? "bg-emerald-600" : "bg-red-600"
+            )}
             onClick={() => {
               setHasInteracted(true);
               if (audioContextRef.current?.state === 'suspended') {
@@ -230,14 +234,18 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
               }
             }}
           >
-            <AlertTriangle size={120} className="text-white mb-8 animate-bounce" />
+            {lastBroadcast ? (
+              <Zap size={120} className="text-white mb-8 animate-bounce" />
+            ) : (
+              <AlertTriangle size={120} className="text-white mb-8 animate-bounce" />
+            )}
             <h1 className="text-4xl sm:text-6xl font-black text-white uppercase tracking-tighter mb-4">
-              Critical Alert!
+              {lastBroadcast ? "New Broadcast!" : "Critical Alert!"}
             </h1>
-            <p className="text-xl sm:text-2xl font-bold text-red-100 uppercase tracking-widest animate-pulse">
+            <p className="text-xl sm:text-2xl font-bold text-white/80 uppercase tracking-widest animate-pulse">
               Tap anywhere to silence & view
             </p>
-            <div className="mt-12 px-8 py-4 bg-white text-red-600 rounded-full font-black uppercase tracking-widest text-sm shadow-2xl">
+            <div className="mt-12 px-8 py-4 bg-white text-slate-900 rounded-full font-black uppercase tracking-widest text-sm shadow-2xl">
               Unlock Audio Now
             </div>
           </motion.div>

@@ -70,7 +70,7 @@ export const Admin: React.FC<AdminProps> = ({
         body: broadcastMessage,
         targetRoles: ['picker', 'supervisor', 'manager'],
         timestamp: serverTimestamp(),
-        status: 'pending',
+        status: 'sent',
         sender: user.name
       });
       setBroadcastMessage("");

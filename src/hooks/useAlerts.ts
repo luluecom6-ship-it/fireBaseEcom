@@ -21,6 +21,106 @@ export function useAlerts(
   const notifiedEscalationsRef = useRef<Set<string>>(new Set());
   const notifiedSystemRef = useRef<Set<string>>(new Set());
   const lastAlertCountRef = useRef(0);
+  const legacyLogsRef = useRef<AlertLog[]>([]);
+  const firestoreLogsRef = useRef<AlertLog[]>([]);
+
+  // Function to merge and filter logs
+  const getMergedAndFilteredLogs = useCallback((fLogs: AlertLog[], lLogs: AlertLog[]) => {
+    if (!user) return [];
+
+    const mergedMap = new Map<string, AlertLog>();
+    
+    // Add legacy logs first
+    lLogs.forEach(log => {
+      const key = `${log.orderId}|${log.timestamp}`.toLowerCase().trim();
+      mergedMap.set(key, log);
+    });
+    
+    // Overwrite with Firestore logs (real-time truth)
+    fLogs.forEach(log => {
+      const key = `${log.orderId}|${log.timestamp}`.toLowerCase().trim();
+      mergedMap.set(key, log);
+    });
+
+    const allLogs = Array.from(mergedMap.values());
+
+    return allLogs.filter((log: AlertLog) => {
+      const role = user.role.toLowerCase();
+      if (role === 'admin' || role === 'supervisor') return true;
+      
+      const userStoreId = String(user.storeId || "").trim().toLowerCase();
+      const logStoreId = String(log.storeId || "").trim().toLowerCase();
+
+      if (userStoreId === 'all') return true;
+      return logStoreId === userStoreId;
+    });
+  }, [user]);
+
+  // Fetch historical logs from Legacy API
+  const fetchAlertHistory = useCallback(async () => {
+    if (!user) return;
+    try {
+      const urlObj = new URL(API_URL.trim());
+      urlObj.searchParams.set('action', 'getAdminData');
+      urlObj.searchParams.set('type', 'alerts');
+      urlObj.searchParams.set('_t', Date.now().toString());
+      
+      const res = await robustFetch(urlObj.toString());
+      const response = await res.json();
+      let data = response.status === "success" ? response.data : response;
+      
+      if (data && !Array.isArray(data) && data.alerts) {
+        data = data.alerts;
+      }
+      
+      if (Array.isArray(data)) {
+        const mapped: AlertLog[] = data.map((item: any) => {
+          // Robust property mapping for different naming conventions
+          const orderId = item.orderId || item.OrderID || item.order_id || "";
+          const timestamp = item.timestamp || item.Timestamp || item.time || "";
+          const storeId = String(item.storeId || item.StoreID || item.store_id || "");
+          const eventType = item.eventType || item.EventType || item.event_type || "";
+          const status = item.status || item.Status || "Pending";
+          const escalation = String(item.escalation || item.Escalation || "FALSE").toUpperCase();
+          const managerStatus = item.managerStatus || item.ManagerStatus || item.manager_status || "Pending";
+          
+          return {
+            id: item.id || `${orderId}-${timestamp}`.toLowerCase().replace(/\s+/g, '-'),
+            timestamp,
+            orderId,
+            eventType,
+            storeId,
+            userId: item.userId || item.UserID || item.user_id || "",
+            notificationTime: item.notificationTime || item.NotificationTime || "",
+            storeStaffName: item.storeStaffName || item.StoreStaffName || "",
+            status,
+            escalation,
+            managerName: item.managerName || item.ManagerName || "",
+            statusTrigger: item.statusTrigger || item.StatusTrigger || "",
+            managerStatus,
+            orderCreatedAt: item.orderCreatedAt || item.OrderCreatedAt || "",
+            triggeredAt: item.triggeredAt || item.TriggeredAt || timestamp,
+            bucket: item.bucket || item.Bucket || ""
+          };
+        });
+        legacyLogsRef.current = mapped;
+        const merged = getMergedAndFilteredLogs(firestoreLogsRef.current, mapped);
+        setAlertLogs(merged);
+      }
+    } catch (e) {
+      console.error("Failed to fetch legacy alert history", e);
+    }
+  }, [user, getMergedAndFilteredLogs]);
+
+  // Expose refresh to window for manual trigger
+  useEffect(() => {
+    (window as any).refreshAlertHistory = fetchAlertHistory;
+    return () => { delete (window as any).refreshAlertHistory; };
+  }, [fetchAlertHistory]);
+
+  useEffect(() => {
+    fetchAlertHistory();
+  }, [fetchAlertHistory]);
 
   // FCM Token Registration
   useEffect(() => {
@@ -62,9 +162,9 @@ export function useAlerts(
           
           console.log(`Broadcast received: ${change.doc.id}. Target: ${isTarget}. User Role: ${userRole}`);
           
-          // Check if it's a recent broadcast (within last 30 mins)
+          // Check if it's a recent broadcast (within last 2 hours to handle clock skew)
           const timestamp = data.timestamp?.toMillis() || Date.now();
-          const isRecent = (Date.now() - timestamp) < (30 * 60 * 1000); 
+          const isRecent = Math.abs(Date.now() - timestamp) < (120 * 60 * 1000); 
           
           // Use session storage to avoid showing the same broadcast multiple times in one session
           const sessionKey = `broadcast_seen_${change.doc.id}`;
@@ -204,15 +304,15 @@ export function useAlerts(
 
     const alertsRef = collection(db, 'alerts');
     const unsubscribe = onSnapshot(query(alertsRef), (snapshot) => {
-      const logs: AlertLog[] = [];
+      const firestoreLogs: AlertLog[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
-        logs.push({
+        firestoreLogs.push({
           id: doc.id,
           timestamp: data.timestamp || "",
           orderId: data.orderId || "",
           eventType: data.eventType || "",
-          storeId: data.storeId || "",
+          storeId: String(data.storeId || ""),
           userId: data.userId || "",
           notificationTime: data.notificationTime || "",
           storeStaffName: data.storeStaffName || "",
@@ -227,25 +327,12 @@ export function useAlerts(
         });
       });
 
-      const filteredLogs = logs.filter((log: AlertLog) => {
-        const role = user.role.toLowerCase();
-        
-        // Admin and Supervisor see everything
-        if (role === 'admin' || role === 'supervisor') return true;
-        
-        const userStoreId = String(user.storeId || "").trim().toLowerCase();
-        const logStoreId = String(log.storeId || "").trim().toLowerCase();
+      firestoreLogsRef.current = firestoreLogs;
+      const merged = getMergedAndFilteredLogs(firestoreLogs, legacyLogsRef.current);
+      setAlertLogs(merged);
 
-        // If user is assigned to "ALL" stores, they see everything
-        if (userStoreId === 'all') return true;
-        
-        // Managers, Pickers, and Store staff ONLY see their store
-        return logStoreId === userStoreId;
-      });
-
-      setAlertLogs(filteredLogs);
-
-      const active = filteredLogs.filter((l: AlertLog) => {
+      // Process active alerts for buzzer/notifications
+      const active = merged.filter((l: AlertLog) => {
         if (l.status === "Acknowledged" || l.managerStatus === "Accepted") return false;
         const triggeredTime = parseServerDate(l.timestamp).getTime();
         const now = new Date().getTime();

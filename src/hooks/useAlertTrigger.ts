@@ -13,6 +13,7 @@ export function useAlertTrigger(
   useEffect(() => {
     if (!user || !matrixData || escalationRules.length === 0) return;
 
+    const normalize = (s: string) => (s || "").toString().toUpperCase().replace(/\s+/g, '').trim();
     const activeRules = escalationRules.filter(r => r.isActive);
     if (activeRules.length === 0) return;
 
@@ -24,12 +25,12 @@ export function useAlertTrigger(
     });
 
     allItems.forEach(item => {
-      const status = (item.status || "").toUpperCase().trim();
-      const bucket = (item.bucket || "").toUpperCase().trim();
+      const status = normalize(item.status);
+      const bucket = normalize(item.bucket);
       
       const matchingRule = activeRules.find(rule => 
-        rule.status.toUpperCase().trim() === status && 
-        rule.bucket.toUpperCase().trim() === bucket
+        normalize(rule.status) === status && 
+        normalize(rule.bucket) === bucket
       );
 
       if (matchingRule) {

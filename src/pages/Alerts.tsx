@@ -24,9 +24,16 @@ export const Alerts: React.FC<AlertsProps> = ({
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    // Real-time sync handles this now
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setIsRefreshing(false);
+    try {
+      // If useAlerts provides a way to refetch history, call it
+      if ((window as any).refreshAlertHistory) {
+        await (window as any).refreshAlertHistory();
+      }
+      // Real-time sync handles Firestore, but we wait a bit for UI feedback
+      await new Promise(resolve => setTimeout(resolve, 800));
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const filteredLogs = alertLogs.filter(log => {
