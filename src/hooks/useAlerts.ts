@@ -19,7 +19,6 @@ export function useAlerts(
   const pendingActionsRef = useRef<Set<string>>(new Set());
   const notifiedEscalationsRef = useRef<Set<string>>(new Set());
   const notifiedSystemRef = useRef<Set<string>>(new Set());
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastAlertCountRef = useRef(0);
 
   const handleFirestoreError = useCallback((error: any, operationType: string, path: string) => {
@@ -35,15 +34,6 @@ export function useAlerts(
     console.error('Firestore Error Detail:', JSON.stringify(errInfo));
     if (showToast) showToast(`Firestore Error (${operationType}): ${error.message}`, "error");
   }, [showToast]);
-
-  useEffect(() => {
-    // Preload notification sound
-    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3');
-    audio.loop = false;
-    audio.crossOrigin = "anonymous";
-    audio.preload = "auto";
-    audioRef.current = audio;
-  }, []);
 
   const requestNotificationPermission = useCallback(async () => {
     if (!("Notification" in window)) return false;
@@ -61,11 +51,9 @@ export function useAlerts(
   const showSystemNotification = useCallback((title: string, body: string, id: string) => {
     if (!notifiedSystemRef.current.has(id)) {
       notifiedSystemRef.current.add(id);
-      if (audioRef.current && !isBuzzerMuted) {
-        audioRef.current.play().catch(e => console.warn("Audio play blocked:", e));
-      }
+      // Sound is handled by AlertOverlay's mathematical buzzer
     }
-  }, [isBuzzerMuted]);
+  }, []);
 
   const logAlertAction = useCallback(async (alert: Partial<AlertLog>, action: 'trigger' | 'acknowledge' | 'escalate') => {
     const actionKey = `${alert.orderId}|${alert.statusTrigger}|${action}`.toLowerCase().trim();

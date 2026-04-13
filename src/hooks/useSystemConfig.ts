@@ -3,7 +3,12 @@ import { EscalationRule } from '../types';
 import { db, auth } from '../firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 
-export function useSystemConfig(showToast?: (msg: string, type?: 'success' | 'error') => void) {
+import { User } from '../types';
+
+export function useSystemConfig(
+  user: User | null,
+  showToast?: (msg: string, type?: 'success' | 'error') => void
+) {
   const [escalationRules, setEscalationRules] = useState<EscalationRule[]>([]);
   const [maxImages, setMaxImages] = useState(1);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
@@ -40,6 +45,11 @@ export function useSystemConfig(showToast?: (msg: string, type?: 'success' | 'er
   }, [showToast]);
 
   const saveSystemConfig = useCallback(async () => {
+    if (!user || user.role !== 'admin') {
+      if (showToast) showToast("Unauthorized: Only admins can modify system config", "error");
+      return { success: false, message: "Unauthorized" };
+    }
+
     setIsSavingConfig(true);
     try {
       const configDoc = doc(db, 'system', 'config');
@@ -71,7 +81,7 @@ export function useSystemConfig(showToast?: (msg: string, type?: 'success' | 'er
     } finally {
       setIsSavingConfig(false);
     }
-  }, [escalationRules, maxImages, showToast]);
+  }, [escalationRules, maxImages, showToast, user]);
 
   return { 
     escalationRules, 

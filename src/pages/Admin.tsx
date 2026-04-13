@@ -205,10 +205,10 @@ export const Admin: React.FC<AdminProps> = ({
                 </button>
                 <button 
                   onClick={onSaveConfig}
-                  disabled={isSavingConfig}
+                  disabled={isSavingConfig || !isFirebaseAuthenticated}
                   className={cn(
                     "px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 sm:gap-2",
-                    isSavingConfig ? "bg-slate-100 text-slate-400" : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-200"
+                    (isSavingConfig || !isFirebaseAuthenticated) ? "bg-slate-100 text-slate-400" : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-200"
                   )}
                 >
                   <Save size={12} sm:size={14} /> {isSavingConfig ? "Syncing..." : "Save"}

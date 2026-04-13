@@ -24,12 +24,14 @@ export function useAuth() {
       if (userSnap.exists()) {
         userData = userSnap.data() as User;
       } else {
-        // Default role for new Google users
+        // Inherit role from legacy session if available, otherwise check default admin email
+        const legacyRole = user?.role;
         const isDefaultAdmin = fbUser.email === "luluecom6@gmail.com";
+        
         userData = {
           empId: fbUser.uid,
           name: fbUser.displayName || "Google User",
-          role: isDefaultAdmin ? "admin" : "user",
+          role: (legacyRole === 'admin' || isDefaultAdmin) ? "admin" : "user",
           storeId: "ALL",
           email: fbUser.email || "",
           status: "Active"

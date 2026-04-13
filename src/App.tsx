@@ -87,7 +87,7 @@ export default function App() {
   const { 
     escalationRules, setEscalationRules, maxImages, setMaxImages, 
     saveSystemConfig, isSavingConfig 
-  } = useSystemConfig(showToast);
+  } = useSystemConfig(user, showToast);
 
   const isFirebaseAuthenticated = !!auth.currentUser;
 
@@ -144,9 +144,13 @@ export default function App() {
 
   // Navigation Helper
   const navigateTo = useCallback((target: typeof page) => {
+    if (target === "admin" && user?.role !== "admin") {
+      showToast("Access Denied: Admin Only", "error");
+      return;
+    }
     setPage(target);
     window.scrollTo(0, 0);
-  }, []);
+  }, [user, showToast]);
 
   // Sync user state from useAuth to other hooks if needed
   // (Most hooks take user as a parameter and handle internal effects)
