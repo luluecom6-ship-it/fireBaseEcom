@@ -30,12 +30,13 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
   setLastBroadcast
 }) => {
   const audioContextRef = useRef<AudioContext | null>(null);
-  const oscillatorRef = useRef<OscillatorNode | null>(null);
-  const gainRef = useRef<GainNode | null>(null);
+  const beepTimeoutRef = useRef<any>(null);
   const [hasInteracted, setHasInteracted] = React.useState(false);
 
   const startBuzzer = () => {
     if (!hasInteracted) return;
+    if (beepTimeoutRef.current) return;
+
     try {
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -46,41 +47,37 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
         ctx.resume();
       }
 
-      if (oscillatorRef.current) return;
+      const playBeep = () => {
+        if (!shouldBuzz) return;
 
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
+        const oscillator = ctx.createOscillator();
+        const gainNode = ctx.createGain();
 
-      // "Car Door Chime" Style: Triangle wave for a warmer "ding"
-      osc.type = 'triangle'; 
-      osc.frequency.setValueAtTime(987.77, ctx.currentTime); // B5 note
-      
-      const now = ctx.currentTime;
-      gain.gain.setValueAtTime(0, now);
-      
-      // Pattern: Rhythmic "Ding... Ding..." every 0.8 seconds
-      const cycleTotal = 0.8; 
-      const chimeDuration = 0.4; // Decay time
-      
-      // Schedule 100 cycles (80 seconds of alerting)
-      for (let i = 0; i < 100; i++) {
-        const startTime = now + (i * cycleTotal);
-        // Attack
-        gain.gain.linearRampToValueAtTime(0.2, startTime + 0.02); 
-        // Decay
-        gain.gain.exponentialRampToValueAtTime(0.001, startTime + chimeDuration);
-        // Silence until next cycle
-        gain.gain.setValueAtTime(0, startTime + chimeDuration + 0.01);
-      }
+        // Use 'square' for a harsher, more noticeable sound as suggested
+        oscillator.type = "square"; 
+        oscillator.frequency.setValueAtTime(1000, ctx.currentTime); 
 
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      
-      oscillatorRef.current = osc;
-      gainRef.current = gain;
+        gainNode.gain.setValueAtTime(0.2, ctx.currentTime); 
+
+        oscillator.connect(gainNode);
+        gainNode.connect(ctx.destination);
+
+        oscillator.start();
+
+        setTimeout(() => {
+          try {
+            oscillator.stop();
+            oscillator.disconnect();
+            gainNode.disconnect();
+          } catch (e) {}
+        }, 300);
+
+        beepTimeoutRef.current = setTimeout(playBeep, 800);
+      };
+
+      playBeep();
     } catch (e) {
-      console.error("Failed to start car door chime buzzer:", e);
+      console.error("Failed to start beep alert:", e);
     }
   };
 
@@ -114,18 +111,9 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
   };
 
   const stopBuzzer = () => {
-    if (oscillatorRef.current) {
-      try {
-        oscillatorRef.current.stop();
-        oscillatorRef.current.disconnect();
-      } catch (e) {}
-      oscillatorRef.current = null;
-    }
-    if (gainRef.current) {
-      try {
-        gainRef.current.disconnect();
-      } catch (e) {}
-      gainRef.current = null;
+    if (beepTimeoutRef.current) {
+      clearTimeout(beepTimeoutRef.current);
+      beepTimeoutRef.current = null;
     }
   };
 

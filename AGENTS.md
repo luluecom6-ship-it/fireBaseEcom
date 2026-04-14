@@ -15,10 +15,11 @@ Whenever the user refers to **Version 4.0**, it refers to the application state 
    - **Visual Distinction**: Indigo theme for Scheduled alerts, Amber for Quick alerts, and Red for Escalated alerts.
    - **Configurable Thresholds**: Admin-controlled alert timing (15m, 30m, 45m, 60m) for scheduled deliveries.
 
-3. **Firebase & Cloud Messaging (FCM)**:
-   - **Real-time Configuration**: Escalation Matrix rules and system thresholds migrated to Firebase Firestore.
-   - **FCM Notifications**: Integrated Firebase Cloud Messaging for robust background and foreground alerts.
-   - **Service Worker**: `firebase-messaging-sw.js` handles background notification delivery.
+3. **Backend Monitor & FCM**:
+   - **System Supervisor**: A 24/7 background worker running in the cloud (Express server) that polls the Google Sheet every 60 seconds.
+   - **Independent Alerting**: Detects alerts using the same logic as the frontend, ensuring notifications are triggered even if no user has the app open.
+   - **Real Push Notifications**: Uses Firebase Admin SDK to send FCM push notifications to all registered devices.
+   - **FCM Tokens**: Automatically registers and updates device tokens in the `fcm_tokens` Firestore collection.
 
 4. **Programmatic Buzzer System**:
    - **Mathematical Sound**: Web Audio API generated sounds for 100% reliability.
