@@ -159,6 +159,24 @@ export default function App() {
     }
   }, [user, fetchStatus]);
 
+  // Background Refresh Handler: Trigger refresh when app returns to foreground
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && user) {
+        console.log("[App] App returned to foreground, triggering refresh...");
+        fetchMatrixData();
+        fetchAdminData();
+        fetchStatus(user.empId);
+        if ((window as any).refreshAlertHistory) {
+          (window as any).refreshAlertHistory();
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [user, fetchMatrixData, fetchAdminData, fetchStatus]);
+
   // Navigation Helper
   const navigateTo = useCallback((target: typeof page) => {
     if (target === "admin" && user?.role !== "admin") {
@@ -204,6 +222,7 @@ export default function App() {
             fetchAdminData={fetchAdminData}
             fetchMatrixData={fetchMatrixData}
             isMatrixLoading={isMatrixLoading}
+            matrixData={matrixData}
             setShowEarlyPunchOutConfirm={setShowEarlyPunchOutConfirm}
             requestNotificationPermission={requestNotificationPermission}
             testAlert={testAlert}

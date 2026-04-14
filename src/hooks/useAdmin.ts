@@ -11,7 +11,8 @@ export function useAdmin(
   const [adminData, setAdminData] = useState<AdminData>({ users: [], attendance: [], orders: [] });
 
   const fetchAdminData = useCallback(async (isManual = false) => {
-    if (!user || (user.role !== 'admin' && user.role !== 'supervisor' && user.role !== 'manager' && user.role !== 'store')) return;
+    const role = String(user?.role || "").toLowerCase().trim();
+    if (!user || (role !== 'admin' && role !== 'supervisor' && role !== 'manager' && role !== 'store')) return;
     if (isManual) setLoading(true);
     
     try {

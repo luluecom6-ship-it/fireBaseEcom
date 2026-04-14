@@ -379,7 +379,7 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
                         alert.escalation === "TRUE" ? "bg-white text-red-600" : "bg-emerald-500 text-white"
                       )}
                     >
-                      <CheckCircle2 size={20} /> {user.role === 'manager' ? 'Accept' : 'Acknowledge'}
+                      <CheckCircle2 size={20} /> {String(user.role || "").toLowerCase().trim() === 'manager' ? 'Accept' : 'Acknowledge'}
                     </motion.button>
                     
                     {alert.escalation !== "TRUE" && (
@@ -392,7 +392,7 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
                       </motion.button>
                     )}
                     
-                    {alert.escalation === "TRUE" && user.role === 'manager' && (
+                    {alert.escalation === "TRUE" && String(user.role || "").toLowerCase().trim() === 'manager' && (
                       <motion.button 
                         whileTap={{ scale: 0.95 }}
                         onClick={() => handleAlertAction(alert, 'hide')}

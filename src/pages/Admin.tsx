@@ -171,7 +171,7 @@ export const Admin: React.FC<AdminProps> = ({
         </div>
 
         {/* Firebase Auth Warning */}
-        {user.role === 'admin' && !isFirebaseAuthenticated && (
+        {String(user.role || "").toLowerCase().trim() === 'admin' && !isFirebaseAuthenticated && (
           <motion.div 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -249,7 +249,7 @@ export const Admin: React.FC<AdminProps> = ({
         )}
 
         {/* System Settings */}
-        {user.role === "admin" && (
+        {String(user.role || "").toLowerCase().trim() === "admin" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden p-5 sm:p-6">
               <div className="flex items-center justify-between mb-4 sm:mb-6">
@@ -343,7 +343,7 @@ export const Admin: React.FC<AdminProps> = ({
         )}
 
         {/* Escalation Matrix Configuration */}
-        {user.role === 'admin' && (
+        {String(user.role || "").toLowerCase().trim() === 'admin' && (
           <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
             <div className="p-4 sm:p-6 bg-slate-50/50 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">

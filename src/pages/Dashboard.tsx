@@ -3,9 +3,9 @@ import { motion } from 'motion/react';
 import { 
   LogOut, Clock, Package, Search, ShieldCheck, 
   History, LayoutDashboard, BarChart3, ArrowRight,
-  AlertCircle, Zap, X, Download
+  AlertCircle, Zap, X, Download, RefreshCw
 } from 'lucide-react';
-import { User, AttendanceStatus } from '../types';
+import { User, AttendanceStatus, MatrixData } from '../types';
 import { RealTimeClock } from '../components/common/RealTimeClock';
 import { usePWA } from '../hooks/usePWA';
 import { parseServerDate } from '../utils/api';
@@ -19,8 +19,9 @@ interface DashboardProps {
   isShiftComplete: boolean;
   navigateTo: (page: any) => void;
   fetchAdminData: (isManual?: boolean) => Promise<void>;
-  fetchMatrixData: () => Promise<void>;
+  fetchMatrixData: (isManual?: boolean) => Promise<void>;
   isMatrixLoading: boolean;
+  matrixData: MatrixData | null;
   setShowEarlyPunchOutConfirm: (show: boolean) => void;
   requestNotificationPermission: () => Promise<boolean>;
   testAlert: () => void;
@@ -37,6 +38,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   fetchAdminData,
   fetchMatrixData,
   isMatrixLoading,
+  matrixData,
   setShowEarlyPunchOutConfirm,
   requestNotificationPermission,
   testAlert,
@@ -110,6 +112,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </button>
             </div>
             
+            <div className="mt-2 flex items-center gap-2 text-[10px] font-black text-blue-200/60 uppercase tracking-widest">
+              <RefreshCw size={10} className={cn(isMatrixLoading && "animate-spin")} />
+              Last Sync: {matrixData?.timestamp ? new Date(matrixData.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '---'}
+            </div>
+
             {notifPermission === "default" && (
               <motion.button
                 initial={{ opacity: 0, y: 10 }}
@@ -323,7 +330,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </motion.div>
 
-        {user.role !== "admin" && user.role !== "supervisor" && (
+        {String(user.role || "").toLowerCase().trim() !== "admin" && String(user.role || "").toLowerCase().trim() !== "supervisor" && (
           <motion.div 
             whileHover={{ y: -5 }}
             whileTap={{ scale: 0.98 }}
@@ -344,7 +351,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </motion.div>
         )}
 
-        {(user.role === "admin" || user.role === "supervisor") && (
+        {(String(user.role || "").toLowerCase().trim() === "admin" || String(user.role || "").toLowerCase().trim() === "supervisor") && (
           <motion.div 
             whileHover={{ y: -5 }}
             whileTap={{ scale: 0.98 }}
@@ -365,7 +372,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </motion.div>
         )}
 
-        {user.role !== "driver" && (
+        {String(user.role || "").toLowerCase().trim() !== "driver" && (
           <>
             <motion.div 
               whileHover={{ y: -5 }}

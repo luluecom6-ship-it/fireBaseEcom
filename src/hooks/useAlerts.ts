@@ -141,7 +141,7 @@ export function useAlerts(
           await setDoc(tokenRef, {
             token,
             userId: user.empId,
-            role: user.role.toLowerCase(),
+            role: String(user.role || "").toLowerCase().trim(),
             storeId: user.storeId,
             updatedAt: serverTimestamp()
           }, { merge: true });
