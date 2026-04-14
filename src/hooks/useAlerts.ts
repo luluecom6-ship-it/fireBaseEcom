@@ -16,6 +16,10 @@ export function useAlerts(
   const [adminHiddenAlerts, setAdminHiddenAlerts] = useState<string[]>([]);
   const [lastBroadcast, setLastBroadcast] = useState<{ id: string, title: string, body: string } | null>(null);
   
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>(
+    "Notification" in window ? Notification.permission : "default"
+  );
+  
   const pendingActionsRef = useRef<Set<string>>(new Set());
   const notifiedEscalationsRef = useRef<Set<string>>(new Set());
   const notifiedSystemRef = useRef<Set<string>>(new Set());
@@ -129,23 +133,37 @@ export function useAlerts(
     fetchAlertHistory();
   }, [fetchAlertHistory]);
 
+  // Periodically check permission status (in case user changes it in browser settings)
+  useEffect(() => {
+    if (!("Notification" in window)) return;
+    const interval = setInterval(() => {
+      if (Notification.permission !== notifPermission) {
+        setNotifPermission(Notification.permission);
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [notifPermission]);
+
   // FCM Token Registration
   useEffect(() => {
-    if (!user) return;
+    if (!user || notifPermission !== "granted") return;
 
     const registerToken = async () => {
       try {
+        console.log("[useAlerts] Requesting FCM token...");
         const token = await requestForToken();
-        if (token) {
-          const tokenRef = doc(db, 'fcm_tokens', user.empId);
+        const fbUser = auth.currentUser;
+        if (token && fbUser) {
+          const tokenRef = doc(db, 'fcm_tokens', fbUser.uid);
           await setDoc(tokenRef, {
             token,
-            userId: user.empId,
+            userId: user.empId, // Keep the readable empId in the data
+            fbUid: fbUser.uid,
             role: String(user.role || "").toLowerCase().trim(),
             storeId: user.storeId,
             updatedAt: serverTimestamp()
           }, { merge: true });
-          console.log("FCM Token registered for user:", user.empId);
+          console.log("FCM Token registered for Firebase UID:", fbUser.uid);
         }
       } catch (error) {
         console.error("Error registering FCM token:", error);
@@ -153,7 +171,7 @@ export function useAlerts(
     };
 
     registerToken();
-  }, [user]);
+  }, [user, notifPermission]);
 
   // Push Notification Listener (for online users)
   useEffect(() => {
@@ -360,11 +378,6 @@ export function useAlerts(
         const diffMins = isNaN(triggeredTime) ? 0 : (now - triggeredTime) / (1000 * 60);
         const buzzerStarted = l.status !== "Acknowledged";
         
-        if (diffMins >= 1 && l.escalation !== "TRUE" && !notifiedEscalationsRef.current.has(l.id)) {
-          notifiedEscalationsRef.current.add(l.id);
-          setTimeout(() => logAlertAction(l, 'escalate'), 0);
-        }
-
         return {
           ...l,
           buzzerStarted,

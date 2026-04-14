@@ -1,10 +1,11 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const { getFirestore } = require('firebase-admin/firestore');
 const axios = require('axios');
 
 admin.initializeApp();
 
-const db = admin.firestore();
+const db = getFirestore(admin.app(), "ai-studio-589cf723-ab60-4b6f-a2cd-f84f8c8c1b48");
 const messaging = admin.messaging();
 
 // --- Shared Logic (Self-contained for deployment) ---
@@ -31,7 +32,8 @@ const getBucketIndex = (bucket) => {
 const parseTime = (t) => {
   if (!t) return 0;
   const cleaned = t.trim().toUpperCase();
-  const match = cleaned.match(/^(\d+)(?::(\d+))?\s*(AM|PM)$/);
+  // Match HH:MM AM/PM or HH AM/PM, potentially preceded by a date
+  const match = cleaned.match(/(\d+)(?::(\d+))?\s*(AM|PM)/);
   if (!match) return 0;
   let hrs = parseInt(match[1], 10);
   let mins = match[2] ? parseInt(match[2], 10) : 0;
@@ -74,6 +76,21 @@ function detectAlerts(matrixData, escalationRules, existingAlertIds, scheduledTh
   }
 
   (matrixData.schedule || []).forEach(item => {
+    // Check if slot contains a date and if it's today
+    if (item.slot) {
+      const dateMatch = item.slot.match(/([A-Za-z]{3}\s\d{1,2},\s\d{4})/);
+      if (dateMatch) {
+        const d = new Date(dateMatch[1]);
+        if (!isNaN(d.getTime())) {
+          const today = new Date();
+          const isToday = d.getDate() === today.getDate() && 
+                          d.getMonth() === today.getMonth() && 
+                          d.getFullYear() === today.getFullYear();
+          if (!isToday) return; // Skip if not today
+        }
+      }
+    }
+
     const slotInfo = parseSlot(item.slot);
     if (!slotInfo) return;
     const status = (item.status || "").toUpperCase().trim();
@@ -120,6 +137,24 @@ exports.systemSupervisor = functions.pubsub.schedule('every 1 minutes').onRun(as
     const existingAlertIds = new Set(existingAlertsSnap.docs.map(doc => doc.id.toLowerCase().trim()));
 
     const newAlerts = detectAlerts(matrixData, escalationRules, existingAlertIds, scheduledThreshold);
+
+    // 5. Auto-Escalation Logic (3-minute cooldown)
+    const nowTime = Date.now();
+    for (const doc of existingAlertsSnap.docs) {
+      const data = doc.data();
+      if (data.status === "Pending" && data.escalation !== "TRUE") {
+        const triggeredAt = data.triggeredAt ? new Date(data.triggeredAt).getTime() : 0;
+        const ageMins = (nowTime - triggeredAt) / (1000 * 60);
+        
+        if (ageMins >= 3) {
+          console.log(`[Monitor] Auto-escalating alert: ${doc.id}`);
+          await doc.ref.update({
+            escalation: "TRUE",
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+        }
+      }
+    }
 
     for (const alert of newAlerts) {
       const now = new Date().toISOString();

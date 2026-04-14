@@ -1,6 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import admin from 'firebase-admin';
+import { getFirestore } from 'firebase-admin/firestore';
 import { runMonitorTick } from '../src/services/monitorService.js';
+import firebaseConfig from '../firebase-applet-config.json' with { type: 'json' };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 1. Security Check (Optional but recommended)
@@ -19,7 +21,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const db = admin.firestore();
+    const db = getFirestore(admin.app(), firebaseConfig.firestoreDatabaseId);
     const messaging = admin.messaging();
 
     // 3. Run the Monitor Logic

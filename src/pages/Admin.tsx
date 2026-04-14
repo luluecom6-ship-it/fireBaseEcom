@@ -103,8 +103,6 @@ export const Admin: React.FC<AdminProps> = ({
       exit={{ opacity: 0, scale: 0.95 }}
       className="min-h-screen bg-slate-50 pb-20"
     >
-      <Header title="Admin Intelligence" showBack onBack={() => navigateTo("dashboard")} user={user} />
-      
       {/* Top Loading Bar */}
       <AnimatePresence>
         {isAdminLoading && (

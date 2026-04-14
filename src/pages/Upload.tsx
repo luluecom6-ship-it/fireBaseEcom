@@ -57,8 +57,6 @@ export const Upload: React.FC<UploadProps> = ({
       exit={{ opacity: 0, y: -20 }}
       className="min-h-screen bg-slate-50 pb-20"
     >
-      <Header title="Order Evidence" showBack onBack={() => navigateTo("dashboard")} user={user} />
-      
       <div className="p-4 max-w-2xl mx-auto space-y-4">
         <div className="bg-white p-5 rounded-[1.5rem] shadow-xl border border-slate-100 space-y-5">
           <div className="space-y-3">

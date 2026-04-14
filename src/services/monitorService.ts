@@ -32,6 +32,24 @@ export async function runMonitorTick(db: any, messaging: any) {
 
     // 5. Detect New Alerts
     const newAlerts = detectAlerts(matrixData, escalationRules as any, existingAlertIds, scheduledThreshold);
+    
+    // 6. Auto-Escalation Logic (3-minute cooldown)
+    const nowTime = Date.now();
+    for (const doc of existingAlertsSnap.docs) {
+      const data = doc.data();
+      if (data.status === "Pending" && data.escalation !== "TRUE") {
+        const triggeredAt = data.triggeredAt ? new Date(data.triggeredAt).getTime() : 0;
+        const ageMins = (nowTime - triggeredAt) / (1000 * 60);
+        
+        if (ageMins >= 3) {
+          console.log(`[Monitor] Auto-escalating alert: ${doc.id}`);
+          await doc.ref.update({
+            escalation: "TRUE",
+            updatedAt: new Date()
+          });
+        }
+      }
+    }
 
     for (const alert of newAlerts) {
       console.log(`[Monitor] New Alert Detected: ${alert.alertKey}`);

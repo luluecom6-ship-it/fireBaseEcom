@@ -33,8 +33,6 @@ export const Search: React.FC<SearchProps> = ({
       exit={{ opacity: 0, scale: 0.95 }}
       className="min-h-screen bg-slate-50 pb-20"
     >
-      <Header title="Order Search" showBack onBack={() => navigateTo("dashboard")} user={user} />
-      
       <div className="p-4 sm:p-6 max-w-2xl mx-auto space-y-6 sm:space-y-8">
         <div className="text-center space-y-1 sm:space-y-2">
           <h2 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">Deep Dive Search</h2>

@@ -54,8 +54,6 @@ export const Analytics: React.FC<AnalyticsProps> = ({
       exit={{ opacity: 0, x: -50 }}
       className="min-h-screen bg-slate-50 pb-20"
     >
-      <Header title="Operational Analytics" showBack onBack={() => navigateTo("dashboard")} user={user} />
-      
       {/* Top Loading Bar */}
       <AnimatePresence>
         {isMatrixLoading && (

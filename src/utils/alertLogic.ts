@@ -27,7 +27,8 @@ export const getBucketIndex = (bucket: string) => {
 export const parseTime = (t: string) => {
   if (!t) return 0;
   const cleaned = t.trim().toUpperCase();
-  const match = cleaned.match(/^(\d+)(?::(\d+))?\s*(AM|PM)$/);
+  // Match HH:MM AM/PM or HH AM/PM, potentially preceded by a date
+  const match = cleaned.match(/(\d+)(?::(\d+))?\s*(AM|PM)/);
   if (!match) return 0;
   
   let hrs = parseInt(match[1], 10);
@@ -99,6 +100,21 @@ export function detectAlerts(
 
   // 2. Scheduled Commerce Alerts
   (matrixData.schedule || []).forEach(item => {
+    // Check if slot contains a date and if it's today
+    if (item.slot) {
+      const dateMatch = item.slot.match(/([A-Za-z]{3}\s\d{1,2},\s\d{4})/);
+      if (dateMatch) {
+        const d = new Date(dateMatch[1]);
+        if (!isNaN(d.getTime())) {
+          const today = new Date();
+          const isToday = d.getDate() === today.getDate() && 
+                          d.getMonth() === today.getMonth() && 
+                          d.getFullYear() === today.getFullYear();
+          if (!isToday) return; // Skip if not today
+        }
+      }
+    }
+
     const slotInfo = parseSlot(item.slot);
     if (!slotInfo) return;
 

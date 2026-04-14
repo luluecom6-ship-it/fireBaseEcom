@@ -22,9 +22,10 @@ import { useAlertTrigger } from "./hooks/useAlertTrigger";
 import { useSystemConfig } from "./hooks/useSystemConfig";
 import { useAttendance } from "./hooks/useAttendance";
 import { useToast } from "./hooks/useToast";
+import { usePWA } from "./hooks/usePWA";
 
 // --- FIREBASE / FCM ---
-import { auth, requestForToken, onMessageListener } from "./firebase";
+import { auth, requestForToken, onForegroundMessage } from "./firebase";
 
 // --- COMPONENTS ---
 import { Loader } from "./components/common/Loader";
@@ -115,25 +116,24 @@ export default function App() {
     attendanceStatus, hoursWorked, isShiftComplete, 
     handleAttendanceSubmit, fetchStatus 
   } = useAttendance(user, showToast, setLoading);
+  
+  // PWA Hook
+  const { isInstallable, showInstallPrompt } = usePWA();
 
   // Auto-request notification permission on first interaction
   useEffect(() => {
-    // Request FCM token on launch
-    requestForToken().then(token => {
-      if (token) {
-        console.log("FCM Token acquired on launch:", token);
+    // Listen for foreground messages
+    const unsubscribe = onForegroundMessage((payload: any) => {
+      if (payload.notification) {
+        showToast(`${payload.notification.title}: ${payload.notification.body}`, "info");
       }
     });
 
-    // Listen for foreground messages
-    onMessageListener().then((payload: any) => {
-      showToast(`${payload.notification.title}: ${payload.notification.body}`, "info");
-    });
-
-    if (!user) return;
+    if (!user) return unsubscribe;
     
     const handleFirstInteraction = async () => {
       if ("Notification" in window && Notification.permission === "default") {
+        console.log("[App] First interaction detected, requesting notification permission...");
         await requestNotificationPermission();
       }
       // Remove listener after first attempt
@@ -229,6 +229,8 @@ export default function App() {
             requestNotificationPermission={requestNotificationPermission}
             testAlert={testAlert}
             testBuzzer={testBuzzer}
+            isInstallable={isInstallable}
+            showInstallPrompt={showInstallPrompt}
           />
         );
       case "upload":
@@ -336,6 +338,28 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-blue-100">
       <Loader loading={loading || authLoading} />
+      
+      <Header 
+        title={(() => {
+          switch(page) {
+            case 'dashboard': return 'Matrix Intelligence';
+            case 'upload': return 'Order Evidence';
+            case 'search': return 'Search Orders';
+            case 'matrix': return 'Live Matrix';
+            case 'analytics': return 'System Analytics';
+            case 'alerts': return 'Alert History';
+            case 'admin': return 'Admin Control';
+            case 'attendance': return 'Shift Attendance';
+            case 'attendance-history': return 'Attendance History';
+            default: return page.charAt(0).toUpperCase() + page.slice(1).replace("-", " ");
+          }
+        })()} 
+        showBack={page !== "dashboard" && page !== "login"} 
+        onBack={() => navigateTo("dashboard")} 
+        user={user}
+        isInstallable={isInstallable}
+        onInstall={showInstallPrompt}
+      />
       
       <AlertOverlay 
         user={user}

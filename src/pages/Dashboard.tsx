@@ -7,7 +7,6 @@ import {
 } from 'lucide-react';
 import { User, AttendanceStatus, MatrixData } from '../types';
 import { RealTimeClock } from '../components/common/RealTimeClock';
-import { usePWA } from '../hooks/usePWA';
 import { parseServerDate } from '../utils/api';
 import { cn } from '../lib/utils';
 
@@ -26,6 +25,8 @@ interface DashboardProps {
   requestNotificationPermission: () => Promise<boolean>;
   testAlert: () => void;
   testBuzzer: () => void;
+  isInstallable: boolean;
+  showInstallPrompt: () => Promise<void>;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -42,9 +43,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
   setShowEarlyPunchOutConfirm,
   requestNotificationPermission,
   testAlert,
-  testBuzzer
+  testBuzzer,
+  isInstallable,
+  showInstallPrompt
 }) => {
-  const { isInstallable, showInstallPrompt } = usePWA();
   const [isIOS, setIsIOS] = useState(false);
 
   useEffect(() => {
@@ -58,8 +60,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>(
     "Notification" in window ? Notification.permission : "default"
   );
+  const [isInIframe, setIsInIframe] = useState(false);
 
   useEffect(() => {
+    setIsInIframe(window.self !== window.top);
     // Check permission status periodically or on focus
     const checkPermission = () => {
       if ("Notification" in window) {
@@ -150,8 +154,32 @@ export const Dashboard: React.FC<DashboardProps> = ({
             )}
 
             {notifPermission === "denied" && (
-              <div className="mt-3 px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-red-400">
-                <X size={12} /> Alerts Blocked (Check Browser Settings)
+              <div className="mt-3 space-y-2">
+                <div className="px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-red-400">
+                  <X size={12} /> Alerts Blocked
+                </div>
+                <p className="text-[9px] text-white/40 leading-tight">
+                  Browser blocked notifications. Please reset permissions in site settings.
+                </p>
+              </div>
+            )}
+
+            {isInIframe && notifPermission !== "granted" && (
+              <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                <p className="text-[10px] font-black uppercase tracking-widest text-amber-400 mb-2 flex items-center gap-2">
+                  <AlertCircle size={12} /> Iframe Detected
+                </p>
+                <p className="text-[9px] text-white/60 leading-tight mb-3">
+                  Notifications are often blocked inside the preview window. Open the app in a new tab to enable alerts.
+                </p>
+                <a 
+                  href={window.location.href} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-amber-500 text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-amber-600 transition-colors"
+                >
+                  Open in New Tab <ArrowRight size={10} />
+                </a>
               </div>
             )}
 

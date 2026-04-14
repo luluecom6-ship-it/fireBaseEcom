@@ -1,4 +1,4 @@
-export const API_URL = "https://script.google.com/macros/s/AKfycbxpbVk5iClMEXaTPB7lGNhPY4eXg_GHrKd-_mCSZgD5zNk1vz0gthVdIZxFwTz2kjQJ/exec";
+export const API_URL = "https://script.google.com/macros/s/AKfycbzgl5Bu2UWzgRu790imqg_5fOXFhjRdkIBqr-bKPaav0hcT00iCF0pvsM89G7ul4B6B/exec";
 
 export const STATUSES = [
   "CREATED",

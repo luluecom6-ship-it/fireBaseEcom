@@ -57,10 +57,34 @@ export const Matrix: React.FC<MatrixProps> = ({
   }, [allQuick, storeFilter]);
     
   const filteredSchedule = React.useMemo(() => {
-    if (!storeFilter) return allSchedule;
+    const now = new Date();
+    const todayStr = `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear()}`;
+    
+    // Filter by today's date
+    const todaySchedule = allSchedule.filter(item => {
+      // 1. Try to extract date from slot first (e.g., "Apr 15, 2026 8:00 AM - 9:59 AM")
+      if (item.slot) {
+        const dateMatch = item.slot.match(/([A-Za-z]{3}\s\d{1,2},\s\d{4})/);
+        if (dateMatch) {
+          const d = new Date(dateMatch[1]);
+          if (!isNaN(d.getTime())) {
+            const itemDateStr = `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+            return itemDateStr === todayStr;
+          }
+        }
+      }
+
+      // 2. Fallback to timestamp (Order Creation Date)
+      if (!item.timestamp) return true; // If no timestamp, assume today
+      const d = parseServerDate(item.timestamp);
+      const itemDateStr = `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+      return itemDateStr === todayStr;
+    });
+
+    if (!storeFilter) return todaySchedule;
     const filterStr = String(storeFilter).toLowerCase().trim();
-    if (filterStr === 'all') return allSchedule;
-    return allSchedule.filter(d => 
+    if (filterStr === 'all') return todaySchedule;
+    return todaySchedule.filter(d => 
       String(d.storeID || "").toLowerCase().includes(filterStr)
     );
   }, [allSchedule, storeFilter]);
@@ -81,8 +105,6 @@ export const Matrix: React.FC<MatrixProps> = ({
       exit={{ opacity: 0, x: -50 }}
       className="min-h-screen bg-[#f8fafc] pb-10"
     >
-      <Header title="Matrix Intelligence" showBack onBack={() => navigateTo("dashboard")} user={user} />
-      
       {/* Top Loading Bar */}
       <AnimatePresence>
         {isMatrixLoading && (
@@ -104,7 +126,7 @@ export const Matrix: React.FC<MatrixProps> = ({
             <p className="text-slate-500 font-bold text-xs mt-1 flex items-center gap-2">
               Real-time ageing & store-wise distribution 
               <span className="h-1 w-1 rounded-full bg-slate-300" />
-              <span className="text-blue-600">{(allQuick.length + allSchedule.length)} Total Orders</span>
+              <span className="text-blue-600">{totalOrders} Total Orders (Today)</span>
             </p>
           </div>
           

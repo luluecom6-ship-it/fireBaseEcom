@@ -17,6 +17,16 @@ export { signInWithPopup, signOut, onAuthStateChanged };
 export const VAPID_KEY = "BIfz7B7xUnczef2e5t97PyyLu9fTxFvRyFd0or6ofND7tsKoSwNMkAW6xY2izQexaZepObIjGU5v5u8yYagMyHs";
 
 export const requestForToken = async () => {
+  if (!("Notification" in window)) {
+    console.log("This browser does not support notifications.");
+    return null;
+  }
+
+  if (Notification.permission === "denied") {
+    console.log("Notification permission denied. Please enable it in browser settings.");
+    return null;
+  }
+
   try {
     const currentToken = await getToken(messaging, { vapidKey: VAPID_KEY });
     if (currentToken) {
@@ -34,10 +44,9 @@ export const requestForToken = async () => {
   }
 };
 
-export const onMessageListener = () =>
-  new Promise((resolve) => {
-    onMessage(messaging, (payload) => {
-      console.log("Payload received: ", payload);
-      resolve(payload);
-    });
+export const onForegroundMessage = (callback: any) => {
+  return onMessage(messaging, (payload) => {
+    console.log("Foreground message received: ", payload);
+    callback(payload);
   });
+};

@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
 import axios from "axios";
 import admin from "firebase-admin";
+import { getFirestore } from "firebase-admin/firestore";
 import { detectAlerts } from "./src/utils/alertLogic.js";
 import firebaseConfig from "./firebase-applet-config.json" with { type: "json" };
 
@@ -56,7 +57,7 @@ async function startServer() {
     console.warn("FIREBASE_SERVICE_ACCOUNT not found. Backend push notifications will be disabled.");
   }
 
-  const db = serviceAccount ? admin.firestore() : null;
+  const db = serviceAccount ? getFirestore(admin.app(), firebaseConfig.firestoreDatabaseId) : null;
   const messaging = serviceAccount ? admin.messaging() : null;
 
   // Background Monitor Logic

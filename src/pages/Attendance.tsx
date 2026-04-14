@@ -68,8 +68,6 @@ export const Attendance: React.FC<AttendanceProps> = ({
       exit={{ opacity: 0, y: -20 }}
       className="min-h-screen bg-slate-50 pb-20"
     >
-      <Header title="Biometric Attendance" showBack onBack={() => navigateTo("dashboard")} user={user} />
-      
       <div className="p-4 max-w-2xl mx-auto space-y-4">
         {attendanceStatus.missingPunchOut && (
           <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-center gap-4 text-amber-700">

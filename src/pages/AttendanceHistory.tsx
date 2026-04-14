@@ -86,8 +86,6 @@ export const AttendanceHistory: React.FC<AttendanceHistoryProps> = ({
       exit={{ opacity: 0 }}
       className="min-h-screen bg-slate-50 pb-20"
     >
-      <Header title="Attendance History" showBack onBack={() => navigateTo("dashboard")} user={user} />
-      
       <div className="p-4 max-w-2xl mx-auto space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div className="flex-1 bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">

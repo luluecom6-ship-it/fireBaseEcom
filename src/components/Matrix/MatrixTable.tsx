@@ -169,8 +169,11 @@ export const sortSlots = (slots: string[]) => {
     const timeB = b.split(' - ')[0];
     
     const parseTime = (t: string) => {
-      const [time, period] = t.split(' ');
-      let [hrs, mins] = time.split(':').map(Number);
+      const match = t.toUpperCase().match(/(\d+)(?::(\d+))?\s*(AM|PM)/);
+      if (!match) return 0;
+      let hrs = parseInt(match[1], 10);
+      let mins = match[2] ? parseInt(match[2], 10) : 0;
+      const period = match[3];
       if (period === 'PM' && hrs !== 12) hrs += 12;
       if (period === 'AM' && hrs === 12) hrs = 0;
       return hrs * 60 + mins;

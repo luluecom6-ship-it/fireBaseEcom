@@ -57,8 +57,6 @@ export const Alerts: React.FC<AlertsProps> = ({
       exit={{ opacity: 0, x: -20 }}
       className="min-h-screen bg-slate-50 pb-20"
     >
-      <Header title="Alert History" showBack onBack={() => navigateTo("dashboard")} user={user} />
-      
       <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-4 sm:space-y-6">
         <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
           <div className="text-center sm:text-left">
