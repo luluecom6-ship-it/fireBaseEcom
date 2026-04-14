@@ -293,6 +293,7 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
       <AnimatePresence>
         {filteredAlerts.map((alert) => {
           const isExpanded = alertToExpand?.id === alert.id;
+          const isScheduled = alert.id.startsWith('sched|');
           
           if (!isExpanded) {
             return (
@@ -304,7 +305,9 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
                 onClick={() => setExpandedAlertId(alert.id)}
                 className={cn(
                   "fixed bottom-24 right-8 h-14 w-14 rounded-full flex items-center justify-center cursor-pointer shadow-2xl border-4 z-[100] group",
-                  alert.escalation === "TRUE" ? "bg-red-600 border-red-400 text-white" : "bg-amber-500 border-amber-300 text-white"
+                  alert.escalation === "TRUE" ? "bg-red-600 border-red-400 text-white" : 
+                  isScheduled ? "bg-indigo-600 border-indigo-400 text-white" :
+                  "bg-amber-500 border-amber-300 text-white"
                 )}
               >
                 <div className="absolute -top-2 -right-2 bg-white text-slate-800 text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-md border border-slate-100">
@@ -324,7 +327,9 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
                 onClick={(e) => e.stopPropagation()}
                 className={cn(
                   "w-full max-w-lg p-6 sm:p-10 rounded-[3rem] shadow-[0_48px_96px_-24px_rgba(0,0,0,0.6)] border-8 flex flex-col gap-6 sm:gap-8 relative",
-                  alert.escalation === "TRUE" ? "bg-red-600 border-red-400 text-white" : (alert.buzzerStarted || alert.managerBuzzerStarted ? "bg-amber-500 border-amber-300 text-white" : "bg-white border-blue-200 text-slate-800")
+                  alert.escalation === "TRUE" ? "bg-red-600 border-red-400 text-white" : 
+                  isScheduled ? "bg-indigo-600 border-indigo-400 text-white" :
+                  (alert.buzzerStarted || alert.managerBuzzerStarted ? "bg-amber-500 border-amber-300 text-white" : "bg-white border-blue-200 text-slate-800")
                 )}
               >
                 <button 

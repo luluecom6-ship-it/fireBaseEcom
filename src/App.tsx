@@ -105,10 +105,11 @@ export default function App() {
 
   const { 
     escalationRules, setEscalationRules, maxImages, setMaxImages, 
+    scheduledThreshold, setScheduledThreshold,
     saveSystemConfig, isSavingConfig 
   } = useSystemConfig(user, showToast);
 
-  useAlertTrigger(user, matrixData, escalationRules, alertLogs, logAlertAction);
+  useAlertTrigger(user, matrixData, escalationRules, alertLogs, logAlertAction, scheduledThreshold);
 
   const { 
     attendanceStatus, hoursWorked, isShiftComplete, 
@@ -179,8 +180,9 @@ export default function App() {
 
   // Navigation Helper
   const navigateTo = useCallback((target: typeof page) => {
-    if (target === "admin" && user?.role !== "admin") {
-      showToast("Access Denied: Admin Only", "error");
+    const role = String(user?.role || "").toLowerCase().trim();
+    if (target === "admin" && role !== "admin" && role !== "supervisor") {
+      showToast("Access Denied: Admin or Supervisor Only", "error");
       return;
     }
     setPage(target);
@@ -307,6 +309,8 @@ export default function App() {
             setMaxImages={setMaxImages}
             onSaveConfig={saveSystemConfig}
             isSavingConfig={isSavingConfig}
+            scheduledThreshold={scheduledThreshold}
+            setScheduledThreshold={setScheduledThreshold}
             navigateTo={navigateTo}
             onViewImage={setFullImage}
             onGoogleLogin={loginWithGoogle}

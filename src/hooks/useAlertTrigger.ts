@@ -55,7 +55,8 @@ export function useAlertTrigger(
   matrixData: MatrixData | null,
   escalationRules: EscalationRule[],
   alertLogs: AlertLog[],
-  logAlertAction: (alert: Partial<MatrixItem> & { statusTrigger: string, triggeredAt: string, orderCreatedAt: string }, action: 'trigger') => Promise<void>
+  logAlertAction: (alert: Partial<MatrixItem> & { statusTrigger: string, triggeredAt: string, orderCreatedAt: string }, action: 'trigger') => Promise<void>,
+  scheduledThreshold: number = 30
 ) {
   const triggeredAlertsRef = useRef<Set<string>>(new Set());
 
@@ -143,8 +144,8 @@ export function useAlertTrigger(
           shouldTrigger = true;
           reason = `RUNNING SLOT (PREP): ${item.slot}`;
         } 
-        // Delivery statuses should be done 30 mins before end
-        else if (DELIVERY_STATUSES.includes(status) && nowMins >= slotInfo.end - 30) {
+        // Delivery statuses should be done X mins before end
+        else if (DELIVERY_STATUSES.includes(status) && nowMins >= slotInfo.end - scheduledThreshold) {
           shouldTrigger = true;
           reason = `RUNNING SLOT (DELIVERY): ${item.slot}`;
         }
@@ -160,7 +161,7 @@ export function useAlertTrigger(
           logAlertAction({
             orderId: item.orderID,
             storeId: item.storeID,
-            statusTrigger: `${status} (${reason})`,
+            statusTrigger: `Still in '${status}' Stage - ${item.slot}`,
             bucket: item.slot, // Repurpose bucket field for slot info
             triggeredAt: new Date().toISOString(),
             orderCreatedAt: item.timestamp || new Date().toISOString(),

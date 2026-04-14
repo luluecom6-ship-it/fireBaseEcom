@@ -28,6 +28,8 @@ interface AdminProps {
   setMaxImages: (num: number) => void;
   onSaveConfig: () => Promise<void>;
   isSavingConfig: boolean;
+  scheduledThreshold: number;
+  setScheduledThreshold: (num: number) => void;
   onGoogleLogin: () => void;
   onEmailLogin: (email: string, pass: string) => Promise<void>;
   isFirebaseAuthenticated: boolean;
@@ -48,6 +50,8 @@ export const Admin: React.FC<AdminProps> = ({
   setMaxImages,
   onSaveConfig,
   isSavingConfig,
+  scheduledThreshold,
+  setScheduledThreshold,
   onGoogleLogin,
   onEmailLogin,
   isFirebaseAuthenticated,
@@ -282,6 +286,34 @@ export const Admin: React.FC<AdminProps> = ({
                       )}
                     >
                       {num}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-4 sm:p-5 bg-slate-50 rounded-2xl sm:rounded-3xl border border-slate-100 mt-4">
+                <div className="flex items-center justify-between mb-3 sm:mb-4">
+                  <div>
+                    <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Scheduled Alert Threshold</p>
+                    <p className="text-[10px] sm:text-xs font-bold text-slate-600 mt-1">Alert {scheduledThreshold} mins prior to slot end</p>
+                  </div>
+                  <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl bg-emerald-600 flex items-center justify-center text-white font-black text-sm sm:text-base">
+                    {scheduledThreshold}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {[15, 30, 45, 60].map(num => (
+                    <button
+                      key={num}
+                      onClick={() => setScheduledThreshold(num)}
+                      className={cn(
+                        "flex-1 py-1.5 sm:py-2 rounded-lg sm:rounded-xl font-black text-[10px] sm:text-xs transition-all",
+                        scheduledThreshold === num 
+                          ? "bg-emerald-600 text-white shadow-lg shadow-emerald-200" 
+                          : "bg-white text-slate-400 border border-slate-200 hover:border-emerald-300"
+                      )}
+                    >
+                      {num}m
                     </button>
                   ))}
                 </div>

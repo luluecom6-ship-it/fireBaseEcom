@@ -11,6 +11,7 @@ export function useSystemConfig(
 ) {
   const [escalationRules, setEscalationRules] = useState<EscalationRule[]>([]);
   const [maxImages, setMaxImages] = useState(1);
+  const [scheduledThreshold, setScheduledThreshold] = useState(15);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   // Use Firestore for real-time config
@@ -27,6 +28,9 @@ export function useSystemConfig(
         if (typeof data.maxImages === 'number') {
           setMaxImages(data.maxImages);
         }
+        if (typeof data.scheduledThreshold === 'number') {
+          setScheduledThreshold(data.scheduledThreshold);
+        }
       } else {
         // Default rules if nothing in Firestore yet
         const defaultRules = [
@@ -35,6 +39,7 @@ export function useSystemConfig(
         ];
         setEscalationRules(defaultRules);
         setMaxImages(1);
+        setScheduledThreshold(15);
       }
     }, (error) => {
       console.error("Firestore config error:", error);
@@ -56,6 +61,7 @@ export function useSystemConfig(
       await setDoc(configDoc, {
         escalationRules,
         maxImages,
+        scheduledThreshold,
         updatedAt: new Date().toISOString()
       });
       
@@ -81,13 +87,15 @@ export function useSystemConfig(
     } finally {
       setIsSavingConfig(false);
     }
-  }, [escalationRules, maxImages, showToast, user]);
+  }, [escalationRules, maxImages, scheduledThreshold, showToast, user]);
 
   return { 
     escalationRules, 
     setEscalationRules, 
     maxImages, 
     setMaxImages, 
+    scheduledThreshold,
+    setScheduledThreshold,
     isSavingConfig, 
     saveSystemConfig 
   };

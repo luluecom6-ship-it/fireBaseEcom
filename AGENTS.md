@@ -1,6 +1,6 @@
-# Project Context: Version 3.3 (Firebase Enabled)
+# Project Context: Version 4.0 (Advanced Alerting & Supervisor Access)
 
-Whenever the user refers to **Version 3.3**, it refers to the application state as of April 12, 2026, with the following core features and structure:
+Whenever the user refers to **Version 4.0**, it refers to the application state as of April 14, 2026, with the following core features and structure:
 
 ## Core Features
 1. **Matrix Intelligence Dashboard**:
@@ -9,26 +9,25 @@ Whenever the user refers to **Version 3.3**, it refers to the application state 
    - Store-based filtering (defaults to user's store for non-admins).
    - Normalized key matching for robust data display.
 
-2. **Firebase & Cloud Messaging (FCM)**:
-   - **Real-time Configuration**: Escalation Matrix rules migrated to Firebase Firestore for instant, cross-device synchronization.
+2. **Advanced Alerting System**:
+   - **Quick Commerce**: Continuous alerting that re-triggers on ageing bucket transitions if status remains unchanged. Supports "at least" bucket matching thresholds.
+   - **Scheduled Delivery**: Complex logic for past slots (instant alert), running slots (prep phase alerts), and delivery phase alerts (configurable threshold).
+   - **Visual Distinction**: Indigo theme for Scheduled alerts, Amber for Quick alerts, and Red for Escalated alerts.
+   - **Configurable Thresholds**: Admin-controlled alert timing (15m, 30m, 45m, 60m) for scheduled deliveries.
+
+3. **Firebase & Cloud Messaging (FCM)**:
+   - **Real-time Configuration**: Escalation Matrix rules and system thresholds migrated to Firebase Firestore.
    - **FCM Notifications**: Integrated Firebase Cloud Messaging for robust background and foreground alerts.
-   - **Service Worker**: `firebase-messaging-sw.js` handles background notification delivery even when the app is closed.
-   - **Auto-Permission**: Notification permission requested immediately upon app launch.
+   - **Service Worker**: `firebase-messaging-sw.js` handles background notification delivery.
 
-3. **Programmatic Buzzer System**:
-   - **Mathematical Sound**: Replaced external MP3 files with Web Audio API generated sounds for 100% reliability and zero network dependency.
-   - **Smooth Pulse**: Sine-wave based alarm (C5 to E5) with a 2Hz pulse for a professional, non-aggressive alert.
-   - **Audio Unlock**: Seamless user interaction handling to comply with browser autoplay policies.
+4. **Programmatic Buzzer System**:
+   - **Mathematical Sound**: Web Audio API generated sounds for 100% reliability.
+   - **Audio Unlock**: Aggressive visual overlay to prompt user interaction for browser autoplay compliance.
 
-4. **Biometric Attendance System**:
-   - Facial verification via camera or manual upload.
-   - **24-Hour Reset Logic**: Automatically resets attendance status if a punch-out is missing after 24 hours.
-   - Real-time hours worked calculation and shift progress tracking.
-
-5. **Attendance History & Order Management**:
-   - Monthly filtering and grouping for attendance.
-   - Barcode scanning and duplicate detection for Order IDs.
-   - Role-based visibility for search results.
+5. **Biometric Attendance & Admin Control**:
+   - **Supervisor Access**: Supervisors can now access the Admin Control page to view daily orders, active staff, and reset attendance.
+   - **Facial Verification**: Facial verification via camera or manual upload.
+   - **24-Hour Reset**: Automatic reset of attendance status if punch-out is missing after 24 hours.
 
 ## Technical Architecture
 - **Frontend**: React 18+, Vite, Tailwind CSS, Framer Motion (motion/react).
@@ -37,4 +36,4 @@ Whenever the user refers to **Version 3.3**, it refers to the application state 
 - **PWA/Service Worker**: `manifest.json` for app identity, `sw.js` for caching, and `firebase-messaging-sw.js` for FCM.
 
 ## Persistence Instruction
-This file serves as the definitive reference for Version 3.3. All future modifications should build upon this baseline unless otherwise specified.
+This file serves as the definitive reference for Version 4.0. All future modifications should build upon this baseline unless otherwise specified.
