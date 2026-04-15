@@ -1,5 +1,5 @@
 import axios from "axios";
-import { detectAlerts } from "../utils/alertLogic";
+import { detectAlerts } from "../utils/alertLogic.js";
 
 export async function runMonitorTick(db: any, messaging: any) {
   try {
