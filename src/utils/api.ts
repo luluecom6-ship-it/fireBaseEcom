@@ -1,7 +1,12 @@
 /**
  * Robust fetch utility with retry logic and better error handling
  */
-export async function robustFetch(url: string, options: RequestInit = {}, retries = 3, backoff = 1000): Promise<Response> {
+export async function robustFetch(
+  url: string, 
+  options: RequestInit = {}, 
+  retries = options.method === 'POST' ? 0 : 3, 
+  backoff = 1000
+): Promise<Response> {
   const cleanUrl = url.trim();
   try {
     const response = await fetch(cleanUrl, {

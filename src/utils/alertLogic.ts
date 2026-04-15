@@ -1,5 +1,5 @@
-import { MatrixData, EscalationRule, MatrixItem, AlertLog } from '../types';
-import { AGE_BUCKETS } from '../constants';
+import { MatrixData, EscalationRule, MatrixItem, AlertLog } from '../types.js';
+import { AGE_BUCKETS } from '../constants.js';
 
 export const PREP_STATUSES = [
   "PICKING",

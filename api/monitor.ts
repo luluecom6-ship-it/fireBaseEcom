@@ -8,6 +8,15 @@ import path from 'path';
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log('[API Monitor] Request received');
 
+  // 0. Authentication Check
+  const monitorKey = req.headers['x-monitor-key'];
+  const secretKey = process.env.MONITOR_SECRET_KEY;
+
+  if (secretKey && (!monitorKey || monitorKey !== secretKey)) {
+    console.warn('[API Monitor] Unauthorized request attempt');
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
   try {
     // 1. Load Firebase Config
     const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
