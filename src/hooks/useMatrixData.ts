@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { MatrixData, MatrixItem } from '../types';
 import { API_URL } from '../constants';
 import { robustFetch } from '../utils/api';
-import { getBucketFromAgeing } from '../components/Matrix/MatrixTable';
+import { getBucketFromAgeing } from '../utils/formatters';
 
 export function useMatrixData(autoRefresh = true, intervalMs = 30000) {
   const [matrixData, setMatrixData] = useState<MatrixData | null>(null);

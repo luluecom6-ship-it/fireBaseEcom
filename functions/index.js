@@ -120,13 +120,24 @@ exports.systemSupervisor = functions.pubsub.schedule('every 1 minutes').onRun(as
   try {
     console.log("[Monitor] Scheduled tick started...");
     
-    const rulesSnap = await db.collection('escalation_rules').where('isActive', '==', true).get();
-    const escalationRules = rulesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    // 0. Cleanup Old Alerts (Older than 24 hours)
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const oldAlertsSnap = await db.collection('alerts').where('timestamp', '<', twentyFourHoursAgo).limit(100).get();
+    if (!oldAlertsSnap.empty) {
+      const batch = db.batch();
+      oldAlertsSnap.docs.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+      console.log(`[Monitor] Cleaned up ${oldAlertsSnap.size} old alerts.`);
+    }
+    
+    // 1. Fetch System Config (Rules & Threshold)
+    const configDoc = await db.collection('system').doc('config').get();
+    const configData = configDoc.exists ? configDoc.data() : {};
+    
+    const escalationRules = (configData.escalationRules || []).filter(r => r.isActive);
+    const scheduledThreshold = configData.scheduledThreshold || 30;
 
-    const configDoc = await db.collection('system_config').doc('general').get();
-    const scheduledThreshold = configDoc.exists ? (configDoc.data().scheduledThreshold || 30) : 30;
-
-    const gasUrl = "https://script.google.com/macros/s/AKfycbzgl5Bu2UWzgRu790imqg_5fOXFhjRdkIBqr-bKPaav0hcT00iCF0pvsM89G7ul4B6B/exec?action=getMatrixData";
+    const gasUrl = (process.env.GAS_API_URL || "https://script.google.com/macros/s/AKfycbwBGYyEjem9_3js7D4uDlFU85pgwZgJ1XFkkmN5cdKRB7utGUsdlf3_ybIHqknlWJzC/exec") + "?action=getMatrixData";
     const response = await axios.get(gasUrl);
     const matrixData = response.data.status === "success" ? response.data.data : response.data;
 
@@ -182,7 +193,8 @@ exports.systemSupervisor = functions.pubsub.schedule('every 1 minutes').onRun(as
       });
 
       const tokensSnap = await db.collection('fcm_tokens').get();
-      const tokens = tokensSnap.docs.map(doc => doc.data().token).filter(t => !!t);
+      const validDocs = tokensSnap.docs.filter(doc => !!doc.data().token);
+      const tokens = validDocs.map(doc => doc.data().token);
 
       if (tokens.length > 0) {
         const message = {
@@ -193,7 +205,23 @@ exports.systemSupervisor = functions.pubsub.schedule('every 1 minutes').onRun(as
           data: { orderId: alert.item.orderID, type: "alert", alertId: alert.alertKey },
           tokens: tokens
         };
-        await messaging.sendEachForMulticast(message);
+        
+        const fcmResponse = await messaging.sendEachForMulticast(message);
+        
+        // Clean up invalid tokens
+        const invalidTokenDocs = [];
+        fcmResponse.responses.forEach((resp, idx) => {
+          if (!resp.success && resp.error?.code === 'messaging/registration-token-not-registered') {
+            invalidTokenDocs.push(validDocs[idx].ref);
+          }
+        });
+
+        if (invalidTokenDocs.length > 0) {
+          const batch = db.batch();
+          invalidTokenDocs.forEach(ref => batch.delete(ref));
+          await batch.commit();
+          console.log(`[Monitor] Cleaned up ${invalidTokenDocs.length} invalid FCM tokens.`);
+        }
       }
     }
     console.log("[Monitor] Scheduled tick completed.");

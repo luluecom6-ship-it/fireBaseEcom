@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { Clock, RefreshCw } from 'lucide-react';
 import { AlertLog, User } from '../types';
 import { Header } from '../components/layout/Header';
-import { getBucketFromAgeing } from '../components/Matrix/MatrixTable';
+import { getBucketFromAgeing } from '../utils/formatters';
 import { cn } from '../lib/utils';
 
 interface AlertsProps {

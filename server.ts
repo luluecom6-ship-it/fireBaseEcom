@@ -5,13 +5,13 @@ import { createServer as createViteServer } from "vite";
 import axios from "axios";
 import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
-import { detectAlerts } from "./src/utils/alertLogic.js";
+import { detectAlerts } from "./src/utils/alertLogic";
 import firebaseConfig from "./firebase-applet-config.json" with { type: "json" };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-import { runMonitorTick } from "./src/services/monitorService.js";
+import { runMonitorTick } from "./src/services/monitorService";
 
 async function startServer() {
   const app = express();

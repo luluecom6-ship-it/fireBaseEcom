@@ -18,7 +18,6 @@ import { useMatrixData } from "./hooks/useMatrixData";
 import { useOrders } from "./hooks/useOrders";
 import { useAdmin } from "./hooks/useAdmin";
 import { useAlerts } from "./hooks/useAlerts";
-import { useAlertTrigger } from "./hooks/useAlertTrigger";
 import { useSystemConfig } from "./hooks/useSystemConfig";
 import { useAttendance } from "./hooks/useAttendance";
 import { useToast } from "./hooks/useToast";
@@ -110,8 +109,6 @@ export default function App() {
     saveSystemConfig, isSavingConfig 
   } = useSystemConfig(user, showToast);
 
-  useAlertTrigger(user, matrixData, escalationRules, alertLogs, logAlertAction, scheduledThreshold);
-
   const { 
     attendanceStatus, hoursWorked, isShiftComplete, 
     handleAttendanceSubmit, fetchStatus 
@@ -119,6 +116,8 @@ export default function App() {
   
   // PWA Hook
   const { isInstallable, showInstallPrompt } = usePWA();
+
+  const lastRefreshRef = useRef(0);
 
   // Auto-request notification permission on first interaction
   useEffect(() => {
@@ -163,20 +162,29 @@ export default function App() {
   // Background Refresh Handler: Trigger refresh when app returns to foreground
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && user) {
-        console.log("[App] App returned to foreground, triggering refresh...");
-        fetchMatrixData();
+      if (document.visibilityState !== 'visible' || !user) return;
+      
+      const now = Date.now();
+      if (now - lastRefreshRef.current < 30000) {
+        console.log("[App] Visibility change detected, but throttled (30s).");
+        return;
+      }
+      lastRefreshRef.current = now;
+
+      console.log("[App] App returned to foreground, triggering refresh...");
+      fetchMatrixData();
+      if (page === "admin") {
         fetchAdminData();
-        fetchStatus(user.empId);
-        if ((window as any).refreshAlertHistory) {
-          (window as any).refreshAlertHistory();
-        }
+      }
+      fetchStatus(user.empId);
+      if ((window as any).refreshAlertHistory) {
+        (window as any).refreshAlertHistory();
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [user, fetchMatrixData, fetchAdminData, fetchStatus]);
+  }, [user, fetchMatrixData, fetchAdminData, fetchStatus, page]);
 
   // Navigation Helper
   const navigateTo = useCallback((target: typeof page) => {

@@ -1,4 +1,18 @@
-export const API_URL = "https://script.google.com/macros/s/AKfycbzgl5Bu2UWzgRu790imqg_5fOXFhjRdkIBqr-bKPaav0hcT00iCF0pvsM89G7ul4B6B/exec";
+// Environment-aware API URL
+const getApiUrl = () => {
+  // Check for Vite environment
+  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GAS_API_URL) {
+    return import.meta.env.VITE_GAS_API_URL;
+  }
+  // Check for Node.js environment
+  if (typeof process !== 'undefined' && process.env && process.env.GAS_API_URL) {
+    return process.env.GAS_API_URL;
+  }
+  // Fallback
+  return "https://script.google.com/macros/s/AKfycbwBGYyEjem9_3js7D4uDlFU85pgwZgJ1XFkkmN5cdKRB7utGUsdlf3_ybIHqknlWJzC/exec";
+};
+
+export const API_URL = getApiUrl();
 
 export const STATUSES = [
   "CREATED",

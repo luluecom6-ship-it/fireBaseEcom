@@ -35,6 +35,7 @@ Whenever the user refers to **Version 4.0**, it refers to the application state 
 - **Backend**: Hybrid approach using Google Apps Script (Legacy) and Firebase Firestore (Real-time Config).
 - **State Management**: Custom hooks with Firestore `onSnapshot` for live updates.
 - **PWA/Service Worker**: `manifest.json` for app identity, `sw.js` for caching, and `firebase-messaging-sw.js` for FCM.
+- **Deployment**: Configured for Vercel (Project: `fire-base-ecom`, ID: `prj_tz4mVBUk0Lbrz0KxK190eWmOqIKQ`).
 
 ## Persistence Instruction
 This file serves as the definitive reference for Version 4.0. All future modifications should build upon this baseline unless otherwise specified.
