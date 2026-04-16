@@ -1,16 +1,18 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { RefreshCw, LayoutDashboard, TrendingUp, Clock, X, ChevronDown } from 'lucide-react';
-import { MatrixData, User } from '../types';
+import { MatrixData, User, AdminData } from '../types';
 import { Header } from '../components/layout/Header';
 import { MatrixTable } from '../components/Matrix/MatrixTable';
 import { sortSlots } from '../utils/formatters';
 import { AGE_BUCKETS, QUICK_STATUSES, SCHEDULE_STATUSES } from '../constants';
 import { cn } from '../lib/utils';
 import { parseServerDate } from '../utils/api';
+import { Globe } from 'lucide-react';
 
 interface MatrixProps {
   matrixData: MatrixData | null;
+  adminData: AdminData;
   isMatrixLoading: boolean;
   onRefetch: () => Promise<void>;
   setMatrixDetail: (detail: any) => void;
@@ -20,6 +22,7 @@ interface MatrixProps {
 
 export const Matrix: React.FC<MatrixProps> = ({
   matrixData,
+  adminData,
   isMatrixLoading,
   onRefetch,
   setMatrixDetail,
@@ -33,9 +36,38 @@ export const Matrix: React.FC<MatrixProps> = ({
     }
     return "";
   });
+
+  const [regionFilter, setRegionFilter] = React.useState<string[]>([]);
+  const [showRegionDropdown, setShowRegionDropdown] = React.useState(false);
   
   const allQuick = matrixData?.quick || [];
   const allSchedule = matrixData?.schedule || [];
+
+  // Create store-to-region mapping
+  const storeToRegion = React.useMemo(() => {
+    const mapping: Record<string, string> = {};
+    if (adminData.regions) {
+      adminData.regions.forEach(r => {
+        mapping[String(r.storeId).trim()] = r.region;
+      });
+    }
+    return mapping;
+  }, [adminData.regions]);
+
+  const availableRegions = React.useMemo(() => {
+    const regions = new Set<string>();
+    if (adminData.regions && Array.isArray(adminData.regions)) {
+      adminData.regions.forEach(r => {
+        if (r && r.region) regions.add(String(r.region).trim());
+      });
+    }
+    if (adminData.users && Array.isArray(adminData.users)) {
+      adminData.users.forEach(u => {
+        if (u && u.region) regions.add(String(u.region).trim());
+      });
+    }
+    return Array.from(regions).filter(Boolean).sort();
+  }, [adminData.regions, adminData.users]);
 
   const storeIds = React.useMemo(() => {
     const ids = new Set<string>();
@@ -49,20 +81,35 @@ export const Matrix: React.FC<MatrixProps> = ({
   }, [allQuick, allSchedule]);
   
   const filteredQuick = React.useMemo(() => {
-    if (!storeFilter) return allQuick;
-    const filterStr = String(storeFilter).toLowerCase().trim();
-    if (filterStr === 'all') return allQuick;
-    return allQuick.filter(d => 
-      String(d.storeID || "").toLowerCase().includes(filterStr)
-    );
-  }, [allQuick, storeFilter]);
+    let filtered = allQuick;
+
+    // Apply Store Filter
+    if (storeFilter) {
+      const filterStr = String(storeFilter).toLowerCase().trim();
+      if (filterStr !== 'all') {
+        filtered = filtered.filter(d => 
+          String(d.storeID || "").toLowerCase().includes(filterStr)
+        );
+      }
+    }
+
+    // Apply Region Filter
+    if (regionFilter.length > 0) {
+      filtered = filtered.filter(d => {
+        const region = storeToRegion[String(d.storeID).trim()];
+        return region && regionFilter.includes(region);
+      });
+    }
+
+    return filtered;
+  }, [allQuick, storeFilter, regionFilter, storeToRegion]);
     
   const filteredSchedule = React.useMemo(() => {
     const now = new Date();
     const todayStr = `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear()}`;
     
     // Filter by today's date
-    const todaySchedule = allSchedule.filter(item => {
+    let filtered = allSchedule.filter(item => {
       // 1. Try to extract date from slot first (e.g., "Apr 15, 2026 8:00 AM - 9:59 AM")
       if (item.slot) {
         const dateMatch = item.slot.match(/([A-Za-z]{3}\s\d{1,2},\s\d{4})/);
@@ -82,13 +129,26 @@ export const Matrix: React.FC<MatrixProps> = ({
       return itemDateStr === todayStr;
     });
 
-    if (!storeFilter) return todaySchedule;
-    const filterStr = String(storeFilter).toLowerCase().trim();
-    if (filterStr === 'all') return todaySchedule;
-    return todaySchedule.filter(d => 
-      String(d.storeID || "").toLowerCase().includes(filterStr)
-    );
-  }, [allSchedule, storeFilter]);
+    // Apply Store Filter
+    if (storeFilter) {
+      const filterStr = String(storeFilter).toLowerCase().trim();
+      if (filterStr !== 'all') {
+        filtered = filtered.filter(d => 
+          String(d.storeID || "").toLowerCase().includes(filterStr)
+        );
+      }
+    }
+
+    // Apply Region Filter
+    if (regionFilter.length > 0) {
+      filtered = filtered.filter(d => {
+        const region = storeToRegion[String(d.storeID).trim()];
+        return region && regionFilter.includes(region);
+      });
+    }
+
+    return filtered;
+  }, [allSchedule, storeFilter, regionFilter, storeToRegion]);
     
   const totalOrders = filteredQuick.length + filteredSchedule.length;
 
@@ -132,6 +192,92 @@ export const Matrix: React.FC<MatrixProps> = ({
           </div>
           
           <div className="flex flex-wrap items-center gap-3">
+            {/* Filter by Region */}
+            <div className="relative">
+              <div 
+                onClick={() => setShowRegionDropdown(!showRegionDropdown)}
+                className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2 cursor-pointer hover:border-blue-300 transition-colors"
+              >
+                <div className="bg-indigo-500 p-2 rounded-xl text-white">
+                  <Globe size={16} />
+                </div>
+                <div className="px-2 min-w-[100px]">
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Filter by Region</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-black text-slate-900 whitespace-nowrap">
+                      {regionFilter.length === 0 ? "All Regions" : 
+                       regionFilter.length === 1 ? regionFilter[0] : 
+                       `${regionFilter.length} Regions`}
+                    </span>
+                    <ChevronDown size={10} className={cn("text-slate-400 transition-transform", showRegionDropdown && "rotate-180")} />
+                  </div>
+                </div>
+              </div>
+
+              <AnimatePresence>
+                {showRegionDropdown && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-40" 
+                      onClick={() => setShowRegionDropdown(false)} 
+                    />
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      className="absolute top-full left-0 mt-2 w-56 bg-white rounded-2xl border border-slate-200 shadow-2xl z-50 overflow-hidden"
+                    >
+                      <div className="p-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Select Regions</span>
+                        {regionFilter.length > 0 && (
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setRegionFilter([]); }}
+                            className="text-[10px] font-bold text-blue-600 hover:text-blue-700"
+                          >
+                            Clear All
+                          </button>
+                        )}
+                      </div>
+                      <div className="max-h-60 overflow-y-auto p-2">
+                        {availableRegions.length === 0 ? (
+                          <div className="py-10 px-6 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 m-2">
+                            <div className="h-12 w-12 bg-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm border border-slate-100">
+                              <Globe size={20} className="text-slate-300" />
+                            </div>
+                            <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">No regions found</p>
+                            <p className="text-[9px] text-slate-400 font-bold mt-1.5 leading-relaxed">
+                              Ensure the 'Regions' sheet exists <br/> and mapping is correct.
+                            </p>
+                          </div>
+                        ) : (
+                          availableRegions.map(region => (
+                            <label 
+                              key={region}
+                              className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-xl cursor-pointer transition-colors"
+                            >
+                              <input 
+                                type="checkbox"
+                                checked={regionFilter.includes(region)}
+                                onChange={() => {
+                                  setRegionFilter(prev => 
+                                    prev.includes(region) 
+                                      ? prev.filter(r => r !== region)
+                                      : [...prev, region]
+                                  );
+                                }}
+                                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="text-xs font-bold text-slate-700">{region}</span>
+                            </label>
+                          ))
+                        )}
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+
             {/* Filter by Store */}
             <div className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2">
               <div className="bg-blue-500 p-2 rounded-xl text-white">

@@ -106,7 +106,12 @@ export function useOrders(
     setIsSearching(true);
     try {
       const baseUrl = API_URL.trim();
-      const urlObj = new URL(baseUrl);
+      let urlObj: URL;
+      try {
+        urlObj = new URL(baseUrl);
+      } catch (e) {
+        urlObj = new URL(baseUrl, window.location.origin);
+      }
       urlObj.searchParams.set('action', 'getAdminData');
       urlObj.searchParams.set('type', 'orders');
       urlObj.searchParams.set('_t', Date.now().toString());

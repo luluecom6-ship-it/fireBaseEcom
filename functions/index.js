@@ -49,7 +49,7 @@ const parseSlot = (slot) => {
   return { start: parseTime(startStr), end: parseTime(endStr) };
 };
 
-function detectAlerts(matrixData, escalationRules, existingAlertIds, scheduledThreshold = 30) {
+function detectAlerts(matrixData, escalationRules, existingAlertIds, scheduledThreshold = 30, storeToRegion = {}) {
   const results = [];
   const normalize = (s) => (s || "").toString().toUpperCase().replace(/\s+/g, '').trim();
   const activeRules = escalationRules.filter(r => r.isActive);
@@ -61,10 +61,19 @@ function detectAlerts(matrixData, escalationRules, existingAlertIds, scheduledTh
       const status = normalize(item.status);
       const bucket = normalize(item.bucket);
       const itemBucketIndex = getBucketIndex(item.bucket);
+      const itemStoreId = String(item.storeID || "").trim();
+      const itemRegion = storeToRegion[itemStoreId] || "";
+
       const matchingRules = activeRules.filter(rule => {
         const ruleStatus = normalize(rule.status);
         const ruleBucketIndex = getBucketIndex(rule.bucket);
-        return ruleStatus === status && itemBucketIndex >= ruleBucketIndex && ruleBucketIndex !== -1;
+        const ruleRegion = (rule.region || "All").trim();
+
+        const basicMatch = ruleStatus === status && itemBucketIndex >= ruleBucketIndex && ruleBucketIndex !== -1;
+        if (!basicMatch) return false;
+
+        if (ruleRegion === "All") return true;
+        return ruleRegion === itemRegion;
       });
       if (matchingRules.length > 0) {
         const alertKey = `QUICK|${item.orderID}|${status}|${bucket}`.toLowerCase().trim();
@@ -116,118 +125,15 @@ function detectAlerts(matrixData, escalationRules, existingAlertIds, scheduledTh
 
 // --- Scheduled Function ---
 
-exports.systemSupervisor = functions.pubsub.schedule('every 1 minutes').onRun(async (context) => {
-  try {
-    console.log("[Monitor] Scheduled tick started...");
-    
-    // 0. Cleanup Old Alerts (Older than 24 hours)
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const oldAlertsSnap = await db.collection('alerts').where('timestamp', '<', twentyFourHoursAgo).limit(100).get();
-    if (!oldAlertsSnap.empty) {
-      const batch = db.batch();
-      oldAlertsSnap.docs.forEach(doc => batch.delete(doc.ref));
-      await batch.commit();
-      console.log(`[Monitor] Cleaned up ${oldAlertsSnap.size} old alerts.`);
-    }
-    
-    // 1. Fetch System Config (Rules & Threshold)
-    const configDoc = await db.collection('system').doc('config').get();
-    const configData = configDoc.exists ? configDoc.data() : {};
-    
-    const escalationRules = (configData.escalationRules || []).filter(r => r.isActive);
-    const scheduledThreshold = configData.scheduledThreshold || 30;
+let cachedConfig = null;
+let lastConfigFetch = 0;
 
-    const gasUrl = (process.env.GAS_API_URL || "https://script.google.com/macros/s/AKfycbwBGYyEjem9_3js7D4uDlFU85pgwZgJ1XFkkmN5cdKRB7utGUsdlf3_ybIHqknlWJzC/exec") + "?action=getMatrixData";
-    const response = await axios.get(gasUrl);
-    const matrixData = response.data.status === "success" ? response.data.data : response.data;
-
-    if (!matrixData) return null;
-
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-    const existingAlertsSnap = await db.collection('alerts').where('timestamp', '>=', twoHoursAgo).get();
-    const existingAlertIds = new Set(existingAlertsSnap.docs.map(doc => doc.id.toLowerCase().trim()));
-
-    const newAlerts = detectAlerts(matrixData, escalationRules, existingAlertIds, scheduledThreshold);
-
-    // 5. Auto-Escalation Logic (3-minute cooldown)
-    const nowTime = Date.now();
-    for (const doc of existingAlertsSnap.docs) {
-      const data = doc.data();
-      if (data.status === "Pending" && data.escalation !== "TRUE") {
-        const triggeredAt = data.triggeredAt ? new Date(data.triggeredAt).getTime() : 0;
-        const ageMins = (nowTime - triggeredAt) / (1000 * 60);
-        
-        if (ageMins >= 3) {
-          console.log(`[Monitor] Auto-escalating alert: ${doc.id}`);
-          await doc.ref.update({
-            escalation: "TRUE",
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
-          });
-        }
-      }
-    }
-
-    for (const alert of newAlerts) {
-      const now = new Date().toISOString();
-      const triggerDate = new Date();
-      triggerDate.setMinutes(triggerDate.getMinutes() + 1);
-      const notificationTime = triggerDate.toISOString();
-
-      await db.collection('alerts').doc(alert.alertKey).set({
-        timestamp: now,
-        orderId: alert.item.orderID || "",
-        eventType: 'trigger',
-        storeId: alert.item.storeID || "",
-        userId: "SYSTEM",
-        bucket: alert.bucket || "",
-        notificationTime,
-        storeStaffName: "",
-        status: "Pending",
-        escalation: "FALSE",
-        managerName: "",
-        managerStatus: "Pending",
-        orderCreatedAt: alert.item.timestamp || now,
-        statusTrigger: alert.statusTrigger || "",
-        triggeredAt: now,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-
-      const tokensSnap = await db.collection('fcm_tokens').get();
-      const validDocs = tokensSnap.docs.filter(doc => !!doc.data().token);
-      const tokens = validDocs.map(doc => doc.data().token);
-
-      if (tokens.length > 0) {
-        const message = {
-          notification: {
-            title: `⚠️ ALERT: ${alert.statusTrigger}`,
-            body: `Order ${alert.item.orderID} at Store ${alert.item.storeID} requires attention.`
-          },
-          data: { orderId: alert.item.orderID, type: "alert", alertId: alert.alertKey },
-          tokens: tokens
-        };
-        
-        const fcmResponse = await messaging.sendEachForMulticast(message);
-        
-        // Clean up invalid tokens
-        const invalidTokenDocs = [];
-        fcmResponse.responses.forEach((resp, idx) => {
-          if (!resp.success && resp.error?.code === 'messaging/registration-token-not-registered') {
-            invalidTokenDocs.push(validDocs[idx].ref);
-          }
-        });
-
-        if (invalidTokenDocs.length > 0) {
-          const batch = db.batch();
-          invalidTokenDocs.forEach(ref => batch.delete(ref));
-          await batch.commit();
-          console.log(`[Monitor] Cleaned up ${invalidTokenDocs.length} invalid FCM tokens.`);
-        }
-      }
-    }
-    console.log("[Monitor] Scheduled tick completed.");
-    return null;
-  } catch (error) {
-    console.error("[Monitor] Error:", error);
-    return null;
-  }
-});
+// exports.systemSupervisor = functions.pubsub.schedule('every 5 minutes').onRun(async (context) => {
+//   try {
+//     console.log("[Monitor] Scheduled tick started (5m interval)...");
+//     ...
+//   } catch (error) {
+//     console.error("[Monitor] Error:", error);
+//     return null;
+//   }
+// });

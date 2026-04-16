@@ -1,5 +1,5 @@
-import { MatrixData, EscalationRule, MatrixItem, AlertLog } from '../types.js';
-import { AGE_BUCKETS } from '../constants.js';
+import { MatrixData, EscalationRule, MatrixItem, AlertLog } from '../types';
+import { AGE_BUCKETS } from '../constants';
 
 export const PREP_STATUSES = [
   "PICKING",
@@ -61,7 +61,8 @@ export function detectAlerts(
   matrixData: MatrixData,
   escalationRules: EscalationRule[],
   existingAlertIds: Set<string>,
-  scheduledThreshold: number = 30
+  scheduledThreshold: number = 30,
+  storeToRegion: Record<string, string> = {}
 ): AlertTriggerResult[] {
   const results: AlertTriggerResult[] = [];
   const normalize = (s: string) => (s || "").toString().toUpperCase().replace(/\s+/g, '').trim();
@@ -76,11 +77,21 @@ export function detectAlerts(
       const status = normalize(item.status);
       const bucket = normalize(item.bucket);
       const itemBucketIndex = getBucketIndex(item.bucket);
+      const itemStoreId = String(item.storeID || "").trim();
+      const itemRegion = storeToRegion[itemStoreId] || "";
       
       const matchingRules = activeRules.filter(rule => {
         const ruleStatus = normalize(rule.status);
         const ruleBucketIndex = getBucketIndex(rule.bucket);
-        return ruleStatus === status && itemBucketIndex >= ruleBucketIndex && ruleBucketIndex !== -1;
+        const ruleRegion = (rule.region || "All").trim();
+        
+        // Match Status and Bucket
+        const basicMatch = ruleStatus === status && itemBucketIndex >= ruleBucketIndex && ruleBucketIndex !== -1;
+        if (!basicMatch) return false;
+
+        // Match Region
+        if (ruleRegion === "All") return true;
+        return ruleRegion === itemRegion;
       });
 
       if (matchingRules.length > 0) {

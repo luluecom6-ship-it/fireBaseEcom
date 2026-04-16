@@ -1,18 +1,35 @@
 // Environment-aware API URL
 const getApiUrl = () => {
-  // Check for Vite environment
-  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GAS_API_URL) {
-    return import.meta.env.VITE_GAS_API_URL;
+  // 0. If we are in the browser, use the local proxy to avoid CORS issues with Google Apps Script
+  if (typeof window !== 'undefined') {
+    return "/api/proxy-gas";
   }
-  // Check for Node.js environment
-  if (typeof process !== 'undefined' && process.env && process.env.GAS_API_URL) {
-    return process.env.GAS_API_URL;
+
+  const fallback = "https://script.google.com/macros/s/AKfycbxUVldHO9dPY9uTfuCc-A_RZUhkyngPQvMDpMC31nrjZV-SXWH2ZzXWIyDh3HDD_Zom/exec";
+  
+  // 1. Check Vite env (Client-side - though usually handled by window check above)
+  if (typeof import.meta !== 'undefined' && import.meta.env) {
+    const viteGas = import.meta.env.VITE_GAS_API_URL;
+    const gas = import.meta.env.GAS_API_URL;
+    if (viteGas) return viteGas;
+    if (gas) return gas;
   }
-  // Fallback
-  return "https://script.google.com/macros/s/AKfycbwBGYyEjem9_3js7D4uDlFU85pgwZgJ1XFkkmN5cdKRB7utGUsdlf3_ybIHqknlWJzC/exec";
+  
+  // 2. Check process.env (Server-side or polyfilled)
+  if (typeof process !== 'undefined' && process.env) {
+    const viteGas = process.env.VITE_GAS_API_URL;
+    const gas = process.env.GAS_API_URL;
+    if (viteGas) return viteGas;
+    if (gas) return gas;
+  }
+  
+  return fallback;
 };
 
-export const API_URL = getApiUrl();
+const detectedUrl = getApiUrl();
+console.log(`[Constants] API_URL: ${detectedUrl ? (detectedUrl.substring(0, 40) + '...') : 'NONE'}`);
+
+export const API_URL = (detectedUrl || "").trim();
 
 export const STATUSES = [
   "CREATED",

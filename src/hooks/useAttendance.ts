@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { User, AttendanceStatus } from '../types';
 import { API_URL } from '../constants';
 import { robustFetch, parseServerDate } from '../utils/api';
@@ -19,13 +19,25 @@ export function useAttendance(
   const fetchStatus = useCallback(async (empId: string) => {
     try {
       const baseUrl = API_URL.trim();
-      const urlObj = new URL(baseUrl);
+      let urlObj: URL;
+      try {
+        urlObj = new URL(baseUrl);
+      } catch (e) {
+        urlObj = new URL(baseUrl, window.location.origin);
+      }
       urlObj.searchParams.set('action', 'getTodayAttendance');
       urlObj.searchParams.set('empId', empId);
       urlObj.searchParams.set('_t', Date.now().toString());
       
       const res = await robustFetch(urlObj.toString());
-      const response = await res.json();
+      const text = await res.text();
+      let response;
+      try {
+        response = JSON.parse(text);
+      } catch (parseErr) {
+        console.error("[useAttendance] Failed to parse JSON:", text.substring(0, 100));
+        return;
+      }
       
       const data = response.status === "success" ? response.data : response;
       
@@ -93,8 +105,11 @@ export function useAttendance(
     }
   }, []);
 
+  const hasFetched = useRef(false);
+
   useEffect(() => {
-    if (user) {
+    if (user && !hasFetched.current) {
+      hasFetched.current = true;
       fetchStatus(user.empId);
     }
   }, [user, fetchStatus]);
@@ -155,7 +170,6 @@ export function useAttendance(
 
       await robustFetch(API_URL, {
         method: "POST",
-        mode: 'no-cors',
         body: params
       });
       

@@ -8,12 +8,14 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, 
   CartesianGrid, Tooltip, PieChart, Pie, Cell 
 } from 'recharts';
-import { MatrixData, User } from '../types';
+import { MatrixData, User, AdminData } from '../types';
 import { Header } from '../components/layout/Header';
 import { cn } from '../lib/utils';
+import { Globe, ChevronDown, X, LayoutDashboard } from 'lucide-react';
 
 interface AnalyticsProps {
   matrixData: MatrixData | null;
+  adminData: AdminData;
   isMatrixLoading: boolean;
   onRefetch: () => Promise<void>;
   navigateTo: (page: any) => void;
@@ -22,27 +24,78 @@ interface AnalyticsProps {
 
 export const Analytics: React.FC<AnalyticsProps> = ({
   matrixData,
+  adminData,
   isMatrixLoading,
   onRefetch,
   navigateTo,
   user
 }) => {
+  const [storeFilter, setStoreFilter] = React.useState<string>(() => {
+    if (user && user.role !== 'admin' && user.role !== 'supervisor') {
+      const sid = String(user.storeId || "").trim();
+      return sid.toLowerCase() === 'all' ? "" : sid;
+    }
+    return "";
+  });
+
+  const [regionFilter, setRegionFilter] = React.useState<string[]>([]);
+  const [showRegionDropdown, setShowRegionDropdown] = React.useState(false);
+
+  // Create store-to-region mapping
+  const storeToRegion = React.useMemo(() => {
+    const mapping: Record<string, string> = {};
+    if (adminData.regions) {
+      adminData.regions.forEach(r => {
+        mapping[String(r.storeId).trim()] = r.region;
+      });
+    }
+    return mapping;
+  }, [adminData.regions]);
+
+  const availableRegions = React.useMemo(() => {
+    const regions = new Set<string>();
+    if (adminData.regions) {
+      adminData.regions.forEach(r => regions.add(r.region));
+    }
+    adminData.users.forEach(u => {
+      if (u.region) regions.add(u.region);
+    });
+    return Array.from(regions).sort();
+  }, [adminData.regions, adminData.users]);
+
   const filteredMatrixData = React.useMemo(() => {
     if (!matrixData) return null;
-    if (user?.role === 'admin' || user?.role === 'supervisor') return matrixData;
     
-    const userStoreId = String(user?.storeId || "").trim().toLowerCase();
-    if (userStoreId === 'all') return matrixData;
+    const filterItems = (items: any[]) => {
+      let filtered = items;
 
-    const filterItems = (items: any[]) => 
-      items.filter(item => String(item.storeID || "").trim().toLowerCase() === userStoreId);
+      // Apply Store Filter
+      if (storeFilter) {
+        const filterStr = String(storeFilter).toLowerCase().trim();
+        if (filterStr !== 'all') {
+          filtered = filtered.filter(item => 
+            String(item.storeID || "").toLowerCase().includes(filterStr)
+          );
+        }
+      }
+
+      // Apply Region Filter
+      if (regionFilter.length > 0) {
+        filtered = filtered.filter(item => {
+          const region = storeToRegion[String(item.storeID).trim()];
+          return region && regionFilter.includes(region);
+        });
+      }
+
+      return filtered;
+    };
 
     return {
       ...matrixData,
       quick: filterItems(matrixData.quick || []),
       schedule: filterItems(matrixData.schedule || [])
     };
-  }, [matrixData, user]);
+  }, [matrixData, storeFilter, regionFilter, storeToRegion]);
 
   const displayData = filteredMatrixData;
 
@@ -73,15 +126,127 @@ export const Analytics: React.FC<AnalyticsProps> = ({
             <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Operational Insights</h2>
             <p className="text-slate-500 font-bold text-xs mt-1">Advanced data visualization & metrics</p>
           </div>
-          <motion.button 
-            whileTap={{ scale: 0.95 }}
-            onClick={onRefetch}
-            disabled={isMatrixLoading}
-            className="h-12 sm:h-14 px-4 sm:px-6 rounded-xl sm:rounded-2xl bg-blue-600 text-white flex items-center justify-center gap-3 shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all disabled:bg-slate-300"
-          >
-            <RefreshCw size={20} className={cn(isMatrixLoading && "animate-spin")} />
-            <span className="font-black uppercase tracking-widest text-[10px] sm:text-xs">Refresh Data</span>
-          </motion.button>
+          
+          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-3">
+            {/* Filter by Region */}
+            <div className="relative">
+              <div 
+                onClick={() => setShowRegionDropdown(!showRegionDropdown)}
+                className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2 cursor-pointer hover:border-blue-300 transition-colors"
+              >
+                <div className="bg-indigo-500 p-2 rounded-xl text-white">
+                  <Globe size={16} />
+                </div>
+                <div className="px-2 min-w-[100px]">
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Filter by Region</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-black text-slate-900 whitespace-nowrap">
+                      {regionFilter.length === 0 ? "All Regions" : 
+                       regionFilter.length === 1 ? regionFilter[0] : 
+                       `${regionFilter.length} Regions`}
+                    </span>
+                    <ChevronDown size={10} className={cn("text-slate-400 transition-transform", showRegionDropdown && "rotate-180")} />
+                  </div>
+                </div>
+              </div>
+
+              <AnimatePresence>
+                {showRegionDropdown && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-40" 
+                      onClick={() => setShowRegionDropdown(false)} 
+                    />
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      className="absolute top-full right-0 mt-2 w-56 bg-white rounded-2xl border border-slate-200 shadow-2xl z-50 overflow-hidden"
+                    >
+                      <div className="p-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Select Regions</span>
+                        {regionFilter.length > 0 && (
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setRegionFilter([]); }}
+                            className="text-[10px] font-bold text-blue-600 hover:text-blue-700"
+                          >
+                            Clear All
+                          </button>
+                        )}
+                      </div>
+                      <div className="max-h-60 overflow-y-auto p-2">
+                        {availableRegions.length === 0 ? (
+                          <p className="text-[10px] text-slate-400 text-center py-4 font-bold italic">No regions found</p>
+                        ) : (
+                          availableRegions.map(region => (
+                            <label 
+                              key={region}
+                              className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-xl cursor-pointer transition-colors"
+                            >
+                              <input 
+                                type="checkbox"
+                                checked={regionFilter.includes(region)}
+                                onChange={() => {
+                                  setRegionFilter(prev => 
+                                    prev.includes(region) 
+                                      ? prev.filter(r => r !== region)
+                                      : [...prev, region]
+                                  );
+                                }}
+                                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="text-xs font-bold text-slate-700">{region}</span>
+                            </label>
+                          ))
+                        )}
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Filter by Store */}
+            <div className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2">
+              <div className="bg-blue-500 p-2 rounded-xl text-white">
+                <LayoutDashboard size={16} />
+              </div>
+              <div className="px-2">
+                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Filter by Store</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-black text-slate-900 whitespace-nowrap">
+                    {storeFilter ? storeFilter : "All Stores"}
+                  </span>
+                  <div className="h-4 w-[1px] bg-slate-200 mx-1" />
+                  <div className="relative flex items-center">
+                    <input 
+                      value={storeFilter}
+                      onChange={(e) => setStoreFilter(e.target.value)}
+                      placeholder="Store ID..."
+                      className="text-[11px] font-bold text-slate-600 outline-none bg-transparent w-20 pr-6"
+                    />
+                    {storeFilter && (
+                      <button 
+                        onClick={() => setStoreFilter("")}
+                        className="absolute right-0 p-1 text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        <X size={10} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <motion.button 
+              whileTap={{ scale: 0.95 }}
+              onClick={onRefetch}
+              disabled={isMatrixLoading}
+              className="h-12 w-12 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all disabled:bg-slate-300"
+            >
+              <RefreshCw size={20} className={cn(isMatrixLoading && "animate-spin")} />
+            </motion.button>
+          </div>
         </div>
 
         {!displayData ? (

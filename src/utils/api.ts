@@ -8,15 +8,33 @@ export async function robustFetch(
   backoff = 1000
 ): Promise<Response> {
   const cleanUrl = url.trim();
+  console.log(`[Fetch] Requesting: ${cleanUrl}`);
   try {
     const response = await fetch(cleanUrl, {
       ...options,
       // Default to follow redirects as GAS uses them heavily
       redirect: 'follow',
+      // Ensure CORS is handled correctly
+      mode: options.mode || 'cors',
+      // Avoid caching issues
+      cache: 'no-store',
     });
 
     if (!response.ok && response.status !== 0) {
-      // If it's a 429 or 5xx, we might want to retry
+      // Log the body for debugging if it's not JSON
+      const text = await response.text();
+      console.error(`[Fetch] SERVER ERROR ${response.status}: ${text.substring(0, 200)}`);
+      
+      // If the proxy returns our JSON error message about GAS error pages
+      if (text.includes('"message"') && text.includes('Google Apps Script')) {
+        try {
+          const errData = JSON.parse(text);
+          throw new Error(errData.message);
+        } catch (e) {
+          // Fall through
+        }
+      }
+
       if ((response.status === 429 || response.status >= 500) && retries > 0) {
         console.warn(`[Fetch] Server error ${response.status}. Retrying in ${backoff}ms... (${retries} left)`);
         await new Promise(resolve => setTimeout(resolve, backoff));
@@ -27,8 +45,11 @@ export async function robustFetch(
 
     return response;
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[Fetch] FAILED: ${cleanUrl}`, error);
+    
     if (retries > 0) {
-      console.warn(`[Fetch] Network error: ${error instanceof Error ? error.message : String(error)}. Retrying in ${backoff}ms... (${retries} left)`);
+      console.warn(`[Fetch] Network error: ${errorMsg}. Retrying in ${backoff}ms... (${retries} left)`);
       await new Promise(resolve => setTimeout(resolve, backoff));
       return robustFetch(url, options, retries - 1, backoff * 2);
     }

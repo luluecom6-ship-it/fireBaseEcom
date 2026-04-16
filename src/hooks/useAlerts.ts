@@ -3,7 +3,7 @@ import { User, AlertLog, ActiveAlert } from '../types';
 import { API_URL } from '../constants';
 import { robustFetch, parseServerDate } from '../utils/api';
 import { db, auth, requestForToken } from '../firebase';
-import { collection, query, onSnapshot, doc, setDoc, updateDoc, serverTimestamp, getDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, setDoc, updateDoc, serverTimestamp, getDoc, where } from 'firebase/firestore';
 
 export function useAlerts(
   user: User | null,
@@ -71,7 +71,12 @@ export function useAlerts(
   const fetchAlertHistory = useCallback(async () => {
     if (!user) return;
     try {
-      const urlObj = new URL(API_URL.trim());
+      let urlObj: URL;
+      try {
+        urlObj = new URL(API_URL.trim());
+      } catch (e) {
+        urlObj = new URL(API_URL.trim(), window.location.origin);
+      }
       urlObj.searchParams.set('action', 'getAdminData');
       urlObj.searchParams.set('type', 'alerts');
       urlObj.searchParams.set('_t', Date.now().toString());
@@ -129,8 +134,13 @@ export function useAlerts(
     return () => { delete (window as any).refreshAlertHistory; };
   }, [fetchAlertHistory]);
 
+  const hasFetched = useRef(false);
+
   useEffect(() => {
-    fetchAlertHistory();
+    if (!hasFetched.current) {
+      hasFetched.current = true;
+      fetchAlertHistory();
+    }
   }, [fetchAlertHistory]);
 
   // Periodically check permission status (in case user changes it in browser settings)
@@ -161,6 +171,7 @@ export function useAlerts(
             fbUid: fbUser.uid,
             role: String(user.role || "").toLowerCase().trim(),
             storeId: user.storeId,
+            region: user.region || "",
             updatedAt: serverTimestamp()
           }, { merge: true });
           console.log("FCM Token registered for Firebase UID:", fbUser.uid);
@@ -177,7 +188,11 @@ export function useAlerts(
   useEffect(() => {
     if (!user) return;
 
-    const q = query(collection(db, 'push_queue'));
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const q = query(
+      collection(db, 'push_queue'),
+      where('timestamp', '>=', twoHoursAgo)
+    );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       snapshot.docChanges().forEach((change) => {
         if (change.type === "added") {
@@ -261,6 +276,13 @@ export function useAlerts(
     try {
       const now = new Date().toISOString();
       const alertId = alert.id || `${alert.orderId}|${alert.statusTrigger}`.toLowerCase().trim();
+      
+      // Skip Firestore for test alerts
+      if (alertId.startsWith('test-buzzer')) {
+        setTimeout(() => pendingActionsRef.current.delete(actionKey), 2000);
+        return;
+      }
+
       const alertRef = doc(db, 'alerts', alertId);
 
       if (action === 'trigger') {
@@ -336,8 +358,11 @@ export function useAlerts(
   useEffect(() => {
     if (!user) return;
 
+    const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
     const alertsRef = collection(db, 'alerts');
-    const unsubscribe = onSnapshot(query(alertsRef), (snapshot) => {
+    const q = query(alertsRef, where('timestamp', '>=', sixHoursAgo));
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       const firestoreLogs: AlertLog[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();

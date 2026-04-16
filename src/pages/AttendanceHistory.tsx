@@ -27,7 +27,12 @@ export const AttendanceHistory: React.FC<AttendanceHistoryProps> = ({
   const fetchHistory = async () => {
     setLoading(true);
     try {
-      const urlObj = new URL(API_URL.trim());
+      let urlObj: URL;
+      try {
+        urlObj = new URL(API_URL.trim());
+      } catch (e) {
+        urlObj = new URL(API_URL.trim(), window.location.origin);
+      }
       urlObj.searchParams.set('action', 'getAdminData');
       urlObj.searchParams.set('type', 'attendance');
       urlObj.searchParams.set('empId', user.empId); // Some backends might filter by empId if provided

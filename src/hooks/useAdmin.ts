@@ -8,28 +8,56 @@ export function useAdmin(
   showToast: (msg: string, type?: 'success' | 'error') => void,
   setLoading: (loading: boolean) => void
 ) {
-  const [adminData, setAdminData] = useState<AdminData>({ users: [], attendance: [], orders: [] });
+  const [adminData, setAdminData] = useState<AdminData>({ 
+    users: [], 
+    attendance: [], 
+    orders: [],
+    regions: []
+  });
 
   const fetchAdminData = useCallback(async (isManual = false) => {
     const role = String(user?.role || "").toLowerCase().trim();
     if (!user || (role !== 'admin' && role !== 'supervisor' && role !== 'manager' && role !== 'store')) return;
+    
+    if (!API_URL) {
+      console.error("Admin sync failed: API_URL is not configured.");
+      if (isManual) showToast("API Configuration Missing", "error");
+      return;
+    }
+
     if (isManual) setLoading(true);
     
     try {
       const baseUrl = API_URL.trim();
-      const urlObj = new URL(baseUrl);
+      let urlObj: URL;
+      try {
+        urlObj = new URL(baseUrl);
+      } catch (urlErr) {
+        urlObj = new URL(baseUrl, window.location.origin);
+      }
       urlObj.searchParams.set('action', 'getAdminData');
+      urlObj.searchParams.set('role', user.role || "");
+      urlObj.searchParams.set('region', user.region || "");
       urlObj.searchParams.set('_t', Date.now().toString());
       
       const res = await robustFetch(urlObj.toString());
-      const response = await res.json();
+      const text = await res.text();
+      let response;
+      try {
+        response = JSON.parse(text);
+      } catch (parseErr) {
+        console.error("Admin sync failed: Response was not JSON", text.substring(0, 100));
+        if (isManual) showToast("Server Error: Invalid data format", "error");
+        return;
+      }
       const data = response.status === "success" ? response.data : response;
       
-      if (data && (data.users || data.attendance || data.orders)) {
+      if (data && (data.users || data.attendance || data.orders || data.regions)) {
         setAdminData({
           users: data.users || [],
           attendance: data.attendance || [],
-          orders: data.orders || []
+          orders: data.orders || [],
+          regions: data.regions || []
         });
         if (isManual) showToast("Admin Data Synced", "success");
       } else {

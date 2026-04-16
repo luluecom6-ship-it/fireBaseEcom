@@ -59,6 +59,7 @@ export const Admin: React.FC<AdminProps> = ({
   isAdminLoading
 }) => {
   const [filterDate, setFilterDate] = useState(new Date().toISOString().split("T")[0]);
+  const [selectedRegion, setSelectedRegion] = useState("All");
   const [adminStoreFilter, setAdminStoreFilter] = useState("All");
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showDailyOrdersModal, setShowDailyOrdersModal] = useState(false);
@@ -68,6 +69,48 @@ export const Admin: React.FC<AdminProps> = ({
   const [showEmailLogin, setShowEmailLogin] = useState(false);
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPass, setAdminPass] = useState("");
+
+  const storeToRegion = React.useMemo(() => {
+    const map: Record<string, string> = {};
+    if (adminData.regions) {
+      adminData.regions.forEach(r => {
+        map[String(r.storeId)] = r.region;
+      });
+    }
+    return map;
+  }, [adminData.regions]);
+
+  const availableRegions = React.useMemo(() => {
+    const regions = new Set<string>();
+    if (adminData.regions && Array.isArray(adminData.regions)) {
+      adminData.regions.forEach(r => {
+        if (r && r.region) regions.add(String(r.region).trim());
+      });
+    }
+    if (adminData.users && Array.isArray(adminData.users)) {
+      adminData.users.forEach(u => {
+        if (u && u.region) regions.add(String(u.region).trim());
+      });
+    }
+    return Array.from(regions).filter(Boolean).sort();
+  }, [adminData.regions, adminData.users]);
+
+  const hasFetched = React.useRef(false);
+
+  // Initial fetch on mount
+  React.useEffect(() => {
+    if (!hasFetched.current) {
+      hasFetched.current = true;
+      onRefetch();
+    }
+  }, [onRefetch]);
+
+  // If supervisor, lock to their region
+  React.useEffect(() => {
+    if (user.role === 'supervisor' && user.region) {
+      setSelectedRegion(user.region);
+    }
+  }, [user]);
 
   const handleBroadcast = async () => {
     if (!broadcastMessage.trim() || !isFirebaseAuthenticated || targetRoles.length === 0) return;
@@ -91,9 +134,19 @@ export const Admin: React.FC<AdminProps> = ({
     }
   };
 
-  const filteredOrders = adminData.orders.filter(o => o.timestamp.includes(filterDate));
-  const filteredAttendance = adminData.attendance.filter(a => a.timestamp.includes(filterDate));
-  const activeStaff = adminData.attendance.filter(a => a.type === "In" && a.timestamp.includes(filterDate) && !adminData.users.find(u => u.empId === a.empId && u.role === 'admin')).length;
+  const filteredOrders = adminData.orders
+    .filter(o => o.timestamp.includes(filterDate))
+    .filter(o => selectedRegion === "All" || storeToRegion[String(o.storeId)] === selectedRegion);
+
+  const filteredAttendance = adminData.attendance
+    .filter(a => a.timestamp.includes(filterDate))
+    .filter(a => {
+      const u = adminData.users.find(usr => usr.empId === a.empId);
+      const region = u?.region || storeToRegion[String(u?.storeId || "")];
+      return selectedRegion === "All" || region === selectedRegion;
+    });
+
+  const activeStaff = filteredAttendance.filter(a => a.type === "In" && !adminData.users.find(u => u.empId === a.empId && u.role === 'admin')).length;
 
   return (
     <motion.div 
@@ -121,6 +174,23 @@ export const Admin: React.FC<AdminProps> = ({
           <div className="text-center sm:text-left">
             <h2 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">System Admin</h2>
             <p className="text-slate-500 font-bold text-xs mt-1">Manage escalation rules and system settings</p>
+            
+            <div className="mt-3 flex items-center justify-center sm:justify-start">
+              <div className="bg-white px-3 py-2 rounded-xl shadow-sm border border-slate-100 flex items-center gap-2">
+                <ShieldCheck size={14} className="text-blue-600" />
+                <select 
+                  value={selectedRegion}
+                  onChange={(e) => setSelectedRegion(e.target.value)}
+                  disabled={user.role === 'supervisor'}
+                  className="bg-transparent border-none font-black text-[10px] uppercase tracking-widest text-slate-600 outline-none cursor-pointer disabled:cursor-not-allowed"
+                >
+                  <option value="All">All Regions</option>
+                  {availableRegions.map(r => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
           
           <div className="flex items-center gap-3">
@@ -148,7 +218,7 @@ export const Admin: React.FC<AdminProps> = ({
           {[
             { id: "orders", label: "Daily Orders", val: filteredOrders.length, icon: Package, color: "text-blue-600", bg: "bg-blue-50" },
             { id: "active", label: "Active Staff", val: activeStaff, icon: Users, color: "text-emerald-600", bg: "bg-emerald-50" },
-            { id: "total", label: "Total Staff", val: adminData.users.filter(u => u.role !== 'admin').length, icon: UserCheck, color: "text-purple-600", bg: "bg-purple-50" },
+            { id: "total", label: "Total Staff", val: adminData.users.filter(u => u.role !== 'admin' && (selectedRegion === "All" || u.region === selectedRegion || storeToRegion[String(u.storeId)] === selectedRegion)).length, icon: UserCheck, color: "text-purple-600", bg: "bg-purple-50" },
             { id: "efficiency", label: "Efficiency", val: "94%", icon: TrendingUp, color: "text-amber-600", bg: "bg-amber-50" },
           ].map((m, i) => (
             <motion.div 
@@ -404,6 +474,7 @@ export const Admin: React.FC<AdminProps> = ({
                       id: Math.random().toString(36).substr(2, 9),
                       status: STATUSES[0],
                       bucket: AGE_BUCKETS[0],
+                      region: 'All',
                       escalationUser: 'New Supervisor',
                       isActive: true
                     };
@@ -419,6 +490,7 @@ export const Admin: React.FC<AdminProps> = ({
               <table className="w-full text-left min-w-[600px]">
                 <thead>
                   <tr className="bg-slate-50/50 border-b border-slate-100">
+                    <th className="p-3 sm:p-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Region</th>
                     <th className="p-3 sm:p-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
                     <th className="p-3 sm:p-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Bucket</th>
                     <th className="p-3 sm:p-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Escalation To</th>
@@ -427,8 +499,20 @@ export const Admin: React.FC<AdminProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {escalationRules.map(rule => (
+                  {escalationRules
+                    .filter(rule => selectedRegion === "All" || rule.region === "All" || rule.region === selectedRegion)
+                    .map(rule => (
                     <tr key={rule.id} className="hover:bg-slate-50/30 transition-colors">
+                      <td className="p-3 sm:p-4">
+                        <select 
+                          value={rule.region || "All"}
+                          onChange={(e) => setEscalationRules(prev => prev.map(r => r.id === rule.id ? { ...r, region: e.target.value } : r))}
+                          className="w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-[10px] sm:text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                        >
+                          <option value="All">All Regions</option>
+                          {availableRegions.map(reg => <option key={reg} value={reg}>{reg}</option>)}
+                        </select>
+                      </td>
                       <td className="p-3 sm:p-4">
                         <select 
                           value={rule.status}
@@ -532,7 +616,9 @@ export const Admin: React.FC<AdminProps> = ({
                     </div>
                     <div>
                       <p className="font-black text-slate-800 tracking-tight text-sm sm:text-base">{u.name}</p>
-                      <p className="text-[9px] sm:text-xs text-slate-400 font-bold uppercase tracking-widest mt-0.5">{u.storeId} • {u.empId}</p>
+                      <p className="text-[9px] sm:text-xs text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+                        {u.storeId} • {u.empId} {u.region && `• ${u.region}`}
+                      </p>
                     </div>
                   </div>
                   
@@ -588,7 +674,14 @@ export const Admin: React.FC<AdminProps> = ({
               
               <div className="mb-6 sm:mb-8">
                 <h3 className="text-xl sm:text-2xl font-black tracking-tight">{selectedUser.name}</h3>
-                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] sm:text-xs mt-1">Staff Profile Details</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] sm:text-xs">Staff Profile Details</p>
+                  {selectedUser.region && (
+                    <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-md text-[8px] font-black uppercase tracking-widest border border-indigo-100">
+                      {selectedUser.region}
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
@@ -697,7 +790,9 @@ export const Admin: React.FC<AdminProps> = ({
                     className="bg-slate-50 border-none rounded-lg sm:rounded-xl px-3 py-1.5 sm:px-4 sm:py-2 font-black text-[9px] sm:text-xs uppercase tracking-widest text-slate-600 outline-none"
                   >
                     <option value="All">All Stores</option>
-                    {Array.from(new Set(adminData.orders.map(o => String(o.storeId)))).sort().map(store => (
+                    {Array.from(new Set(adminData.orders
+                      .filter(o => selectedRegion === "All" || storeToRegion[String(o.storeId)] === selectedRegion)
+                      .map(o => String(o.storeId)))).sort().map(store => (
                       <option key={store} value={store}>{store}</option>
                     ))}
                   </select>
@@ -708,12 +803,10 @@ export const Admin: React.FC<AdminProps> = ({
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-3 sm:space-y-4">
-                {adminData.orders
-                  .filter(o => o.timestamp.includes(filterDate))
+                {filteredOrders
                   .filter(o => adminStoreFilter === "All" || String(o.storeId) === adminStoreFilter)
                   .length > 0 ? (
-                  adminData.orders
-                    .filter(o => o.timestamp.includes(filterDate))
+                  filteredOrders
                     .filter(o => adminStoreFilter === "All" || String(o.storeId) === adminStoreFilter)
                     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
                     .map((order, i) => (

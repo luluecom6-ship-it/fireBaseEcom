@@ -37,7 +37,9 @@ export const Header: React.FC<HeaderProps> = ({ title, showBack, onBack, user, i
         </motion.button>
       )}
       <div className="flex flex-col items-end">
-        <div className="text-[9px] font-black uppercase tracking-widest opacity-60">Station</div>
+        <div className="text-[9px] font-black uppercase tracking-widest opacity-60">
+          {user?.region ? user.region : "Station"}
+        </div>
         <div className="text-xs font-bold">{user?.storeId || "N/A"}</div>
       </div>
     </div>

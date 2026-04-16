@@ -1,19 +1,28 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { MatrixData, MatrixItem } from '../types';
 import { API_URL } from '../constants';
 import { robustFetch } from '../utils/api';
 import { getBucketFromAgeing } from '../utils/formatters';
 
-export function useMatrixData(autoRefresh = true, intervalMs = 30000) {
+export function useMatrixData(autoRefresh = true, intervalMs = 60000) {
   const [matrixData, setMatrixData] = useState<MatrixData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async (isManual = false) => {
+    if (!API_URL) {
+      setError("API_URL is not configured.");
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
-      const urlObj = new URL(API_URL.trim());
+      let urlObj: URL;
+      try {
+        urlObj = new URL(API_URL.trim());
+      } catch (urlErr) {
+        urlObj = new URL(API_URL.trim(), window.location.origin);
+      }
       urlObj.searchParams.set('action', 'getMatrixData');
       urlObj.searchParams.set('_t', Date.now().toString());
       
@@ -61,7 +70,8 @@ export function useMatrixData(autoRefresh = true, intervalMs = 30000) {
           throw new Error("Invalid matrix data format");
         }
       } else {
-        throw new Error("Server returned non-JSON response");
+        console.error("[useMatrixData] Non-JSON response:", text.substring(0, 200));
+        throw new Error(`Server returned non-JSON response: ${text.substring(0, 50)}...`);
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -72,7 +82,12 @@ export function useMatrixData(autoRefresh = true, intervalMs = 30000) {
     }
   }, []);
 
+  const hasFetched = useRef(false);
+
   useEffect(() => {
+    if (hasFetched.current) return;
+    hasFetched.current = true;
+    
     fetchData();
     if (autoRefresh) {
       const timer = setInterval(() => fetchData(false), intervalMs);

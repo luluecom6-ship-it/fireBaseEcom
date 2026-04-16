@@ -106,16 +106,29 @@ export function useAuth() {
     setLoading(true);
     try {
       const baseUrl = API_URL.trim();
-      const urlObj = new URL(baseUrl);
+      let urlObj: URL;
+      try {
+        urlObj = new URL(baseUrl);
+      } catch (e) {
+        urlObj = new URL(baseUrl, window.location.origin);
+      }
       urlObj.searchParams.set('action', 'login');
       urlObj.searchParams.set('username', username);
       urlObj.searchParams.set('password', password);
       urlObj.searchParams.set('_t', Date.now().toString());
       
       const res = await robustFetch(urlObj.toString());
-      const data = await res.json();
+      const text = await res.text();
       
-      const userData = data.status === "success" ? data : (data.empId ? data : null);
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        console.error("[useAuth] Failed to parse JSON response:", text.substring(0, 100));
+        return { success: false, message: "Server returned non-JSON response. Check API configuration." };
+      }
+      
+      const userData = (data.status === "success" || data.empId) ? data : null;
       
       if (userData && (userData.status === "success" || userData.empId)) {
         if (userData.role) userData.role = userData.role.toLowerCase() as any;
@@ -124,9 +137,11 @@ export function useAuth() {
         localStorage.setItem("lulu_login_time", new Date().getTime().toString());
         return { success: true, user: userData };
       } else {
-        return { success: false, message: "Invalid Credentials" };
+        console.warn("Login failed: Invalid credentials or status", data);
+        return { success: false, message: data.message || "Invalid Credentials" };
       }
     } catch (err) {
+      console.error("Login catch error:", err);
       return { success: false, message: "Connection Error. Please check your internet." };
     } finally {
       setLoading(false);

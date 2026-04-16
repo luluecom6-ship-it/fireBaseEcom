@@ -153,11 +153,11 @@ export default function App() {
   useEffect(() => {
     if (user) {
       if (page === "login") setPage("dashboard");
-      fetchStatus(user.empId);
+      // fetchStatus, fetchMatrixData, and fetchAdminData are handled internally by hooks on initial load
     } else {
       setPage("login");
     }
-  }, [user, fetchStatus]);
+  }, [user]);
 
   // Background Refresh Handler: Trigger refresh when app returns to foreground
   useEffect(() => {
@@ -165,15 +165,16 @@ export default function App() {
       if (document.visibilityState !== 'visible' || !user) return;
       
       const now = Date.now();
-      if (now - lastRefreshRef.current < 30000) {
-        console.log("[App] Visibility change detected, but throttled (30s).");
+      if (now - lastRefreshRef.current < 60000) {
+        console.log("[App] Visibility change detected, but throttled (60s).");
         return;
       }
       lastRefreshRef.current = now;
 
       console.log("[App] App returned to foreground, triggering refresh...");
       fetchMatrixData();
-      if (page === "admin") {
+      const role = String(user.role || "").toLowerCase().trim();
+      if (page === "admin" || role === "admin" || role === "supervisor") {
         fetchAdminData();
       }
       fetchStatus(user.empId);
@@ -194,8 +195,10 @@ export default function App() {
       return;
     }
     setPage(target);
+    if (target === "admin") fetchAdminData();
+    if (target === "matrix" || target === "dashboard") fetchMatrixData();
     window.scrollTo(0, 0);
-  }, [user, showToast]);
+  }, [user, showToast, fetchAdminData, fetchMatrixData]);
 
   // Sync user state from useAuth to other hooks if needed
   // (Most hooks take user as a parameter and handle internal effects)
@@ -280,6 +283,7 @@ export default function App() {
         return (
           <Matrix 
             matrixData={matrixData}
+            adminData={adminData}
             isMatrixLoading={isMatrixLoading}
             onRefetch={fetchMatrixData}
             setMatrixDetail={setMatrixDetail}
@@ -291,6 +295,7 @@ export default function App() {
         return (
           <Analytics 
             matrixData={matrixData}
+            adminData={adminData}
             isMatrixLoading={isMatrixLoading}
             onRefetch={fetchMatrixData}
             navigateTo={navigateTo}

@@ -5,6 +5,7 @@ export interface User {
   storeId: string;
   status: string;
   email?: string;
+  region?: string;
 }
 
 export interface AlertLog {
@@ -51,10 +52,16 @@ export interface OrderRecord {
   imageUrls?: string[]; // Optional array for easier frontend handling
 }
 
+export interface RegionMapping {
+  storeId: string;
+  region: string;
+}
+
 export interface AdminData {
   users: User[];
   attendance: AttendanceRecord[];
   orders: OrderRecord[];
+  regions?: RegionMapping[];
 }
 
 export interface MatrixItem {
@@ -78,6 +85,7 @@ export interface EscalationRule {
   id: string;
   status: string;
   bucket: string;
+  region: string;
   escalationUser: string;
   isActive: boolean;
 }
