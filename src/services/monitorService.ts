@@ -33,6 +33,10 @@ export async function runMonitorTick(db: any, messaging: any) {
     
     const escalationRules = (cachedConfig.escalationRules || []).filter((r: any) => r.isActive);
     const scheduledThreshold = cachedConfig.scheduledThreshold || 30;
+    const scheduledConfig = {
+      pastSlot: cachedConfig.scheduledPastSlot,
+      runningSlot: cachedConfig.scheduledRunningSlot
+    };
 
     // 3. Fetch Matrix Data & Regions from GAS
     const baseUrl = (process.env.GAS_API_URL || "https://script.google.com/macros/s/AKfycbxUVldHO9dPY9uTfuCc-A_RZUhkyngPQvMDpMC31nrjZV-SXWH2ZzXWIyDh3HDD_Zom/exec");
@@ -70,7 +74,7 @@ export async function runMonitorTick(db: any, messaging: any) {
       storeToRegion[String(r.storeId).trim()] = String(r.region).trim();
     });
 
-    const newAlerts = detectAlerts(matrixData, escalationRules as any, existingAlertIds, scheduledThreshold, storeToRegion);
+    const newAlerts = detectAlerts(matrixData, escalationRules as any, existingAlertIds, scheduledThreshold, storeToRegion, scheduledConfig);
     
     // 6. Auto-Escalation Logic (3-minute cooldown) - Always run this
     const nowTime = Date.now();

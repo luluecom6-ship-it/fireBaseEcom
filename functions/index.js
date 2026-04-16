@@ -49,7 +49,7 @@ const parseSlot = (slot) => {
   return { start: parseTime(startStr), end: parseTime(endStr) };
 };
 
-function detectAlerts(matrixData, escalationRules, existingAlertIds, scheduledThreshold = 30, storeToRegion = {}) {
+function detectAlerts(matrixData, escalationRules, existingAlertIds, scheduledThreshold = 30, storeToRegion = {}, scheduledConfig = {}) {
   const results = [];
   const normalize = (s) => (s || "").toString().toUpperCase().replace(/\s+/g, '').trim();
   const activeRules = escalationRules.filter(r => r.isActive);
@@ -103,16 +103,40 @@ function detectAlerts(matrixData, escalationRules, existingAlertIds, scheduledTh
     const slotInfo = parseSlot(item.slot);
     if (!slotInfo) return;
     const status = (item.status || "").toUpperCase().trim();
+    const itemStoreId = String(item.storeID || "").trim();
+    const itemRegion = storeToRegion[itemStoreId] || "";
+
     let shouldTrigger = false;
+    let triggerType = null;
+
     if (nowMins >= slotInfo.end) {
       shouldTrigger = true;
+      triggerType = 'PAST';
     } else if (nowMins >= slotInfo.start) {
       if (PREP_STATUSES.includes(status)) {
         shouldTrigger = true;
+        triggerType = 'RUNNING';
       } else if (DELIVERY_STATUSES.includes(status) && nowMins >= slotInfo.end - scheduledThreshold) {
         shouldTrigger = true;
+        triggerType = 'RUNNING';
       }
     }
+
+    // Apply Scheduled Configuration Toggles and Regions
+    if (shouldTrigger && triggerType && scheduledConfig) {
+      const config = triggerType === 'PAST' ? scheduledConfig.pastSlot : scheduledConfig.runningSlot;
+      if (config) {
+        // Condition 1: Check if Active
+        if (config.isActive === false) shouldTrigger = false;
+        
+        // Condition 2: Check Region
+        if (shouldTrigger && config.regions && config.regions.length > 0) {
+          const matchesRegion = config.regions.includes('All') || config.regions.includes(itemRegion);
+          if (!matchesRegion) shouldTrigger = false;
+        }
+      }
+    }
+
     if (shouldTrigger) {
       const alertKey = `SCHED|${item.orderID}|${status}|${item.slot}`.toLowerCase().trim();
       if (!existingAlertIds.has(alertKey)) {

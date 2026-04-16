@@ -12,6 +12,10 @@ export function useSystemConfig(
   const [escalationRules, setEscalationRules] = useState<EscalationRule[]>([]);
   const [maxImages, setMaxImages] = useState(1);
   const [scheduledThreshold, setScheduledThreshold] = useState(15);
+  const [scheduledPastSlotActive, setScheduledPastSlotActive] = useState(true);
+  const [scheduledRunningSlotActive, setScheduledRunningSlotActive] = useState(true);
+  const [scheduledPastSlotRegions, setScheduledPastSlotRegions] = useState<string[]>(['All']);
+  const [scheduledRunningSlotRegions, setScheduledRunningSlotRegions] = useState<string[]>(['All']);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   // Use Firestore for real-time config
@@ -31,6 +35,14 @@ export function useSystemConfig(
         if (typeof data.scheduledThreshold === 'number') {
           setScheduledThreshold(data.scheduledThreshold);
         }
+        if (data.scheduledPastSlot) {
+          setScheduledPastSlotActive(data.scheduledPastSlot.isActive ?? true);
+          setScheduledPastSlotRegions(data.scheduledPastSlot.regions || ['All']);
+        }
+        if (data.scheduledRunningSlot) {
+          setScheduledRunningSlotActive(data.scheduledRunningSlot.isActive ?? true);
+          setScheduledRunningSlotRegions(data.scheduledRunningSlot.regions || ['All']);
+        }
       } else {
         // Default rules if nothing in Firestore yet
         const defaultRules = [
@@ -40,6 +52,10 @@ export function useSystemConfig(
         setEscalationRules(defaultRules);
         setMaxImages(1);
         setScheduledThreshold(15);
+        setScheduledPastSlotActive(true);
+        setScheduledRunningSlotActive(true);
+        setScheduledPastSlotRegions(['All']);
+        setScheduledRunningSlotRegions(['All']);
       }
     }, (error) => {
       console.error("Firestore config error:", error);
@@ -62,6 +78,14 @@ export function useSystemConfig(
         escalationRules,
         maxImages,
         scheduledThreshold,
+        scheduledPastSlot: {
+          isActive: scheduledPastSlotActive,
+          regions: scheduledPastSlotRegions
+        },
+        scheduledRunningSlot: {
+          isActive: scheduledRunningSlotActive,
+          regions: scheduledRunningSlotRegions
+        },
         updatedAt: new Date().toISOString()
       });
       
@@ -87,7 +111,17 @@ export function useSystemConfig(
     } finally {
       setIsSavingConfig(false);
     }
-  }, [escalationRules, maxImages, scheduledThreshold, showToast, user]);
+  }, [
+    escalationRules, 
+    maxImages, 
+    scheduledThreshold, 
+    scheduledPastSlotActive, 
+    scheduledPastSlotRegions, 
+    scheduledRunningSlotActive, 
+    scheduledRunningSlotRegions, 
+    showToast, 
+    user
+  ]);
 
   return { 
     escalationRules, 
@@ -96,6 +130,14 @@ export function useSystemConfig(
     setMaxImages, 
     scheduledThreshold,
     setScheduledThreshold,
+    scheduledPastSlotActive,
+    setScheduledPastSlotActive,
+    scheduledRunningSlotActive,
+    setScheduledRunningSlotActive,
+    scheduledPastSlotRegions,
+    setScheduledPastSlotRegions,
+    scheduledRunningSlotRegions,
+    setScheduledRunningSlotRegions,
     isSavingConfig, 
     saveSystemConfig 
   };

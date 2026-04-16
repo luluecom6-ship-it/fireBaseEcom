@@ -106,6 +106,10 @@ export default function App() {
   const { 
     escalationRules, setEscalationRules, maxImages, setMaxImages, 
     scheduledThreshold, setScheduledThreshold,
+    scheduledPastSlotActive, setScheduledPastSlotActive,
+    scheduledRunningSlotActive, setScheduledRunningSlotActive,
+    scheduledPastSlotRegions, setScheduledPastSlotRegions,
+    scheduledRunningSlotRegions, setScheduledRunningSlotRegions,
     saveSystemConfig, isSavingConfig 
   } = useSystemConfig(user, showToast);
 
@@ -322,6 +326,14 @@ export default function App() {
             setEscalationRules={setEscalationRules}
             maxImages={maxImages}
             setMaxImages={setMaxImages}
+            scheduledPastSlotActive={scheduledPastSlotActive}
+            setScheduledPastSlotActive={setScheduledPastSlotActive}
+            scheduledRunningSlotActive={scheduledRunningSlotActive}
+            setScheduledRunningSlotActive={setScheduledRunningSlotActive}
+            scheduledPastSlotRegions={scheduledPastSlotRegions}
+            setScheduledPastSlotRegions={setScheduledPastSlotRegions}
+            scheduledRunningSlotRegions={scheduledRunningSlotRegions}
+            setScheduledRunningSlotRegions={setScheduledRunningSlotRegions}
             onSaveConfig={saveSystemConfig}
             isSavingConfig={isSavingConfig}
             scheduledThreshold={scheduledThreshold}

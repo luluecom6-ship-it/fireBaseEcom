@@ -30,6 +30,14 @@ interface AdminProps {
   isSavingConfig: boolean;
   scheduledThreshold: number;
   setScheduledThreshold: (num: number) => void;
+  scheduledPastSlotActive: boolean;
+  setScheduledPastSlotActive: (val: boolean) => void;
+  scheduledRunningSlotActive: boolean;
+  setScheduledRunningSlotActive: (val: boolean) => void;
+  scheduledPastSlotRegions: string[];
+  setScheduledPastSlotRegions: (val: string[]) => void;
+  scheduledRunningSlotRegions: string[];
+  setScheduledRunningSlotRegions: (val: string[]) => void;
   onGoogleLogin: () => void;
   onEmailLogin: (email: string, pass: string) => Promise<void>;
   isFirebaseAuthenticated: boolean;
@@ -52,6 +60,14 @@ export const Admin: React.FC<AdminProps> = ({
   isSavingConfig,
   scheduledThreshold,
   setScheduledThreshold,
+  scheduledPastSlotActive,
+  setScheduledPastSlotActive,
+  scheduledRunningSlotActive,
+  setScheduledRunningSlotActive,
+  scheduledPastSlotRegions,
+  setScheduledPastSlotRegions,
+  scheduledRunningSlotRegions,
+  setScheduledRunningSlotRegions,
   onGoogleLogin,
   onEmailLogin,
   isFirebaseAuthenticated,
@@ -560,6 +576,147 @@ export const Admin: React.FC<AdminProps> = ({
                       </td>
                     </tr>
                   ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Scheduled Alerts Configuration */}
+        {String(user.role || "").toLowerCase().trim() === 'admin' && (
+          <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden mt-6">
+            <div className="p-4 sm:p-6 bg-indigo-50/50 border-b border-indigo-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
+                <Clock size={18} className="text-indigo-600 sm:hidden" />
+                <Clock size={20} className="text-indigo-600 hidden sm:block" />
+                Scheduled Alerts Config
+              </h4>
+              <p className="text-[9px] font-black text-slate-400 mt-1 uppercase tracking-wider">Independent of threshold settings</p>
+            </div>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full text-left min-w-[500px]">
+                <thead>
+                  <tr className="bg-slate-50/30 border-b border-slate-100">
+                    <th className="p-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Alert Condition</th>
+                    <th className="p-4 text-[9px] font-black text-slate-400 uppercase tracking-widest px-8">Region Selection</th>
+                    <th className="p-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Active</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {/* Past Slot Condition */}
+                  <tr className="hover:bg-indigo-50/10 transition-colors">
+                    <td className="p-4">
+                      <p className="text-xs font-black text-slate-700">Past Slot (Missed Delivery)</p>
+                      <p className="text-[9px] font-bold text-slate-400 mt-0.5">Alerts when currentTime {'>'}= slotEnd</p>
+                    </td>
+                    <td className="p-4 px-8">
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => setScheduledPastSlotRegions(['All'])}
+                          className={cn(
+                            "px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all",
+                            scheduledPastSlotRegions.includes('All') 
+                              ? "bg-indigo-600 text-white border-indigo-600" 
+                              : "bg-white text-slate-400 border-slate-100"
+                          )}
+                        >
+                          All Regions
+                        </button>
+                        {availableRegions.map(reg => (
+                          <button
+                            key={reg}
+                            onClick={() => {
+                              if (scheduledPastSlotRegions.includes('All')) {
+                                setScheduledPastSlotRegions([reg]);
+                              } else if (scheduledPastSlotRegions.includes(reg)) {
+                                const next = scheduledPastSlotRegions.filter(r => r !== reg);
+                                setScheduledPastSlotRegions(next.length === 0 ? ['All'] : next);
+                              } else {
+                                setScheduledPastSlotRegions([...scheduledPastSlotRegions, reg]);
+                              }
+                            }}
+                            className={cn(
+                              "px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all",
+                              scheduledPastSlotRegions.includes(reg) && !scheduledPastSlotRegions.includes('All')
+                                ? "bg-indigo-600 text-white border-indigo-600" 
+                                : "bg-white text-slate-400 border-slate-100"
+                            )}
+                          >
+                            {reg}
+                          </button>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="p-4 text-center">
+                      <button 
+                        onClick={() => setScheduledPastSlotActive(!scheduledPastSlotActive)}
+                        className={cn(
+                          "h-6 w-10 rounded-full relative transition-all mx-auto",
+                          scheduledPastSlotActive ? "bg-indigo-500" : "bg-slate-200"
+                        )}
+                      >
+                        <div className={cn("absolute top-1 h-4 w-4 bg-white rounded-full transition-all", scheduledPastSlotActive ? "right-1" : "left-1")}></div>
+                      </button>
+                    </td>
+                  </tr>
+
+                  {/* Running Slot Condition */}
+                  <tr className="hover:bg-indigo-50/10 transition-colors">
+                    <td className="p-4">
+                      <p className="text-xs font-black text-slate-700">Running Slot (In Progress)</p>
+                      <p className="text-[9px] font-bold text-slate-400 mt-0.5">Alerts for Prep or Near-End Delivery stages</p>
+                    </td>
+                    <td className="p-4 px-8">
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => setScheduledRunningSlotRegions(['All'])}
+                          className={cn(
+                            "px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all",
+                            scheduledRunningSlotRegions.includes('All') 
+                              ? "bg-indigo-600 text-white border-indigo-600" 
+                              : "bg-white text-slate-400 border-slate-100"
+                          )}
+                        >
+                          All Regions
+                        </button>
+                        {availableRegions.map(reg => (
+                          <button
+                            key={reg}
+                            onClick={() => {
+                              if (scheduledRunningSlotRegions.includes('All')) {
+                                setScheduledRunningSlotRegions([reg]);
+                              } else if (scheduledRunningSlotRegions.includes(reg)) {
+                                const next = scheduledRunningSlotRegions.filter(r => r !== reg);
+                                setScheduledRunningSlotRegions(next.length === 0 ? ['All'] : next);
+                              } else {
+                                setScheduledRunningSlotRegions([...scheduledRunningSlotRegions, reg]);
+                              }
+                            }}
+                            className={cn(
+                              "px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all",
+                              scheduledRunningSlotRegions.includes(reg) && !scheduledRunningSlotRegions.includes('All')
+                                ? "bg-indigo-600 text-white border-indigo-600" 
+                                : "bg-white text-slate-400 border-slate-100"
+                            )}
+                          >
+                            {reg}
+                          </button>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="p-4 text-center">
+                      <button 
+                        onClick={() => setScheduledRunningSlotActive(!scheduledRunningSlotActive)}
+                        className={cn(
+                          "h-6 w-10 rounded-full relative transition-all mx-auto",
+                          scheduledRunningSlotActive ? "bg-indigo-500" : "bg-slate-200"
+                        )}
+                      >
+                        <div className={cn("absolute top-1 h-4 w-4 bg-white rounded-full transition-all", scheduledRunningSlotActive ? "right-1" : "left-1")}></div>
+                      </button>
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>

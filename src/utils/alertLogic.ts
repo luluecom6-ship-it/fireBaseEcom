@@ -62,7 +62,11 @@ export function detectAlerts(
   escalationRules: EscalationRule[],
   existingAlertIds: Set<string>,
   scheduledThreshold: number = 30,
-  storeToRegion: Record<string, string> = {}
+  storeToRegion: Record<string, string> = {},
+  scheduledConfig?: {
+    pastSlot?: { isActive: boolean, regions: string[] };
+    runningSlot?: { isActive: boolean, regions: string[] };
+  }
 ): AlertTriggerResult[] {
   const results: AlertTriggerResult[] = [];
   const normalize = (s: string) => (s || "").toString().toUpperCase().replace(/\s+/g, '').trim();
@@ -130,15 +134,37 @@ export function detectAlerts(
     if (!slotInfo) return;
 
     const status = (item.status || "").toUpperCase().trim();
+    const itemStoreId = String(item.storeID || "").trim();
+    const itemRegion = storeToRegion[itemStoreId] || "";
+    
     let shouldTrigger = false;
+    let triggerType: 'PAST' | 'RUNNING' | null = null;
 
     if (nowMins >= slotInfo.end) {
       shouldTrigger = true;
+      triggerType = 'PAST';
     } else if (nowMins >= slotInfo.start) {
       if (PREP_STATUSES.includes(status)) {
         shouldTrigger = true;
+        triggerType = 'RUNNING';
       } else if (DELIVERY_STATUSES.includes(status) && nowMins >= slotInfo.end - scheduledThreshold) {
         shouldTrigger = true;
+        triggerType = 'RUNNING';
+      }
+    }
+
+    // Apply Scheduled Configuration Toggles and Regions
+    if (shouldTrigger && triggerType && scheduledConfig) {
+      const config = triggerType === 'PAST' ? scheduledConfig.pastSlot : scheduledConfig.runningSlot;
+      if (config) {
+        // Condition 1: Check if Active
+        if (config.isActive === false) shouldTrigger = false;
+        
+        // Condition 2: Check Region
+        if (shouldTrigger && config.regions && config.regions.length > 0) {
+          const matchesRegion = config.regions.includes('All') || config.regions.includes(itemRegion);
+          if (!matchesRegion) shouldTrigger = false;
+        }
       }
     }
 
