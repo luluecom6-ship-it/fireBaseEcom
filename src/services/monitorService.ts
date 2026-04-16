@@ -167,7 +167,8 @@ export async function runMonitorTick(db: any, messaging: any) {
             data: {
               orderId: alert.item.orderID,
               type: "alert",
-              alertId: alert.alertKey
+              alertId: alert.alertKey,
+              click_action: "/" // Hint for the service worker
             },
             tokens: tokens
           };

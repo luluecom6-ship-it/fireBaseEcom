@@ -1,6 +1,6 @@
-# Project Context: Version 4.0 (Advanced Alerting & Supervisor Access)
+# Project Context: Version 4.1 (Granular Alert Configuration)
 
-Whenever the user refers to **Version 4.0**, it refers to the application state as of April 14, 2026, with the following core features and structure:
+Whenever the user refers to **Version 4.1**, it refers to the application state as of April 16, 2026, with the following core features and structure:
 
 ## Core Features
 1. **Matrix Intelligence Dashboard**:
@@ -10,10 +10,11 @@ Whenever the user refers to **Version 4.0**, it refers to the application state 
    - Normalized key matching for robust data display.
 
 2. **Advanced Alerting System**:
-   - **Quick Commerce**: Continuous alerting that re-triggers on ageing bucket transitions if status remains unchanged. Supports "at least" bucket matching thresholds.
-   - **Scheduled Delivery**: Complex logic for past slots (instant alert), running slots (prep phase alerts), and delivery phase alerts (configurable threshold).
+   - **Quick Commerce**: Continuous alerting that re-triggers on ageing bucket transitions if status remains unchanged. Supports "at least" bucket matching thresholds and region-wise selection.
+   - **Scheduled Commerce**: Enhanced logic for past slots (instant alert) and running slots (prep/delivery alerts). 
+   - **Configurable Toggles**: Admins can now independently enable/disable "Past Slot" and "Running Slot" alert conditions.
+   - **Regional Filtering**: Added region-wise selection for scheduled alerts, ensuring alerts are only broadcasted for configured areas (e.g., KSA-CR, KSA-ER).
    - **Visual Distinction**: Indigo theme for Scheduled alerts, Amber for Quick alerts, and Red for Escalated alerts.
-   - **Configurable Thresholds**: Admin-controlled alert timing (15m, 30m, 45m, 60m) for scheduled deliveries.
 
 3. **Backend Monitor & FCM**:
    - **System Supervisor**: A 24/7 background worker running in the cloud (Express server) that polls the Google Sheet every 60 seconds.
@@ -38,4 +39,4 @@ Whenever the user refers to **Version 4.0**, it refers to the application state 
 - **Deployment**: Configured for Vercel (Project: `fire-base-ecom`, ID: `prj_tz4mVBUk0Lbrz0KxK190eWmOqIKQ`).
 
 ## Persistence Instruction
-This file serves as the definitive reference for Version 4.0. All future modifications should build upon this baseline unless otherwise specified.
+This file serves as the definitive reference for Version 4.1. All future modifications should build upon this baseline unless otherwise specified.

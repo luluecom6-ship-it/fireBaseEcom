@@ -22,8 +22,34 @@ messaging.onBackgroundMessage((payload) => {
   const notificationTitle = payload.notification.title;
   const notificationOptions = {
     body: payload.notification.body,
-    icon: '/favicon.ico'
+    icon: '/favicon.ico',
+    data: payload.data || {}
   };
 
   self.registration.showNotification(notificationTitle, notificationOptions);
+});
+
+// Handle notification click to open or focus the app
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      const data = event.notification.data || {};
+      const targetUrl = data.click_action || '/';
+      
+      // If a window client is already open, focus it
+      if (clientList.length > 0) {
+        let client = clientList[0];
+        for (let i = 0; i < clientList.length; i++) {
+          if (clientList[i].focused) {
+            client = clientList[i];
+          }
+        }
+        return client.focus();
+      }
+      // Otherwise, open a new window
+      return self.clients.openWindow(targetUrl);
+    })
+  );
 });
