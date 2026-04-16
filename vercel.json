@@ -1,10 +1,9 @@
 {
-  "name": "fire-base-ecom",
-  "framework": "vite",
+  "version": 2,
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
+      "source": "/api/proxy-gas",
+      "destination": "/api/proxy-gas.ts"
     },
     {
       "source": "/(.*)",

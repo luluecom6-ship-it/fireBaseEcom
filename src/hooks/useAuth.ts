@@ -110,8 +110,13 @@ export function useAuth() {
       try {
         urlObj = new URL(baseUrl);
       } catch (e) {
-        urlObj = new URL(baseUrl, window.location.origin);
+        // Handle relative paths by prepending the current origin
+        const origin = window.location.origin;
+        urlObj = new URL(baseUrl, origin);
       }
+      
+      console.log(`[useAuth] Fetching from: ${urlObj.toString()}`);
+      
       urlObj.searchParams.set('action', 'login');
       urlObj.searchParams.set('username', username);
       urlObj.searchParams.set('password', password);
@@ -124,8 +129,12 @@ export function useAuth() {
       try {
         data = JSON.parse(text);
       } catch (parseErr) {
-        console.error("[useAuth] Failed to parse JSON response:", text.substring(0, 100));
-        return { success: false, message: "Server returned non-JSON response. Check API configuration." };
+        if (text.trim().toLowerCase().startsWith('<!doctype html>')) {
+          console.error("[useAuth] HTML response received. Possible causes:\n1. Backend proxy route (/api/proxy-gas) is not configured\n2. Vercel deployment missing serverless functions\n3. GAS script is erroring out and returning an error page");
+          return { success: false, message: "Backend communication error (HTML received instead of JSON). Check deployment settings." };
+        }
+        console.error("[useAuth] Failed to parse JSON response:", text.substring(0, 200));
+        return { success: false, message: "Malformed response from server. Check API configuration." };
       }
       
       const userData = (data.status === "success" || data.empId) ? data : null;

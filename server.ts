@@ -24,6 +24,7 @@ async function startServer() {
   // GAS Proxy Route - Top priority to avoid interception
   app.all("/api/proxy-gas", async (req, res) => {
     let gasUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
+    const source = process.env.GAS_API_URL ? "GAS_API_URL" : (process.env.VITE_GAS_API_URL ? "VITE_GAS_API_URL" : "FALLBACK");
     
     // Fallback to the known working URL if env is missing or invalid
     if (!gasUrl || gasUrl === "undefined" || !gasUrl.startsWith("http")) {
@@ -36,7 +37,7 @@ async function startServer() {
       try {
         target = new URL(gasUrl);
       } catch (e) {
-        console.error(`[Proxy] Invalid GAS URL: ${gasUrl}`);
+        console.error(`[Proxy] Invalid GAS URL via ${source}: ${gasUrl}`);
         return res.status(500).json({ status: "error", message: "Invalid GAS URL configured" });
       }
 
