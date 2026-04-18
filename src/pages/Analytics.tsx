@@ -279,7 +279,10 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                   <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">High Risk</span>
                 </div>
                 <p className="text-xl sm:text-3xl font-black text-slate-900">
-                  {(displayData?.quick || []).filter(d => d.bucket.includes("45Min+") || d.bucket.includes("60Min+") || d.bucket.includes("45-50") || d.bucket.includes("50-55") || d.bucket.includes("55-60")).length}
+                  {(displayData?.quick || []).filter(d => {
+                    const b = String(d.bucket || "");
+                    return b.includes("45Min+") || b.includes("60Min+") || b.includes("45-50") || b.includes("50-55") || b.includes("55-60");
+                  }).length}
                 </p>
               </div>
               <div className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] shadow-sm border border-slate-100">
@@ -350,7 +353,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                         data={(() => {
                           let low = 0, mid = 0, high = 0;
                           (displayData?.quick || []).forEach(item => {
-                            const b = item.bucket || "";
+                            const b = String(item.bucket || "");
                             if (b.includes("60Min+") || b.includes("45-50") || b.includes("50-55") || b.includes("55-60")) high++;
                             else if (b.includes("20-25") || b.includes("25-30") || b.includes("30-35") || b.includes("35-40") || b.includes("40-45")) mid++;
                             else low++;
@@ -371,7 +374,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                         {(() => {
                           let low = 0, mid = 0, high = 0;
                           (displayData?.quick || []).forEach(item => {
-                            const b = item.bucket || "";
+                            const b = String(item.bucket || "");
                             if (b.includes("60Min+") || b.includes("45-50") || b.includes("50-55") || b.includes("55-60")) high++;
                             else if (b.includes("20-25") || b.includes("25-30") || b.includes("30-35") || b.includes("35-40") || b.includes("40-45")) mid++;
                             else low++;

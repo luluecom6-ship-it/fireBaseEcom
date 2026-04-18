@@ -47,8 +47,10 @@ export const Matrix: React.FC<MatrixProps> = ({
   const storeToRegion = React.useMemo(() => {
     const mapping: Record<string, string> = {};
     if (adminData.regions) {
-      adminData.regions.forEach(r => {
-        mapping[String(r.storeId).trim()] = r.region;
+      adminData.regions.forEach((r: any) => {
+        const sid = String(r.storeId || r.storeid || "").trim();
+        const reg = String(r.region || "").trim();
+        if (sid) mapping[sid] = reg;
       });
     }
     return mapping;

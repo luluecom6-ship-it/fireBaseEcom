@@ -23,8 +23,14 @@ export async function robustFetch(
     if (!response.ok && response.status !== 0) {
       // Log the body for debugging if it's not JSON
       const text = await response.text();
-      console.error(`[Fetch] SERVER ERROR ${response.status}: ${text.substring(0, 200)}`);
+      const contentType = response.headers.get('content-type') || 'unknown';
+      console.error(`[Fetch] SERVER ERROR ${response.status} (${contentType}): ${text.substring(0, 500)}`);
       
+      // Detailed error detection for Google Apps Script HTML errors
+      if (text.includes('<!DOCTYPE html>') || text.includes('goog-script-error') || text.includes('Fehler')) {
+        console.error(`[Fetch] DETECTED: Google Apps Script HTML error page returned. Status: ${response.status}`);
+      }
+
       // If the proxy returns our JSON error message about GAS error pages
       if (text.includes('"message"') && text.includes('Google Apps Script')) {
         try {
@@ -60,17 +66,20 @@ export async function robustFetch(
 /**
  * Parses a date string from the server, ensuring it's treated as UTC if no timezone is present.
  */
-export function parseServerDate(dateStr: string | null | undefined): Date {
+export function parseServerDate(dateStr: any): Date {
   if (!dateStr) return new Date();
   
+  // Coerce to string safely
+  const str = String(dateStr);
+  
   // If it's already a valid ISO string with timezone, just parse it
-  if (dateStr.includes('Z') || dateStr.includes('+')) {
-    return new Date(dateStr);
+  if (str.includes('Z') || str.includes('+')) {
+    return new Date(str);
   }
   
   // Handle M/D/YYYY or MM/DD/YYYY HH:mm:ss
-  if (dateStr.includes('/')) {
-    const parts = dateStr.split(/[\s,T]+/);
+  if (str.includes('/')) {
+    const parts = str.split(/[\s,T]+/);
     const datePart = parts[0];
     const timePart = parts[1] || "00:00:00";
     const [m, d, y] = datePart.split('/');
@@ -81,10 +90,10 @@ export function parseServerDate(dateStr: string | null | undefined): Date {
   }
   
   // If it's a simple YYYY-MM-DD HH:mm:ss format, assume UTC and add 'Z'
-  const isoStr = dateStr.replace(' ', 'T');
+  const isoStr = str.replace(' ', 'T');
   if (isoStr.includes('T') && !isoStr.includes('Z')) {
     return new Date(isoStr + 'Z');
   }
   
-  return new Date(dateStr);
+  return new Date(str);
 }

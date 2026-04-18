@@ -14,8 +14,7 @@ service cloud.firestore {
       return isAuthenticated() &&
         (
           (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
-          (request.auth.token.email == "luluecom6@gmail.com" && request.auth.token.email_verified == true) ||
-          (request.auth.token.email == "505011@sa.lulumea.com")
+          (request.auth.token.email in ["luluecom6@gmail.com", "505011@sa.lulumea.com"] && request.auth.token.email_verified == true)
         );
     }
 
@@ -23,8 +22,23 @@ service cloud.firestore {
       return isAuthenticated() &&
         (
           isAdmin() ||
-          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'supervisor')
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['supervisor', 'manager', 'store'])
         );
+    }
+
+    function isValidUser(data) {
+      return data.name is string && data.name.size() < 100 &&
+             data.role in ['admin', 'supervisor', 'picker', 'user', 'manager', 'store', 'driver'] &&
+             (!('email' in data) || (data.email is string && data.email.size() < 100)) &&
+             (!('storeId' in data) || (data.storeId is string && data.storeId.size() < 20)) &&
+             (!('region' in data) || (data.region is string && data.region.size() < 50));
+    }
+
+    // Heartbeat logic: Allow partial creation/update for presence
+    function isHeartbeat(data) {
+      return data.keys().hasOnly(['lastSeen', 'updatedAt', 'soundAlertsEnabled', 'empId', 'name', 'role', 'storeId', 'email', 'status', 'region']) &&
+             data.keys().hasAny(['lastSeen', 'updatedAt']);
     }
 
     // ===============================================================
@@ -33,13 +47,33 @@ service cloud.firestore {
 
     // User profiles
     match /users/{userId} {
-      allow read: if isSupervisor() || (isAuthenticated() && request.auth.uid == userId);
-      allow create, update: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow read: if isAuthenticated();
+      
+      allow create: if isAuthenticated() && 
+                      request.auth.uid == userId && 
+                      (
+                        isValidUser(request.resource.data) || 
+                        (request.resource.data.keys().hasAll(['lastSeen']) && request.resource.data.keys().size() <= 5)
+                      );
+      
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        (
+          request.auth.uid == userId && 
+          (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeen', 'soundAlertsEnabled', 'updatedAt']) ||
+            (
+              isValidUser(request.resource.data) && 
+              (!('role' in request.resource.data) || request.resource.data.role == resource.data.role)
+            )
+          )
+        )
+      );
     }
 
     // System configuration (Escalation Matrix)
     match /system/config {
-      allow read: if true;
+      allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
     
@@ -51,15 +85,21 @@ service cloud.firestore {
 
     // Push Notification Queue
     match /push_queue/{notificationId} {
-      allow read: if true;
+      allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
 
     // Real-time Alerts
     match /alerts/{alertId} {
-      allow read: if true;
-      allow create, update: if true;
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated(); // Restrict creation to authenticated users
       allow delete: if isAdmin();
+    }
+
+    // User Presence/Heartbeats
+    match /presence/{userId} {
+      allow read: if isSupervisor();
+      allow write: if isAuthenticated() && request.auth.uid == userId;
     }
 
     // Default deny

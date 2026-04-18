@@ -3,7 +3,8 @@ import { motion } from 'motion/react';
 import { 
   LogOut, Clock, Package, Search, ShieldCheck, 
   History, LayoutDashboard, BarChart3, ArrowRight,
-  AlertCircle, Zap, X, Download, RefreshCw
+  AlertCircle, Zap, X, Download, RefreshCw,
+  Volume2, VolumeX
 } from 'lucide-react';
 import { User, AttendanceStatus, MatrixData } from '../types';
 import { RealTimeClock } from '../components/common/RealTimeClock';
@@ -27,6 +28,8 @@ interface DashboardProps {
   testBuzzer: () => void;
   isInstallable: boolean;
   showInstallPrompt: () => Promise<void>;
+  soundAlertsEnabled: boolean;
+  onToggleSound: () => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -45,7 +48,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
   testAlert,
   testBuzzer,
   isInstallable,
-  showInstallPrompt
+  showInstallPrompt,
+  soundAlertsEnabled,
+  onToggleSound
 }) => {
   const [isIOS, setIsIOS] = useState(false);
 
@@ -102,7 +107,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
         
         <div className="flex items-start justify-between mb-6 relative z-10">
           <div>
-            <h2 className="text-2xl sm:text-3xl font-black tracking-tight">Hello, {user.name.split(' ')[0]} 👋</h2>
+            <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
+              Hello, {String(user?.name || "User").split(' ')[0]} 👋
+            </h2>
             <div className="flex items-center gap-3 mt-0.5">
               <p className="text-blue-200 font-bold text-xs sm:text-sm flex items-center gap-2">
                 <span className="px-1.5 py-0.5 bg-blue-800 rounded text-[9px] uppercase tracking-widest">{user.role}</span>
@@ -118,8 +125,83 @@ export const Dashboard: React.FC<DashboardProps> = ({
             
             <div className="mt-2 flex items-center gap-2 text-[10px] font-black text-blue-200/60 uppercase tracking-widest">
               <RefreshCw size={10} className={cn(isMatrixLoading && "animate-spin")} />
-              Last Sync: {matrixData?.timestamp ? new Date(matrixData.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '---'}
+              Last Sync: {matrixData?.timestamp && !isNaN(new Date(matrixData.timestamp).getTime()) ? new Date(matrixData.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '---'}
             </div>
+
+            <motion.div 
+              whileHover={{ scale: 1.02, translateY: -2 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={onToggleSound}
+              className={cn(
+                "mt-4 p-4 border rounded-2xl backdrop-blur-md cursor-pointer transition-all duration-500 relative overflow-hidden group",
+                soundAlertsEnabled 
+                  ? "bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_30px_-5px_rgba(16,185,129,0.4)]" 
+                  : "bg-white/5 border-white/10"
+              )}
+            >
+              {/* Hardware Ambient Glow */}
+              {soundAlertsEnabled && (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: [0.3, 0.6, 0.3] }}
+                  transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                  className="absolute inset-0 bg-emerald-500/5 pointer-events-none"
+                />
+              )}
+              
+              <div className="flex items-center justify-between relative z-10">
+                <div className="flex items-center gap-3">
+                  <div className={cn(
+                    "h-10 w-10 rounded-xl flex items-center justify-center transition-all duration-500 border",
+                    soundAlertsEnabled 
+                      ? "bg-emerald-500 text-white shadow-lg border-emerald-400" 
+                      : "bg-slate-800 text-slate-400 border-white/10"
+                  )}>
+                    {soundAlertsEnabled ? <Volume2 size={20} className="animate-pulse" /> : <VolumeX size={20} />}
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/90 font-mono">Audible Buzzer</p>
+                    <p className={cn(
+                      "text-[9px] font-bold mt-0.5 transition-colors",
+                      soundAlertsEnabled ? "text-emerald-400" : "text-white/40"
+                    )}>
+                      {soundAlertsEnabled ? "SYSTEM ACTIVE • PULSING" : "SYSTEM MUTED • STANDBY"}
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Custom Toggle Switch */}
+                <div 
+                  className={cn(
+                    "h-6 w-12 rounded-full relative transition-all duration-500 p-1 border shadow-inner",
+                    soundAlertsEnabled 
+                      ? "bg-emerald-500/40 border-emerald-500/50" 
+                      : "bg-white/10 border-white/20"
+                  )}
+                >
+                  <motion.div 
+                    animate={{ 
+                      x: soundAlertsEnabled ? 24 : 0,
+                      backgroundColor: soundAlertsEnabled ? "#10b981" : "#ffffff",
+                      boxShadow: soundAlertsEnabled ? "0 0 15px rgba(16,185,129,0.8)" : "0 2px 4px rgba(0,0,0,0.1)"
+                    }}
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    className="h-4 w-4 rounded-full"
+                  />
+                </div>
+              </div>
+              
+              {/* Scanline effect when active */}
+              {soundAlertsEnabled && (
+                <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-20">
+                  <motion.div 
+                    animate={{ y: ["-100%", "100%"] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                    className="h-1/2 w-full bg-gradient-to-b from-transparent via-emerald-400 to-transparent"
+                  />
+                </div>
+              )}
+            </motion.div>
 
             {notifPermission === "default" && (
               <motion.button
@@ -264,12 +346,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden p-0.5 shadow-inner">
                   <motion.div 
                     initial={{ width: 0 }}
-                    animate={{ 
-                      width: `${Math.min(((() => {
-                        const [h, m] = hoursWorked.split(":").map(Number);
-                        return h + m / 60;
-                      })() / 10) * 100, 100)}%` 
-                    }}
+                  animate={{ 
+                    width: `${Math.min(((() => {
+                      const hWorked = hoursWorked || "00:00";
+                      const [h, m] = hWorked.split(":").map(Number);
+                      return h + m / 60;
+                    })() / 10) * 100, 100)}%` 
+                  }}
                     className={cn("h-full rounded-full transition-all duration-1000", isShiftComplete ? "bg-emerald-500" : "bg-blue-600")}
                   ></motion.div>
                 </div>

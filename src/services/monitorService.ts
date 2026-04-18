@@ -1,57 +1,37 @@
-import axios from "axios";
 import { detectAlerts } from "../utils/alertLogic";
-
-let cachedConfig: any = null;
-let lastConfigFetch = 0;
-let tickCount = 0;
+import { executeGasRequest } from "./gasService";
 
 export async function runMonitorTick(db: any, messaging: any) {
   try {
-    tickCount++;
-    console.log(`[Monitor] Tick ${tickCount} started...`);
+    console.log(`[Monitor] Tick started...`);
     
-    // 0. Cleanup Old Alerts (Older than 24 hours) - Run only every 10 ticks (~30 mins)
-    if (tickCount % 10 === 1) {
-      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const oldAlertsSnap = await db.collection('alerts').where('timestamp', '<', twentyFourHoursAgo).limit(100).get();
-      if (!oldAlertsSnap.empty) {
-        const batch = db.batch();
-        oldAlertsSnap.docs.forEach((doc: any) => batch.delete(doc.ref));
-        await batch.commit();
-        console.log(`[Monitor] Cleaned up ${oldAlertsSnap.size} old alerts.`);
-      }
-    }
+    // 1. Fetch System Config
+    const configDoc = await db.collection('system').doc('config').get();
+    const config = configDoc.exists ? configDoc.data() : {};
     
-    // 1. Fetch System Config (Rules & Threshold) - Cache for 10 minutes
-    const now = Date.now();
-    if (!cachedConfig || now - lastConfigFetch > 600000) {
-      console.log("[Monitor] Fetching system config...");
-      const configDoc = await db.collection('system').doc('config').get();
-      cachedConfig = configDoc.exists ? configDoc.data() : {};
-      lastConfigFetch = now;
-    }
-    
-    const escalationRules = (cachedConfig.escalationRules || []).filter((r: any) => r.isActive);
-    const scheduledThreshold = cachedConfig.scheduledThreshold || 30;
+    const escalationRules = (config.escalationRules || []).filter((r: any) => r.isActive);
+    const scheduledThreshold = config.scheduledThreshold || 30;
     const scheduledConfig = {
-      pastSlot: cachedConfig.scheduledPastSlot,
-      runningSlot: cachedConfig.scheduledRunningSlot
+      pastSlot: config.scheduledPastSlot,
+      runningSlot: config.scheduledRunningSlot
     };
 
-    // 3. Fetch Matrix Data & Regions from GAS
-    const baseUrl = (process.env.GAS_API_URL || "https://script.google.com/macros/s/AKfycbxUVldHO9dPY9uTfuCc-A_RZUhkyngPQvMDpMC31nrjZV-SXWH2ZzXWIyDh3HDD_Zom/exec");
+    // 2. Fetch Matrix Data & Admin Data from GAS via common service
+    const baseUrl = (process.env.GAS_API_URL || "https://script.google.com/macros/s/AKfycbym9GP8SjMCgi23bsgU1Ex-Q08iczLyRwqnKJJl9P-2TEHCCv5H4tOy-Vr7XFUWneMJ/exec");
     
-    console.log("[Monitor] Fetching live matrix and admin data...");
+    console.log("[Monitor] Fetching data via gasService...");
+
+    // Using executeGasRequest ensures these requests are queued and cached
     const [matrixRes, adminRes] = await Promise.all([
-      axios.get(`${baseUrl}?action=getMatrixData&_t=${Date.now()}`),
-      axios.get(`${baseUrl}?action=getAdminData&_t=${Date.now()}`)
+      executeGasRequest({ method: 'GET', url: `${baseUrl}?action=getMatrixData` }, { cacheKey: `GET:${baseUrl}:action=getMatrixData` }),
+      executeGasRequest({ method: 'GET', url: `${baseUrl}?action=getAdminData` }, { cacheKey: `GET:${baseUrl}:action=getAdminData` })
     ]);
 
     const matrixRaw = matrixRes.data.status === "success" ? matrixRes.data.data : (matrixRes.data.data || matrixRes.data);
     const adminRaw = adminRes.data.status === "success" ? adminRes.data.data : (adminRes.data.data || adminRes.data);
     
     if (!matrixRaw || !adminRaw) {
-      console.log("[Monitor] Failed to fetch essential data from GAS.");
+      console.log("[Monitor] Essential data missing from GAS.");
       return;
     }
 

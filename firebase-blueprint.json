@@ -13,10 +13,35 @@
           "type": "number",
           "description": "Maximum number of images allowed for biometric attendance."
         },
+        "systemSoundEnabled": {
+          "type": "boolean",
+          "description": "Global toggle for system buzzers."
+        },
+        "scheduledThreshold": {
+          "type": "number",
+          "description": "Alert threshold for scheduled commerce."
+        },
         "updatedAt": {
           "type": "string",
           "format": "date-time"
         }
+      }
+    },
+    "User": {
+      "title": "User Profile",
+      "description": "User profile with role and presence tracking.",
+      "type": "object",
+      "properties": {
+        "empId": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "supervisor", "picker", "user", "driver", "manager", "store"] },
+        "storeId": { "type": "string" },
+        "region": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "status": { "type": "string" },
+        "lastSeen": { "type": "object", "description": "Firestore server timestamp" },
+        "soundAlertsEnabled": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       }
     },
     "Alert": {
@@ -31,12 +56,38 @@
         "status": { "type": "string", "enum": ["Pending", "Acknowledged"] },
         "managerStatus": { "type": "string", "enum": ["Pending", "Accepted"] },
         "escalation": { "type": "string", "enum": ["TRUE", "FALSE"] },
-        "timestamp": { "type": "string", "format": "date-time" },
+        "timestamp": { "type": "object", "description": "Firestore server timestamp" },
         "updatedAt": { "type": "string" }
+      }
+    },
+    "PushQueueItem": {
+      "title": "Push Notification Queue Item",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "targetRoles": { "type": "array" },
+        "timestamp": { "type": "object" },
+        "status": { "type": "string" },
+        "sender": { "type": "string" }
+      }
+    },
+    "Presence": {
+      "title": "User Presence",
+      "description": "Background heartbeat tracking for online status.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "lastSeen": { "type": "object" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       }
     }
   },
   "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile collection."
+    },
     "/system/config": {
       "schema": "SystemConfig",
       "description": "Singleton document for system-wide settings."
@@ -44,6 +95,14 @@
     "/alerts/{alertId}": {
       "schema": "Alert",
       "description": "Collection of active alerts synchronized across all devices."
+    },
+    "/push_queue/{notificationId}": {
+      "schema": "PushQueueItem",
+      "description": "Queue for background push notifications."
+    },
+    "/presence/{userId}": {
+      "schema": "Presence",
+      "description": "Real-time presence and heartbeat tracking."
     }
   }
 }

@@ -7,7 +7,8 @@ import { collection, query, onSnapshot, doc, setDoc, updateDoc, serverTimestamp,
 
 export function useAlerts(
   user: User | null,
-  showToast: (msg: string, type?: 'success' | 'error') => void
+  showToast: (msg: string, type?: 'success' | 'error') => void,
+  isFirebaseAuthenticated: boolean
 ) {
   const [activeAlerts, setActiveAlerts] = useState<ActiveAlert[]>([]);
   const [alertLogs, setAlertLogs] = useState<AlertLog[]>([]);
@@ -77,8 +78,7 @@ export function useAlerts(
       } catch (e) {
         urlObj = new URL(API_URL.trim(), window.location.origin);
       }
-      urlObj.searchParams.set('action', 'getAdminData');
-      urlObj.searchParams.set('type', 'alerts');
+      urlObj.searchParams.set('action', 'getalertlogs');
       urlObj.searchParams.set('_t', Date.now().toString());
       
       const res = await robustFetch(urlObj.toString());
@@ -160,17 +160,19 @@ export function useAlerts(
 
     const registerToken = async () => {
       try {
+        const fbUser = auth.currentUser;
+        if (!fbUser || !user) return;
+
         console.log("[useAlerts] Requesting FCM token...");
         const token = await requestForToken();
-        const fbUser = auth.currentUser;
-        if (token && fbUser) {
+        if (token) {
           const tokenRef = doc(db, 'fcm_tokens', fbUser.uid);
           await setDoc(tokenRef, {
             token,
-            userId: user.empId, // Keep the readable empId in the data
+            userId: user.empId || fbUser.uid, // Defensive: use UID if empId is missing
             fbUid: fbUser.uid,
             role: String(user.role || "").toLowerCase().trim(),
-            storeId: user.storeId,
+            storeId: user.storeId || "ALL",
             region: user.region || "",
             updatedAt: serverTimestamp()
           }, { merge: true });
@@ -186,7 +188,7 @@ export function useAlerts(
 
   // Push Notification Listener (for online users)
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isFirebaseAuthenticated) return;
 
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
     const q = query(
@@ -356,7 +358,7 @@ export function useAlerts(
 
   // Firestore Real-time Sync for Alerts
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isFirebaseAuthenticated) return;
 
     const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
     const alertsRef = collection(db, 'alerts');

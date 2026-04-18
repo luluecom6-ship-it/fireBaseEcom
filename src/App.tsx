@@ -20,6 +20,7 @@ import { useAdmin } from "./hooks/useAdmin";
 import { useAlerts } from "./hooks/useAlerts";
 import { useSystemConfig } from "./hooks/useSystemConfig";
 import { useAttendance } from "./hooks/useAttendance";
+import { useStaffStatus } from "./hooks/useStaffStatus";
 import { useToast } from "./hooks/useToast";
 import { usePWA } from "./hooks/usePWA";
 
@@ -57,6 +58,7 @@ export default function App() {
     loginWithEmail, 
     loginWithGoogle, 
     logout, 
+    toggleSound,
     setUser 
   } = useAuth();
   
@@ -93,7 +95,7 @@ export default function App() {
   } = useOrders(user, showToast, setDuplicateOrder, setSuccessOrder, setFullImage);
 
   const { 
-    adminData, fetchAdminData, handleResetAttendance 
+    adminData, fetchAdminData, fetchRegions, handleResetAttendance 
   } = useAdmin(user, showToast, setLoading);
 
   const { 
@@ -101,7 +103,7 @@ export default function App() {
     minimizedAlerts, setMinimizedAlerts, expandedAlertId, setExpandedAlertId,
     adminHiddenAlerts, requestNotificationPermission, testAlert, testBuzzer,
     lastBroadcast, setLastBroadcast
-  } = useAlerts(user, showToast);
+  } = useAlerts(user, showToast, isFirebaseAuthenticated);
 
   const { 
     escalationRules, setEscalationRules, maxImages, setMaxImages, 
@@ -110,8 +112,11 @@ export default function App() {
     scheduledRunningSlotActive, setScheduledRunningSlotActive,
     scheduledPastSlotRegions, setScheduledPastSlotRegions,
     scheduledRunningSlotRegions, setScheduledRunningSlotRegions,
+    soundAlertsEnabled, setSoundAlertsEnabled,
     saveSystemConfig, isSavingConfig 
-  } = useSystemConfig(user, showToast);
+  } = useSystemConfig(user, showToast, isFirebaseAuthenticated);
+
+  const { staffStatus } = useStaffStatus(user, isFirebaseAuthenticated);
 
   const { 
     attendanceStatus, hoursWorked, isShiftComplete, 
@@ -157,11 +162,13 @@ export default function App() {
   useEffect(() => {
     if (user) {
       if (page === "login") setPage("dashboard");
+      // Load essential metadata immediately for filters
+      fetchRegions();
       // fetchStatus, fetchMatrixData, and fetchAdminData are handled internally by hooks on initial load
     } else {
       setPage("login");
     }
-  }, [user]);
+  }, [user, fetchRegions]);
 
   // Background Refresh Handler: Trigger refresh when app returns to foreground
   useEffect(() => {
@@ -191,6 +198,33 @@ export default function App() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [user, fetchMatrixData, fetchAdminData, fetchStatus, page]);
 
+  useEffect(() => {
+    if (!user || !isFirebaseAuthenticated) return;
+    
+    // Initial heartbeat
+    const updatePresence = async () => {
+      try {
+        const { doc, setDoc, serverTimestamp } = await import('firebase/firestore');
+        const { db } = await import('./firebase');
+        const uid = auth.currentUser?.uid;
+        if (!uid) return;
+
+        const presenceRef = doc(db, 'presence', uid);
+        await setDoc(presenceRef, { 
+          uid,
+          lastSeen: serverTimestamp(),
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (e) {
+        console.error("Presence update failed", e);
+      }
+    };
+
+    updatePresence();
+    const interval = setInterval(updatePresence, 60000); // Pulse every minute
+    return () => clearInterval(interval);
+  }, [user, isFirebaseAuthenticated]);
+
   // Navigation Helper
   const navigateTo = useCallback((target: typeof page) => {
     const role = String(user?.role || "").toLowerCase().trim();
@@ -213,6 +247,21 @@ export default function App() {
       showToast(result.message || "Login failed", "error");
     }
   }, [login, showToast]);
+
+  const handleToggleSound = async (targetId?: string, forceVal?: boolean) => {
+    const currentVal = targetId ? (staffStatus.find(s => s.empId === targetId)?.soundAlertsEnabled !== false) : (user?.soundAlertsEnabled !== false);
+    const newVal = forceVal !== undefined ? forceVal : !currentVal;
+    
+    const res = await toggleSound(newVal, targetId);
+    if (res.success) {
+      if (!targetId) {
+        showToast(`Sound Alerts ${newVal ? "Active" : "Muted"}`, "info");
+      }
+      if (res.warning) console.warn(res.warning);
+    } else {
+      showToast(res.message || "Action blocked - Please Login with Google", "error");
+    }
+  };
 
   const renderPage = () => {
     if (!user || page === "login") {
@@ -246,6 +295,8 @@ export default function App() {
             testBuzzer={testBuzzer}
             isInstallable={isInstallable}
             showInstallPrompt={showInstallPrompt}
+            soundAlertsEnabled={user?.soundAlertsEnabled !== false}
+            onToggleSound={() => handleToggleSound()}
           />
         );
       case "upload":
@@ -336,6 +387,10 @@ export default function App() {
             setScheduledRunningSlotRegions={setScheduledRunningSlotRegions}
             onSaveConfig={saveSystemConfig}
             isSavingConfig={isSavingConfig}
+            systemSoundEnabled={soundAlertsEnabled}
+            setSystemSoundEnabled={setSoundAlertsEnabled}
+            setSoundAlertsEnabled={handleToggleSound}
+            staffStatus={staffStatus}
             scheduledThreshold={scheduledThreshold}
             setScheduledThreshold={setScheduledThreshold}
             navigateTo={navigateTo}
@@ -356,7 +411,28 @@ export default function App() {
           />
         );
       default:
-        return <Dashboard user={user} onLogout={logout} attendanceStatus={attendanceStatus} hoursWorked={hoursWorked} isShiftComplete={isShiftComplete} navigateTo={navigateTo} fetchAdminData={fetchAdminData} fetchMatrixData={fetchMatrixData} isMatrixLoading={isMatrixLoading} setShowEarlyPunchOutConfirm={setShowEarlyPunchOutConfirm} />;
+        return (
+          <Dashboard 
+            user={user} 
+            onLogout={logout} 
+            attendanceStatus={attendanceStatus} 
+            hoursWorked={hoursWorked} 
+            isShiftComplete={isShiftComplete} 
+            navigateTo={navigateTo} 
+            fetchAdminData={fetchAdminData} 
+            fetchMatrixData={fetchMatrixData} 
+            isMatrixLoading={isMatrixLoading} 
+            matrixData={matrixData}
+            setShowEarlyPunchOutConfirm={setShowEarlyPunchOutConfirm} 
+            requestNotificationPermission={requestNotificationPermission}
+            testAlert={testAlert}
+            testBuzzer={testBuzzer}
+            isInstallable={isInstallable}
+            showInstallPrompt={showInstallPrompt}
+            soundAlertsEnabled={user?.soundAlertsEnabled !== false}
+            onToggleSound={() => handleToggleSound()}
+          />
+        );
     }
   };
 
@@ -384,6 +460,7 @@ export default function App() {
         user={user}
         isInstallable={isInstallable}
         onInstall={showInstallPrompt}
+        onToggleSound={() => handleToggleSound()}
       />
       
       <AlertOverlay 
@@ -397,6 +474,7 @@ export default function App() {
         setMinimizedAlerts={setMinimizedAlerts}
         lastBroadcast={lastBroadcast}
         setLastBroadcast={setLastBroadcast}
+        soundAlertsEnabled={(user?.soundAlertsEnabled !== false) && soundAlertsEnabled}
       />
 
       <AnimatePresence mode="wait">

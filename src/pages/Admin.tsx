@@ -28,6 +28,10 @@ interface AdminProps {
   setMaxImages: (num: number) => void;
   onSaveConfig: () => Promise<void>;
   isSavingConfig: boolean;
+  systemSoundEnabled: boolean;
+  setSystemSoundEnabled: (val: boolean) => void;
+  setSoundAlertsEnabled: (val: boolean, targetUserId?: string) => void;
+  staffStatus: any[];
   scheduledThreshold: number;
   setScheduledThreshold: (num: number) => void;
   scheduledPastSlotActive: boolean;
@@ -72,9 +76,17 @@ export const Admin: React.FC<AdminProps> = ({
   onEmailLogin,
   isFirebaseAuthenticated,
   showToast,
-  isAdminLoading
+  isAdminLoading,
+  systemSoundEnabled,
+  setSystemSoundEnabled,
+  setSoundAlertsEnabled,
+  staffStatus
 }) => {
-  const [filterDate, setFilterDate] = useState(new Date().toISOString().split("T")[0]);
+  const getTodayStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const [filterDate, setFilterDate] = useState(getTodayStr());
   const [selectedRegion, setSelectedRegion] = useState("All");
   const [adminStoreFilter, setAdminStoreFilter] = useState("All");
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -89,8 +101,10 @@ export const Admin: React.FC<AdminProps> = ({
   const storeToRegion = React.useMemo(() => {
     const map: Record<string, string> = {};
     if (adminData.regions) {
-      adminData.regions.forEach(r => {
-        map[String(r.storeId)] = r.region;
+      adminData.regions.forEach((r: any) => {
+        const sid = String(r.storeId || r.storeid || "").trim();
+        const reg = String(r.region || "").trim();
+        if (sid) map[sid] = reg;
       });
     }
     return map;
@@ -150,19 +164,72 @@ export const Admin: React.FC<AdminProps> = ({
     }
   };
 
-  const filteredOrders = adminData.orders
-    .filter(o => o.timestamp.includes(filterDate))
-    .filter(o => selectedRegion === "All" || storeToRegion[String(o.storeId)] === selectedRegion);
+  const filteredOrders = React.useMemo(() => {
+    return adminData.orders
+      .filter(o => String(o.timestamp || "").includes(filterDate))
+      .filter(o => selectedRegion === "All" || storeToRegion[String(o.storeId)] === selectedRegion);
+  }, [adminData.orders, filterDate, selectedRegion, storeToRegion]);
 
-  const filteredAttendance = adminData.attendance
-    .filter(a => a.timestamp.includes(filterDate))
-    .filter(a => {
-      const u = adminData.users.find(usr => usr.empId === a.empId);
-      const region = u?.region || storeToRegion[String(u?.storeId || "")];
+  const filteredAttendance = React.useMemo(() => {
+    return adminData.attendance
+      .filter(a => String(a.timestamp || "").includes(filterDate))
+      .filter(a => {
+        // Try to find user in Excel list first, then Firestore list
+        const u = adminData.users.find(usr => String(usr.empId).trim() === String(a.empId).trim());
+        const fsUser = staffStatus.find(s => String(s.empId).trim() === String(a.empId).trim());
+        
+        const region = (u?.region || fsUser?.region || storeToRegion[String(u?.storeId || fsUser?.storeId || "")]) || "All";
+        return selectedRegion === "All" || String(region).trim() === selectedRegion;
+      });
+  }, [adminData.attendance, adminData.users, staffStatus, filterDate, selectedRegion, storeToRegion]);
+
+  const activeStaff = filteredAttendance.filter(a => a.type === "In" && !adminData.users.find(u => String(u.empId).trim() === String(a.empId).trim() && String(u.role).toLowerCase() === 'admin')).length;
+
+  const operationalStaffList = React.useMemo(() => {
+    // Combine Excel users, Firestore users, and Active Logs to ensure absolute visibility
+    const excelUsers = adminData.users.filter(u => String(u.role || "").toLowerCase() !== 'admin');
+    const fsUsers = staffStatus.filter(s => String(s.role || "").toLowerCase() !== 'admin');
+    
+    // Merge them by empId
+    const allUniqueUsers = [...excelUsers];
+    
+    // Add Firestore users if they aren't in Excel
+    fsUsers.forEach(fsu => {
+      const uId = String(fsu.empId || "").trim();
+      if (uId && !allUniqueUsers.find(au => String(au.empId || "").trim() === uId)) {
+        allUniqueUsers.push(fsu as any);
+      }
+    });
+
+    // CRITICAL: Add anyone who has an attendance log today but isn't in Excel or Firestore
+    filteredAttendance.forEach(log => {
+      const uId = String(log.empId || "").trim();
+      if (uId && !allUniqueUsers.find(au => String(au.empId || "").trim() === uId)) {
+        allUniqueUsers.push({
+          empId: uId,
+          name: log.name,
+          storeId: log.storeId,
+          role: 'staff',
+          region: storeToRegion[String(log.storeId)] || 'All'
+        } as any);
+      }
+    });
+
+    // Apply regional filter to the final merged list
+    const filteredList = allUniqueUsers.filter(u => {
+      const region = u.region || storeToRegion[String(u.storeId)];
       return selectedRegion === "All" || region === selectedRegion;
     });
 
-  const activeStaff = filteredAttendance.filter(a => a.type === "In" && !adminData.users.find(u => u.empId === a.empId && u.role === 'admin')).length;
+    // Sort to put people with activity today at THE TOP
+    return filteredList.sort((a, b) => {
+      const aHasLog = filteredAttendance.some(log => String(log.empId).trim() === String(a.empId).trim());
+      const bHasLog = filteredAttendance.some(log => String(log.empId).trim() === String(b.empId).trim());
+      if (aHasLog && !bHasLog) return -1;
+      if (!aHasLog && bHasLog) return 1;
+      return String(a.name).localeCompare(String(b.name));
+    });
+  }, [adminData.users, staffStatus, filteredAttendance, selectedRegion, storeToRegion]);
 
   return (
     <motion.div 
@@ -584,18 +651,18 @@ export const Admin: React.FC<AdminProps> = ({
 
         {/* Scheduled Alerts Configuration */}
         {String(user.role || "").toLowerCase().trim() === 'admin' && (
-          <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden mt-6">
-            <div className="p-4 sm:p-6 bg-indigo-50/50 border-b border-indigo-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
-                <Clock size={18} className="text-indigo-600 sm:hidden" />
-                <Clock size={20} className="text-indigo-600 hidden sm:block" />
-                Scheduled Alerts Config
-              </h4>
-              <p className="text-[9px] font-black text-slate-400 mt-1 uppercase tracking-wider">Independent of threshold settings</p>
-            </div>
-            
-            <div className="overflow-x-auto">
-              <table className="w-full text-left min-w-[500px]">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+            <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+              <div className="p-4 sm:p-6 bg-indigo-50/50 border-b border-indigo-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
+                  <Clock size={18} className="text-indigo-600 sm:hidden" />
+                  <Clock size={20} className="text-indigo-600 hidden sm:block" />
+                  Scheduled Alerts Config
+                </h4>
+              </div>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full text-left min-w-[500px]">
                 <thead>
                   <tr className="bg-slate-50/30 border-b border-slate-100">
                     <th className="p-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Alert Condition</th>
@@ -720,7 +787,127 @@ export const Admin: React.FC<AdminProps> = ({
                 </tbody>
               </table>
             </div>
+
+            {/* Sound Control Session Toggle */}
+            <div className="p-4 sm:p-6 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-800">Global Buzzer System</p>
+                <p className="text-[9px] font-bold text-slate-400 mt-0.5">Toggle audible buzzers for the ENTIRE system</p>
+              </div>
+              <button 
+                onClick={() => setSystemSoundEnabled(!systemSoundEnabled)}
+                className={cn(
+                  "h-6 w-10 sm:h-7 sm:w-12 rounded-full relative transition-all",
+                  systemSoundEnabled ? "bg-indigo-600" : "bg-slate-300"
+                )}
+              >
+                <div className={cn(
+                  "absolute top-1 h-4 w-4 sm:h-5 sm:w-5 bg-white rounded-full transition-all shadow-sm",
+                  systemSoundEnabled ? "right-1" : "left-1"
+                )}></div>
+              </button>
+            </div>
           </div>
+
+          {/* Staff Presence Column */}
+          <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+            <div className="p-4 sm:p-6 bg-emerald-50/50 border-b border-emerald-100 flex items-center justify-between">
+              <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
+                <Users size={18} className="text-emerald-600 sm:hidden" />
+                <Users size={20} className="text-emerald-600 hidden sm:block" />
+                Staff Presence
+              </h4>
+              <div className="flex gap-2">
+                {['Active', 'Inactive', 'Offline'].map(status => (
+                  <div key={status} className="flex items-center gap-1.5">
+                    <div className={cn(
+                      "h-2 w-2 rounded-full",
+                      status === 'Active' ? "bg-emerald-500" : (status === 'Inactive' ? "bg-amber-500" : "bg-slate-300")
+                    )}></div>
+                    <span className="text-[8px] font-black uppercase text-slate-400 hidden sm:inline">{status}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            <div className="overflow-x-auto max-h-[400px]">
+              <table className="w-full text-left">
+                <thead className="sticky top-0 bg-white z-10 shadow-sm">
+                  <tr className="border-b border-slate-100">
+                    <th className="p-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Name</th>
+                    <th className="p-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Store</th>
+                    <th className="p-3 text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Buzzer</th>
+                    <th className="p-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {staffStatus.map((staff, i) => (
+                    <tr key={staff.empId || i} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="p-3">
+                        <p className="font-black text-slate-800 text-[11px] truncate max-w-[100px]">{staff.name}</p>
+                        <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">{staff.role}</p>
+                      </td>
+                      <td className="p-3 font-bold text-slate-600 text-[10px]">{staff.storeId}</td>
+                      <td className="p-3 text-center">
+                        <button 
+                          onClick={() => setSoundAlertsEnabled(staff.soundAlertsEnabled !== false ? false : true, staff.empId)}
+                          className={cn(
+                            "h-5 w-8 rounded-full relative transition-all mx-auto shadow-inner",
+                            staff.soundAlertsEnabled !== false ? "bg-emerald-500 shadow-emerald-500/20" : "bg-slate-300 shadow-slate-300/20"
+                          )}
+                        >
+                          <div className={cn("absolute top-0.5 h-4 w-4 bg-white rounded-full transition-all shadow-sm", staff.soundAlertsEnabled !== false ? "right-0.5" : "left-0.5")}></div>
+                        </button>
+                      </td>
+                      <td className="p-3">
+                        <span className={cn(
+                          "px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest block text-center",
+                          staff.presenceStatus === 'Active' ? "bg-emerald-100 text-emerald-600" : 
+                          (staff.presenceStatus === 'Inactive' ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-400")
+                        )}>
+                          {staff.presenceStatus}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {staffStatus.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="p-8 text-center text-slate-300 font-bold uppercase tracking-widest text-[10px]">No staff data</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Remote Admin Control (Batch Toggle) */}
+            <div className="p-4 bg-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-white tracking-widest">Remote Buzzer Override</p>
+                <p className="text-[9px] font-bold text-slate-400 mt-1">Force update sound state for ALL visible members</p>
+              </div>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => {
+                    staffStatus.forEach(s => setSoundAlertsEnabled(false, s.empId));
+                    showToast("All Buzzers Disabled Remotely", "info");
+                  }}
+                  className="flex-1 sm:flex-none px-4 py-2 bg-red-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg shadow-red-900/40"
+                >
+                  Mute All
+                </button>
+                <button 
+                  onClick={() => {
+                    staffStatus.forEach(s => setSoundAlertsEnabled(true, s.empId));
+                    showToast("All Buzzers Enabled Remotely", "success");
+                  }}
+                  className="flex-1 sm:flex-none px-4 py-2 bg-emerald-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-900/40"
+                >
+                  Unmute All
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
         )}
 
         {/* Staff Table */}
@@ -731,12 +918,18 @@ export const Admin: React.FC<AdminProps> = ({
               <Users size={20} className="text-blue-600 hidden sm:block" />
               Operational Staff
             </h4>
-            <span className="px-2 py-0.5 sm:px-3 sm:py-1 bg-blue-100 text-blue-700 rounded-full text-[8px] sm:text-[10px] font-black uppercase tracking-widest">Live Status</span>
+            <div className="flex items-center gap-2">
+              <span className="hidden sm:inline text-[8px] font-black text-slate-400 uppercase tracking-widest">{operationalStaffList.length} Total</span>
+              <span className="px-2 py-0.5 sm:px-3 sm:py-1 bg-blue-100 text-blue-700 rounded-full text-[8px] sm:text-[10px] font-black uppercase tracking-widest">Live Status</span>
+            </div>
           </div>
           <div className="divide-y divide-slate-50">
-            {adminData.users.filter(u => u.role !== 'admin').map((u, i) => {
-              const inRecord = adminData.attendance.find(a => a.empId === u.empId && a.type === "In" && a.timestamp.includes(filterDate));
-              const outRecord = [...adminData.attendance].reverse().find(a => a.empId === u.empId && a.type === "Out" && a.timestamp.includes(filterDate));
+            {operationalStaffList.map((u, i) => {
+              const uId = String(u.empId).trim();
+              // Backend is New to Old, so reverse it to find the FIRST In
+              const inRecord = [...adminData.attendance].reverse().find(a => String(a.empId).trim() === uId && a.type === "In" && String(a.timestamp || "").includes(filterDate));
+              // Backend is New to Old, so first match is LATEST Out
+              const outRecord = adminData.attendance.find(a => String(a.empId).trim() === uId && a.type === "Out" && String(a.timestamp || "").includes(filterDate));
               
               const isToday = filterDate === new Date().toISOString().split("T")[0];
               let duration = "--";
@@ -756,7 +949,13 @@ export const Admin: React.FC<AdminProps> = ({
                 }
               }
 
-              const formatTime = (ts: string) => new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+              const formatTime = (ts: string) => {
+                try {
+                  return new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+                } catch (e) {
+                  return "--:--";
+                }
+              };
 
               return (
                 <motion.div 
@@ -764,7 +963,7 @@ export const Admin: React.FC<AdminProps> = ({
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: i * 0.05 }}
-                  onClick={() => setSelectedUser(u)} 
+                  onClick={() => setSelectedUser(u as any)} 
                   className="p-4 sm:p-6 flex items-center justify-between hover:bg-slate-50 cursor-pointer transition-colors"
                 >
                   <div className="flex items-center gap-3 sm:gap-4">
@@ -843,7 +1042,13 @@ export const Admin: React.FC<AdminProps> = ({
 
               <div className="grid grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
                 {["In", "Out"].map(type => {
-                  const record = adminData.attendance.find(a => a.empId === selectedUser.empId && a.type === type && a.timestamp.includes(filterDate));
+                  const uId = String(selectedUser.empId).trim();
+                  // For "In", we want the first one of the day (Oldest) -> Reverse the New-to-Old list
+                  // For "Out", we want the latest one of the day (Newest) -> Standard search on New-to-Old list
+                  const record = type === "In" 
+                    ? [...adminData.attendance].reverse().find(a => String(a.empId).trim() === uId && a.type === type && String(a.timestamp || "").includes(filterDate))
+                    : adminData.attendance.find(a => String(a.empId).trim() === uId && a.type === type && String(a.timestamp || "").includes(filterDate));
+                  
                   return (
                     <div key={type} className="space-y-2 sm:space-y-3">
                       <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">{type} Verification</p>
@@ -871,8 +1076,9 @@ export const Admin: React.FC<AdminProps> = ({
 
               <div className="space-y-3 sm:space-y-4">
                 {(() => {
-                  const inRec = adminData.attendance.find(a => a.empId === selectedUser.empId && a.type === "In" && a.timestamp.includes(filterDate));
-                  const outRec = [...adminData.attendance].reverse().find(a => a.empId === selectedUser.empId && a.type === "Out" && a.timestamp.includes(filterDate));
+                  const uId = String(selectedUser.empId).trim();
+                  const inRec = [...adminData.attendance].reverse().find(a => String(a.empId).trim() === uId && a.type === "In" && String(a.timestamp || "").includes(filterDate));
+                  const outRec = adminData.attendance.find(a => String(a.empId).trim() === uId && a.type === "Out" && String(a.timestamp || "").includes(filterDate));
                   const isToday = filterDate === new Date().toISOString().split("T")[0];
                   let dur = "--";
                   if (inRec) {
@@ -902,10 +1108,10 @@ export const Admin: React.FC<AdminProps> = ({
 
                 <div className="p-3 sm:p-4 bg-slate-50 rounded-xl sm:rounded-2xl flex items-center justify-between">
                   <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">Orders Today</span>
-                  <span className="font-black text-blue-600 text-sm sm:text-base">{adminData.orders.filter(o => o.pickerName === selectedUser.name && o.timestamp.includes(filterDate)).length}</span>
+                  <span className="font-black text-blue-600 text-sm sm:text-base">{adminData.orders.filter(o => (o.pickerName === selectedUser.name || (o as any).uploadedBy === selectedUser.empId) && String(o.timestamp || "").includes(filterDate)).length}</span>
                 </div>
 
-                {adminData.attendance.some(a => a.empId === selectedUser.empId && a.timestamp.includes(filterDate)) && (
+                {adminData.attendance.some(a => String(a.empId).trim() === String(selectedUser.empId).trim() && String(a.timestamp || "").includes(filterDate)) && (
                   <motion.button
                     whileTap={{ scale: 0.95 }}
                     onClick={() => onResetAttendance(selectedUser.empId, filterDate)}

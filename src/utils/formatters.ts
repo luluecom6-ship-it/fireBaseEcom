@@ -1,26 +1,28 @@
 import { AGE_BUCKETS } from '../constants';
 
-export const fixImageUrl = (url: string) => {
+export const fixImageUrl = (url: any) => {
   if (!url) return "";
-  if (url.includes("drive.google.com")) {
-    const id = url.split("id=")[1] || url.split("/d/")[1]?.split("/")[0];
-    if (!id) return url;
+  const str = String(url);
+  if (str.includes("drive.google.com")) {
+    const id = str.split("id=")[1] || str.split("/d/")[1]?.split("/")[0];
+    if (!id) return str;
     return `https://lh3.googleusercontent.com/d/${id}`;
   }
-  return url;
+  return str;
 };
 
-export const getImages = (url: string): string[] => {
+export const getImages = (url: any): string[] => {
   if (!url) return [];
-  return url.split("|||").filter(Boolean);
+  return String(url).split("|||").filter(Boolean);
 };
 
-export const getAgeing = (triggeredAt: string) => {
+export const getAgeing = (triggeredAt: any) => {
   if (!triggeredAt) return "N/A";
-  let start = new Date(triggeredAt).getTime();
+  const str = String(triggeredAt);
+  let start = new Date(str).getTime();
   
   if (isNaN(start)) {
-    const cleaned = triggeredAt.replace(/,/g, '');
+    const cleaned = str.replace(/,/g, '');
     start = new Date(cleaned).getTime();
   }
   
@@ -32,17 +34,20 @@ export const getAgeing = (triggeredAt: string) => {
   return `${mins}m ${secs}s`;
 };
 
-export const getBucketFromAgeing = (createdAt: string, triggeredAt?: string) => {
+export const getBucketFromAgeing = (createdAt: any, triggeredAt?: any) => {
   if (!createdAt) return "--";
-  let start = new Date(createdAt).getTime();
-  let end = triggeredAt ? new Date(triggeredAt).getTime() : new Date().getTime();
+  const strCreated = String(createdAt);
+  const strTriggered = triggeredAt ? String(triggeredAt) : null;
+  
+  let start = new Date(strCreated).getTime();
+  let end = strTriggered ? new Date(strTriggered).getTime() : new Date().getTime();
 
   if (isNaN(start)) {
-    const cleaned = createdAt.replace(/,/g, '');
+    const cleaned = strCreated.replace(/,/g, '');
     start = new Date(cleaned).getTime();
   }
-  if (isNaN(end) && triggeredAt) {
-    const cleaned = triggeredAt.replace(/,/g, '');
+  if (isNaN(end) && strTriggered) {
+    const cleaned = strTriggered.replace(/,/g, '');
     end = new Date(cleaned).getTime();
   }
 
@@ -57,9 +62,10 @@ export const getBucketFromAgeing = (createdAt: string, triggeredAt?: string) => 
 };
 
 export const sortSlots = (slots: string[]) => {
+  if (!slots || !Array.isArray(slots)) return [];
   return [...slots].sort((a, b) => {
-    const timeA = a.split(' - ')[0];
-    const timeB = b.split(' - ')[0];
+    const timeA = String(a || "").split(' - ')[0];
+    const timeB = String(b || "").split(' - ')[0];
     
     const parseTime = (t: string) => {
       const match = t.toUpperCase().match(/(\d+)(?::(\d+))?\s*(AM|PM)/);

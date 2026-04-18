@@ -52,14 +52,17 @@ export const MatrixTable: React.FC<MatrixTableProps> = ({
           <thead>
             <tr className="bg-[#f1f5f9] border-b border-slate-200">
               <th className="p-2.5 text-left font-black text-slate-400 uppercase tracking-widest border-r border-slate-200 min-w-[140px]">STATUS</th>
-              {headers.map(h => (
-                <th key={h} className="p-2.5 text-center font-black text-slate-400 uppercase tracking-widest border-r border-slate-200 min-w-[70px]">
-                  <div className="flex flex-col items-center gap-0.5">
-                    <span>{h.split(' - ')[0]}</span>
-                    {h.includes(' - ') && <span className="text-[8px] opacity-40 leading-none">to {h.split(' - ')[1]}</span>}
-                  </div>
-                </th>
-              ))}
+              {headers.map(h => {
+                const headerStr = String(h || "");
+                return (
+                  <th key={headerStr} className="p-2.5 text-center font-black text-slate-400 uppercase tracking-widest border-r border-slate-200 min-w-[70px]">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span>{headerStr.split(' - ')[0]}</span>
+                      {headerStr.includes(' - ') && <span className="text-[8px] opacity-40 leading-none">to {headerStr.split(' - ')[1]}</span>}
+                    </div>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>

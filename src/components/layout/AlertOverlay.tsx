@@ -15,6 +15,7 @@ interface AlertOverlayProps {
   setMinimizedAlerts: React.Dispatch<React.SetStateAction<string[]>>;
   lastBroadcast: { id: string, title: string, body: string } | null;
   setLastBroadcast: (broadcast: { id: string, title: string, body: string } | null) => void;
+  soundAlertsEnabled?: boolean;
 }
 
 export const AlertOverlay: React.FC<AlertOverlayProps> = ({
@@ -27,7 +28,8 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
   handleAlertAction,
   setMinimizedAlerts,
   lastBroadcast,
-  setLastBroadcast
+  setLastBroadcast,
+  soundAlertsEnabled = true
 }) => {
   const audioContextRef = useRef<AudioContext | null>(null);
   const beepTimeoutRef = useRef<any>(null);
@@ -150,8 +152,8 @@ export const AlertOverlay: React.FC<AlertOverlayProps> = ({
   }, [activeAlerts, user, adminHiddenAlerts]);
 
   const shouldBuzz = useMemo(() => 
-    filteredAlerts.some(a => (a.buzzerStarted || a.managerBuzzerStarted)),
-  [filteredAlerts]);
+    soundAlertsEnabled && filteredAlerts.some(a => (a.buzzerStarted || a.managerBuzzerStarted)),
+  [filteredAlerts, soundAlertsEnabled]);
 
   useEffect(() => {
     const handleInteraction = () => {

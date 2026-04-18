@@ -6,6 +6,8 @@ export interface User {
   status: string;
   email?: string;
   region?: string;
+  lastSeen?: any;
+  soundAlertsEnabled?: boolean;
 }
 
 export interface AlertLog {

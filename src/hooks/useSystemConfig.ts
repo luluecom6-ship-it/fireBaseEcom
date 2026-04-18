@@ -7,7 +7,8 @@ import { User } from '../types';
 
 export function useSystemConfig(
   user: User | null,
-  showToast?: (msg: string, type?: 'success' | 'error') => void
+  showToast?: (msg: string, type?: 'success' | 'error') => void,
+  isFirebaseAuthenticated?: boolean
 ) {
   const [escalationRules, setEscalationRules] = useState<EscalationRule[]>([]);
   const [maxImages, setMaxImages] = useState(1);
@@ -16,10 +17,12 @@ export function useSystemConfig(
   const [scheduledRunningSlotActive, setScheduledRunningSlotActive] = useState(true);
   const [scheduledPastSlotRegions, setScheduledPastSlotRegions] = useState<string[]>(['All']);
   const [scheduledRunningSlotRegions, setScheduledRunningSlotRegions] = useState<string[]>(['All']);
+  const [soundAlertsEnabled, setSoundAlertsEnabled] = useState(true);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   // Use Firestore for real-time config
   useEffect(() => {
+    if (!isFirebaseAuthenticated) return;
     const configDoc = doc(db, 'system', 'config');
     
     // Listen for real-time updates
@@ -43,6 +46,9 @@ export function useSystemConfig(
           setScheduledRunningSlotActive(data.scheduledRunningSlot.isActive ?? true);
           setScheduledRunningSlotRegions(data.scheduledRunningSlot.regions || ['All']);
         }
+        if (typeof data.soundAlertsEnabled === 'boolean') {
+          setSoundAlertsEnabled(data.soundAlertsEnabled);
+        }
       } else {
         // Default rules if nothing in Firestore yet
         const defaultRules = [
@@ -56,6 +62,7 @@ export function useSystemConfig(
         setScheduledRunningSlotActive(true);
         setScheduledPastSlotRegions(['All']);
         setScheduledRunningSlotRegions(['All']);
+        setSoundAlertsEnabled(true);
       }
     }, (error) => {
       console.error("Firestore config error:", error);
@@ -86,6 +93,7 @@ export function useSystemConfig(
           isActive: scheduledRunningSlotActive,
           regions: scheduledRunningSlotRegions
         },
+        soundAlertsEnabled,
         updatedAt: new Date().toISOString()
       });
       
@@ -119,6 +127,7 @@ export function useSystemConfig(
     scheduledPastSlotRegions, 
     scheduledRunningSlotActive, 
     scheduledRunningSlotRegions, 
+    soundAlertsEnabled,
     showToast, 
     user
   ]);
@@ -138,6 +147,8 @@ export function useSystemConfig(
     setScheduledPastSlotRegions,
     scheduledRunningSlotRegions,
     setScheduledRunningSlotRegions,
+    soundAlertsEnabled,
+    setSoundAlertsEnabled,
     isSavingConfig, 
     saveSystemConfig 
   };

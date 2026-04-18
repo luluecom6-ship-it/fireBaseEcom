@@ -4,7 +4,7 @@ import { API_URL } from '../constants';
 import { robustFetch } from '../utils/api';
 import { getBucketFromAgeing } from '../utils/formatters';
 
-export function useMatrixData(autoRefresh = true, intervalMs = 60000) {
+export function useMatrixData(autoRefresh = true, intervalMs = 90000) {
   const [matrixData, setMatrixData] = useState<MatrixData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +24,9 @@ export function useMatrixData(autoRefresh = true, intervalMs = 60000) {
         urlObj = new URL(API_URL.trim(), window.location.origin);
       }
       urlObj.searchParams.set('action', 'getMatrixData');
-      urlObj.searchParams.set('_t', Date.now().toString());
+      if (isManual) {
+        urlObj.searchParams.set('cache', 'skip');
+      }
       
       const res = await robustFetch(urlObj.toString());
       const text = await res.text();
@@ -90,7 +92,10 @@ export function useMatrixData(autoRefresh = true, intervalMs = 60000) {
     
     fetchData();
     if (autoRefresh) {
-      const timer = setInterval(() => fetchData(false), intervalMs);
+      // Add a randomized jitter between 0 and 30 seconds to the first refresh 
+      // and interval to prevent simultaneous requests from multiple browser tabs
+      const jitter = Math.floor(Math.random() * 30000);
+      const timer = setInterval(() => fetchData(false), intervalMs + (Math.random() * 5000));
       return () => clearInterval(timer);
     }
   }, [fetchData, autoRefresh, intervalMs]);

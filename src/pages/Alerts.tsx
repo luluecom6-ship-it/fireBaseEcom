@@ -37,7 +37,7 @@ export const Alerts: React.FC<AlertsProps> = ({
   };
 
   const filteredLogs = alertLogs.filter(log => {
-    const dateMatch = log.timestamp.includes(filterDate);
+    const dateMatch = String(log.timestamp || "").includes(filterDate);
     if (!dateMatch) return false;
     const role = String(user?.role || "").toLowerCase().trim();
     if (role === 'admin' || role === 'supervisor') return true;

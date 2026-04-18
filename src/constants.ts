@@ -1,29 +1,7 @@
 // Environment-aware API URL
 const getApiUrl = () => {
-  // 0. If we are in the browser, use the local proxy to avoid CORS issues with Google Apps Script
-  if (typeof window !== 'undefined') {
-    return "/api/proxy-gas";
-  }
-
-  const fallback = "https://script.google.com/macros/s/AKfycbxUVldHO9dPY9uTfuCc-A_RZUhkyngPQvMDpMC31nrjZV-SXWH2ZzXWIyDh3HDD_Zom/exec";
-  
-  // 1. Check Vite env (Client-side - though usually handled by window check above)
-  if (typeof import.meta !== 'undefined' && import.meta.env) {
-    const viteGas = import.meta.env.VITE_GAS_API_URL;
-    const gas = import.meta.env.GAS_API_URL;
-    if (viteGas) return viteGas;
-    if (gas) return gas;
-  }
-  
-  // 2. Check process.env (Server-side or polyfilled)
-  if (typeof process !== 'undefined' && process.env) {
-    const viteGas = process.env.VITE_GAS_API_URL;
-    const gas = process.env.GAS_API_URL;
-    if (viteGas) return viteGas;
-    if (gas) return gas;
-  }
-  
-  return fallback;
+  // Always use the local proxy to avoid CORS issues and environment mismatches
+  return "/api/proxy-gas";
 };
 
 const detectedUrl = getApiUrl();

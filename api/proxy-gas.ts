@@ -20,7 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   
   // Fallback to the known working URL
   if (!gasUrl || gasUrl === "undefined" || !gasUrl.startsWith("http")) {
-    gasUrl = "https://script.google.com/macros/s/AKfycbxUVldHO9dPY9uTfuCc-A_RZUhkyngPQvMDpMC31nrjZV-SXWH2ZzXWIyDh3HDD_Zom/exec";
+    gasUrl = "https://script.google.com/macros/s/AKfycbxSxv9EPpd_KxNNThhUDyocY_38QE1JlfGWK-h2vKXjRpoxUXa9XTPP6eM77pcTSE4/exec";
   }
 
   try {
