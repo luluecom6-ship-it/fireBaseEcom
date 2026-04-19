@@ -74,16 +74,17 @@ export function useCamera() {
   }, []);
 
   const capturePhoto = useCallback(() => {
-    if (videoElementRef.current) {
+    const video = videoElementRef.current;
+    if (video && video.readyState >= 2 && video.videoWidth > 0) {
       const canvas = document.createElement("canvas");
-      canvas.width = videoElementRef.current.videoWidth;
-      canvas.height = videoElementRef.current.videoHeight;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
       const ctx = canvas.getContext("2d");
       if (ctx) {
         // Mirror the context to match the mirrored video UI
         ctx.translate(canvas.width, 0);
         ctx.scale(-1, 1);
-        ctx.drawImage(videoElementRef.current, 0, 0);
+        ctx.drawImage(video, 0, 0);
         const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
         stopCamera();
         return dataUrl;

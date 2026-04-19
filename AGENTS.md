@@ -1,6 +1,27 @@
-# Project Context: Version 4.1 (Granular Alert Configuration)
+# Project Context: Version 4.2 (Optimized Performance & Architecture)
 
-Whenever the user refers to **Version 4.1**, it refers to the application state as of April 16, 2026, with the following core features and structure:
+Whenever the user refers to **Version 4.2**, it refers to the application state as of April 19, 2026, with the following enhancements:
+
+## Core Enhancements (v4.2)
+1. **Architectural Optimizations**:
+   - **Unified Service Worker**: Consolidated `sw.js` and `firebase-messaging-sw.js` into a single background thread to eliminate registration conflicts and skipWaiting bugs.
+   - **Event-Driven Permissions**: Replaced inefficient 2-second polling for notification permissions with modern Permissions API `onchange` listeners.
+   - **Stable Data Refresh**: Fixed stale-closure bugs in `useMatrixData` to ensure the background interval stays active across all configuration changes.
+
+2. **Performance Fixes**:
+   - **Smart Jitter**: Correctly implemented "Stampeding Herd" protection by applying a 0-30s jitter to the actual data fetch intervals.
+   - **Backend Data Capping**: Restricted `getAlertLogs` to fetch only the last 1500 rows, preventing performance degradation as the log sheet grows.
+   - **Case-Insensitive Caching**: Normalized GAS action checking to ensure 1-hour "Region" caching works regardless of URL parameter casing.
+
+3. **Reliability & Logic**:
+   - **Alert Deduplication**: Standardized alert merge keys to `orderId|statusTrigger` to eliminate duplicate entries between Firestore and Legacy logs.
+   - **Proactive FCM Onboarding**: `requestForToken` now proactively triggers the browser permission prompt if in "default" state.
+   - **Stable Firestore Sync**: Optimized the Firestore real-time listener by removing unnecessary dependencies that caused frequent reconnections.
+
+4. **Updated Backend Integration**:
+   - Switched to the latest production Google Apps Script Web App for improved stability and fixed LogAlertV2 logic.
+
+[ ... rest of 4.1 features preserved ...]
 
 ## Core Features
 1. **Matrix Intelligence Dashboard**:

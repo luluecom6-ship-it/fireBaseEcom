@@ -114,6 +114,8 @@ export function useOrders(
       }
       urlObj.searchParams.set('action', 'getAdminData');
       urlObj.searchParams.set('type', 'orders');
+      urlObj.searchParams.set('role', user.role || "");
+      urlObj.searchParams.set('region', user.region || "");
       urlObj.searchParams.set('_t', Date.now().toString());
       
       const res = await robustFetch(urlObj.toString());
@@ -127,10 +129,36 @@ export function useOrders(
       
       if (!Array.isArray(data)) throw new Error("Invalid response format");
 
-      let filtered = data.filter(o => String(o.orderId).toLowerCase().includes(query.toLowerCase()));
+      const normalizeId = (id: string) => String(id).replace(/^(Lulu-|Jee-)/i, '').replace(/INP1$/i, '').trim();
+      const normalizedQuery = normalizeId(query.toLowerCase());
+
+      let filtered = data.filter(o => {
+        const orderIdValue = o.orderId || o.OrderID || o.order_id || "";
+        const orderIdStr = String(orderIdValue).toLowerCase();
+        const normalizedOrderId = normalizeId(orderIdStr);
+        
+        // Match if direct match, includes, OR both numeric parts match
+        return orderIdStr.includes(query.toLowerCase()) || 
+               query.toLowerCase().includes(orderIdStr) ||
+               (normalizedQuery.length >= 8 && normalizedOrderId.includes(normalizedQuery)) ||
+               (normalizedOrderId.length >= 8 && normalizedQuery.includes(normalizedOrderId));
+      }).map(o => ({
+        ...o,
+        orderId: String(o.orderId || o.OrderID || o.order_id || ""),
+        storeId: String(o.storeId || o.StoreID || o.store_id || ""),
+        pickerName: String(o.pickerName || o.PickerName || o.picker_name || o.picker || ""),
+        uploadedBy: String(o.uploadedBy || o.UploadedBy || o.uploaded_by || ""),
+        timestamp: String(o.timestamp || o.Timestamp || o.Time || o.dateTime || ""),
+        imageUrl: String(o.imageUrl || o.ImageUrl || o.image_url || o.image || "")
+      }));
       
       if (user.role !== 'admin' && user.role !== 'supervisor') {
-        filtered = filtered.filter(o => o.uploadedBy === user.name);
+        const userStoreId = String(user.storeId || "").trim().toLowerCase();
+        if ((user.role === 'manager' || user.role === 'store') && userStoreId !== 'all') {
+          filtered = filtered.filter(o => String(o.storeId || "").trim().toLowerCase() === userStoreId);
+        } else {
+          filtered = filtered.filter(o => o.uploadedBy === user.name);
+        }
       }
       
       setSearchResults(filtered);

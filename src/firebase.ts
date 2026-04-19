@@ -22,13 +22,26 @@ export const requestForToken = async () => {
     return null;
   }
 
+  // Proactively request permission if it's currently "default"
+  if (Notification.permission === "default") {
+    console.log("[Firebase] Requesting notification permission...");
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") return null;
+  }
+
   if (Notification.permission === "denied") {
     console.log("Notification permission denied. Please enable it in browser settings.");
     return null;
   }
 
   try {
-    const currentToken = await getToken(messaging, { vapidKey: VAPID_KEY });
+    // Get the consolidated service worker registration
+    const registration = await navigator.serviceWorker.getRegistration('/sw.js');
+    
+    const currentToken = await getToken(messaging, { 
+      vapidKey: VAPID_KEY,
+      serviceWorkerRegistration: registration 
+    });
     if (currentToken) {
       console.log('FCM Token:', currentToken);
       // In a real app, you would send this token to your backend (Google Apps Script)

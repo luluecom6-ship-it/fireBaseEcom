@@ -270,10 +270,13 @@ export function useAuth() {
             const currentUser = JSON.parse(localStorage.getItem("lulu_user") || "{}");
             const currentHasRealRole = currentUser.role && currentUser.role !== 'user';
             
-            // Define what we consider "generic" or "downgraded" in Firestore
-            const fsHasRealRole = firestoreRole && firestoreRole !== 'user' && firestoreRole !== 'picker';
+            // Define what we consider "generic" or "downgraded" in Firestore: specifically the 'user' fallback.
+            // 'picker' is a valid production role and should not trigger healing if it's the current session role.
+            const fsHasRealRole = firestoreRole && firestoreRole !== 'user';
             
-            if (currentHasRealRole && !fsHasRealRole && currentUser.empId === userData.empId) {
+            const isDowngrade = currentHasRealRole && !fsHasRealRole && currentUser.role !== firestoreRole;
+            
+            if (isDowngrade && currentUser.empId === userData.empId) {
               console.warn("[useAuth] Snapshot returned generic/downgraded profile — ignoring to preserve login state", {
                 current: currentUser.role,
                 incoming: firestoreRole

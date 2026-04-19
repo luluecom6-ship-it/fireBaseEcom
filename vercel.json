@@ -2,12 +2,22 @@
   "version": 2,
   "rewrites": [
     {
+      "source": "/api/monitor",
+      "destination": "/api/monitor.ts"
+    },
+    {
       "source": "/api/proxy-gas",
       "destination": "/api/proxy-gas.ts"
     },
     {
       "source": "/(.*)",
       "destination": "/index.html"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/monitor",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

@@ -117,7 +117,7 @@ export function useStaffStatus(
       unsubUsers();
       unsubPresence();
     };
-  }, [selectedStoreId]);
+  }, [user, isFirebaseAuthenticated, selectedStoreId]);
 
   return { staffStatus, loading };
 }

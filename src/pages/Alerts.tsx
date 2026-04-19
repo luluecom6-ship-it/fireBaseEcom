@@ -36,18 +36,9 @@ export const Alerts: React.FC<AlertsProps> = ({
     }
   };
 
-  const filteredLogs = alertLogs.filter(log => {
-    const dateMatch = String(log.timestamp || "").includes(filterDate);
-    if (!dateMatch) return false;
-    const role = String(user?.role || "").toLowerCase().trim();
-    if (role === 'admin' || role === 'supervisor') return true;
-    
-    const userStoreId = String(user?.storeId || "").trim().toLowerCase();
-    const logStoreId = String(log.storeId || "").trim().toLowerCase();
-
-    if (userStoreId === 'all') return true;
-    return logStoreId === userStoreId;
-  });
+  const filteredLogs = alertLogs.filter(log => 
+    String(log.timestamp || "").includes(filterDate)
+  );
 
   return (
     <motion.div 

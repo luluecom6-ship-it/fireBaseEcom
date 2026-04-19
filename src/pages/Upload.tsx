@@ -29,9 +29,11 @@ export const Upload: React.FC<UploadProps> = ({
   loading,
   navigateTo
 }) => {
-  const { isScanning, setIsScanning } = useScanner((text) => {
+  const handleScan = React.useCallback((text: string) => {
     setOrderId(text);
-  });
+  }, [setOrderId]);
+
+  const { isScanning, setIsScanning } = useScanner(handleScan);
 
   const validateOrderId = (id: string) => {
     const regex = /^((Lulu|Jee)-)?\d{12}(INP1)?$/i;

@@ -84,20 +84,20 @@ export function useMatrixData(autoRefresh = true, intervalMs = 90000) {
     }
   }, []);
 
-  const hasFetched = useRef(false);
+  useEffect(() => {
+    // Initial fetch on mount
+    fetchData();
+  }, [fetchData]);
 
   useEffect(() => {
-    if (hasFetched.current) return;
-    hasFetched.current = true;
+    if (!autoRefresh) return;
     
-    fetchData();
-    if (autoRefresh) {
-      // Add a randomized jitter between 0 and 30 seconds to the first refresh 
-      // and interval to prevent simultaneous requests from multiple browser tabs
-      const jitter = Math.floor(Math.random() * 30000);
-      const timer = setInterval(() => fetchData(false), intervalMs + (Math.random() * 5000));
-      return () => clearInterval(timer);
-    }
+    // Add a randomized jitter between 0 and 15 seconds to the refresh interval
+    // to prevent simultaneous requests from multiple browser tabs (Stampeding Herd)
+    const jitter = Math.floor(Math.random() * 15000);
+    const timer = setInterval(() => fetchData(false), intervalMs + jitter);
+    
+    return () => clearInterval(timer);
   }, [fetchData, autoRefresh, intervalMs]);
 
   return { matrixData, isLoading, error, refetch: () => fetchData(true) };

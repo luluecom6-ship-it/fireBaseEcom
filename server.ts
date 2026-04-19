@@ -13,6 +13,15 @@ import { executeGasRequest } from "./src/services/gasService";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Global Error Handlers to prevent process crashes
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Server] Unhandled Rejection:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('[Server] Uncaught Exception:', error);
+});
+
 // Load firebase config safely
 let firebaseConfig: any = {};
 try {
@@ -80,20 +89,27 @@ async function startServer() {
 
   // GAS Proxy Route
   app.all("/api/proxy-gas", async (req, res) => {
-    let gasUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
+    let rawUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
     const queryGasUrl = req.query.gasUrl;
-    if (queryGasUrl) gasUrl = String(queryGasUrl).trim();
+    if (queryGasUrl) rawUrl = String(queryGasUrl).trim();
     
-    if (!gasUrl || gasUrl === "undefined" || !gasUrl.startsWith("http")) {
-      gasUrl = "https://script.google.com/macros/s/AKfycbym9GP8SjMCgi23bsgU1Ex-Q08iczLyRwqnKJJl9P-2TEHCCv5H4tOy-Vr7XFUWneMJ/exec";
+    // Consistent fallback across all environments
+    if (!rawUrl || rawUrl === "undefined" || !rawUrl.startsWith("http")) {
+      rawUrl = "https://script.google.com/macros/s/AKfycbyyN9uR3twJmu1zo5_yjw1wIiP6IgGRZLdctZ31DBnVsvpBguq1XUyh42Ro8k7x48es/exec";
     }
 
-    const cacheKey = req.method + ":" + gasUrl + ":" + JSON.stringify(Object.keys(req.query).sort().reduce((acc: any, k) => {
+    let urlObj: URL;
+    try {
+      urlObj = new URL(rawUrl);
+    } catch (e) {
+      return res.status(400).json({ error: "Invalid GAS URL configuration" });
+    }
+
+    const cacheKey = req.method + ":" + rawUrl + ":" + JSON.stringify(Object.keys(req.query).sort().reduce((acc: any, k) => {
       if (k !== '_t' && k !== 'gasUrl') acc[k] = req.query[k];
       return acc;
     }, {}));
 
-    const urlObj = new URL(gasUrl);
     for (const [key, value] of Object.entries(req.query)) {
       if (key !== 'gasUrl') urlObj.searchParams.set(key, String(value));
     }

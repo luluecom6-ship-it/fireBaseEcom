@@ -24,7 +24,6 @@ export function useScanner(onScanSuccess: (text: string) => void) {
         (decodedText) => {
           onScanSuccess(decodedText);
           setIsScanning(false);
-          scanner.clear();
         },
         (error) => {
           // Silent error for scanner

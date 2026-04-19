@@ -7,51 +7,51 @@ const REGIONS_TTL = 3600000; // 1 Hour for regions
 
 // Request Queue for GAS Proxy with Limited Concurrency
 let activeRequests = 0;
-const MAX_CONCURRENT = 3;
+const MAX_CONCURRENT = 10; // Increased concurrency to prevent long queues
 let backoffMultiplier = 1;
 const gasQueue: { config: any, resolve: any, reject: any, skipCache?: boolean }[] = [];
 
 async function processGasQueue() {
-  if (activeRequests >= MAX_CONCURRENT || gasQueue.length === 0) return;
+  if (gasQueue.length === 0 || activeRequests >= MAX_CONCURRENT) return;
 
-  while (activeRequests < MAX_CONCURRENT && gasQueue.length > 0) {
-    const { config, resolve, reject, skipCache } = gasQueue.shift()!;
-    activeRequests++;
+  const item = gasQueue.shift();
+  if (!item) return;
 
-    // Execute in an async IIFE to allow the loop to continue for other concurrent slots
-    (async () => {
-      try {
-        // Enforce a strict timeout at the axios level
-        const response = await axiosLib({
-          ...config,
-          timeout: 30000 // 30s timeout for individual GAS requests
-        });
-        
-        const dataStr = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
-        if (dataStr.includes('Rate exceeded')) {
-          console.warn("[GAS Queue] Rate limit detected at GAS level, increasing backoff.");
-          backoffMultiplier = Math.min(backoffMultiplier * 2, 10);
-        } else {
-          // Slowly recover backoff if successful
-          backoffMultiplier = Math.max(1, backoffMultiplier * 0.8);
-        }
+  activeRequests++;
+  const { config, resolve, reject } = item;
 
-        resolve(response);
-      } catch (err) {
-        reject(err);
-      } finally {
-        activeRequests--;
-        
-        // Base delay 300ms between slots, but scales up if we hit rate limits
-        const delay = 300 * backoffMultiplier;
-        if (delay > 0) {
-          await new Promise(r => setTimeout(r, delay));
-        }
-        
-        // Trigger next if queue not empty
-        processGasQueue();
-      }
-    })();
+  try {
+    console.log(`[GAS Queue] Executing [${config.method}] ${new URL(config.url).searchParams.get('action')} (${activeRequests}/${MAX_CONCURRENT})`);
+    
+    // Enforce a strict timeout at the axios level
+    const response = await axiosLib({
+      ...config,
+      timeout: 45000 // 45s timeout for individual GAS requests
+    });
+    
+    const dataStr = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+    if (dataStr.includes('Rate exceeded')) {
+      console.warn("[GAS Queue] Rate limit detected at GAS level, increasing backoff.");
+      backoffMultiplier = Math.min(backoffMultiplier * 1.5, 5);
+    } else {
+      backoffMultiplier = Math.max(1, backoffMultiplier * 0.9);
+    }
+
+    resolve(response);
+  } catch (err: any) {
+    console.error(`[GAS Queue] Request failed: ${err.message}`);
+    reject(err);
+  } finally {
+    activeRequests--;
+    
+    // Minimal delay between slots to avoid overwhelming GAS, but scaled by backoff
+    const delay = Math.floor(100 * backoffMultiplier);
+    if (delay > 0) {
+      await new Promise(r => setTimeout(r, delay));
+    }
+    
+    // Always trigger next check
+    processGasQueue();
   }
 }
 
@@ -74,8 +74,8 @@ export async function executeGasRequest(config: any, options: { skipCache?: bool
     if (!skipCache && cacheKey && response.status === 200) {
       const dataStr = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
       if (!dataStr.includes('error') && !dataStr.includes('Rate exceeded')) {
-        // Use longer TTL for regions
-        const ttl = config.url.includes('action=getRegions') ? REGIONS_TTL : CACHE_TTL;
+        // Use longer TTL for regions (normalize case for check)
+        const ttl = config.url.toLowerCase().includes('action=getregions') ? REGIONS_TTL : CACHE_TTL;
         gasCache.set(cacheKey, {
           data: response.data,
           headers: response.headers,

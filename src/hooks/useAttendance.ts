@@ -15,8 +15,10 @@ export function useAttendance(
   });
   const [hoursWorked, setHoursWorked] = useState("00:00");
   const [isShiftComplete, setIsShiftComplete] = useState(false);
+  const lastFetchedEmpId = useRef<string | null>(null);
 
   const fetchStatus = useCallback(async (empId: string) => {
+    if (!empId) return;
     try {
       const baseUrl = API_URL.trim();
       let urlObj: URL;
@@ -74,18 +76,18 @@ export function useAttendance(
       const inTime = firstIn.timestamp;
       const outTime = isCurrentlyOut ? latestRecord.timestamp : null;
 
-      // 24-Hour Reset Logic
+      // Session Reset Logic: Reset if shift is too long (missed punch out)
       if (!isCurrentlyOut) {
         const inDate = parseServerDate(inTime);
         const now = new Date();
         const diffMs = now.getTime() - inDate.getTime();
         const diffHrs = diffMs / (1000 * 60 * 60);
         
-        // If it's been more than 24 hours, OR if it's a different calendar day and > 16 hours
-        // we reset to allow Punch In for the new day.
         const isDifferentDay = inDate.toDateString() !== now.toDateString();
         
-        if (diffHrs >= 24 || (isDifferentDay && diffHrs >= 16)) {
+        // Thresholds: 20 hours total, OR 12 hours if it's a different day.
+        // This handles night shifts (e.g. 10pm to 6am = 8 hours, isDifferentDay=true, diffHrs=8 < 12 => OK)
+        if (diffHrs >= 20 || (isDifferentDay && diffHrs >= 12)) {
           setAttendanceStatus({
             inTime: null,
             outTime: null,
@@ -105,13 +107,29 @@ export function useAttendance(
     }
   }, []);
 
-  const hasFetched = useRef(false);
-
   useEffect(() => {
-    if (user && !hasFetched.current) {
-      hasFetched.current = true;
+    if (!user) {
+      setAttendanceStatus({ inTime: null, outTime: null, missingPunchOut: false });
+      setHoursWorked("00:00");
+      setIsShiftComplete(false);
+      lastFetchedEmpId.current = null;
+      return;
+    }
+
+    if (user.empId !== lastFetchedEmpId.current) {
+      setAttendanceStatus({ inTime: null, outTime: null, missingPunchOut: false });
+      setHoursWorked("00:00");
+      setIsShiftComplete(false);
+      lastFetchedEmpId.current = user.empId;
       fetchStatus(user.empId);
     }
+
+    // Periodically sync status every 5 minutes while logged in to detect day boundaries/resets
+    const syncInterval = setInterval(() => {
+      if (user?.empId) fetchStatus(user.empId);
+    }, 300000);
+
+    return () => clearInterval(syncInterval);
   }, [user, fetchStatus]);
 
   useEffect(() => {

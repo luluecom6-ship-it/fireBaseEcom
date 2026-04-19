@@ -77,10 +77,22 @@ export function useAdmin(
           timestamp: a.timestamp || a.Date || a.Time || a.dateTime || ""
         }));
 
+        // Normalize Orders
+        const rawOrders = Array.isArray(data.orders) ? data.orders : [];
+        const normalizedOrders = rawOrders.map((o: any) => ({
+          ...o,
+          orderId: String(o.orderId || o.OrderID || o.order_id || "").trim(),
+          storeId: String(o.storeId || o.StoreID || o.store_id || "").trim(),
+          pickerName: String(o.pickerName || o.PickerName || o.picker_name || o.picker || "").trim(),
+          uploadedBy: String(o.uploadedBy || o.UploadedBy || o.uploaded_by || "").trim(),
+          timestamp: String(o.timestamp || o.Timestamp || o.Time || o.dateTime || "").trim(),
+          imageUrl: String(o.imageUrl || o.ImageUrl || o.image_url || o.image || "").trim()
+        }));
+
         setAdminData({
           users: normalizedUsers,
           attendance: normalizedAttendance,
-          orders: data.orders || [],
+          orders: normalizedOrders,
           regions: data.regions || []
         });
         if (isManual) showToast("Admin Data Synced", "success");

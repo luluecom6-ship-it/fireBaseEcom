@@ -34,15 +34,18 @@ export function useAlerts(
 
     const mergedMap = new Map<string, AlertLog>();
     
+    // Merge logic: Use orderId + statusTrigger as the unique key for an alert event
+    // This correctly deduplicates alerts received from both Firestore and Legacy GAS logs.
+    
     // Add legacy logs first
     lLogs.forEach(log => {
-      const key = `${log.orderId}|${log.timestamp}`.toLowerCase().trim();
+      const key = `${log.orderId}|${log.statusTrigger}`.toLowerCase().trim();
       mergedMap.set(key, log);
     });
     
     // Overwrite with Firestore logs (real-time truth)
     fLogs.forEach(log => {
-      const key = `${log.orderId}|${log.timestamp}`.toLowerCase().trim();
+      const key = `${log.orderId}|${log.statusTrigger}`.toLowerCase().trim();
       mergedMap.set(key, log);
     });
 
@@ -143,15 +146,28 @@ export function useAlerts(
     }
   }, [fetchAlertHistory]);
 
-  // Periodically check permission status (in case user changes it in browser settings)
+  // Check permission status using Permissions API change listener
   useEffect(() => {
     if (!("Notification" in window)) return;
-    const interval = setInterval(() => {
+    
+    const checkPermission = () => {
       if (Notification.permission !== notifPermission) {
         setNotifPermission(Notification.permission);
       }
-    }, 2000);
-    return () => clearInterval(interval);
+    };
+
+    if (navigator.permissions && (navigator as any).permissions.query) {
+      navigator.permissions.query({ name: 'notifications' as PermissionName }).then(status => {
+        status.onchange = checkPermission;
+      }).catch(() => {
+        // Fallback to polling if query fails (some browsers like Safari might not support it for notifications)
+        const interval = setInterval(checkPermission, 10000);
+        return () => clearInterval(interval);
+      });
+    } else {
+      const interval = setInterval(checkPermission, 10000);
+      return () => clearInterval(interval);
+    }
   }, [notifPermission]);
 
   // FCM Token Registration
@@ -266,7 +282,32 @@ export function useAlerts(
   const showSystemNotification = useCallback((title: string, body: string, id: string) => {
     if (!notifiedSystemRef.current.has(id)) {
       notifiedSystemRef.current.add(id);
-      // Sound is handled by AlertOverlay's mathematical buzzer
+      
+      if (!("Notification" in window)) return;
+
+      if (Notification.permission === "granted") {
+        try {
+          // Attempt using service worker registration for better background reliability
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.ready.then(registration => {
+              registration.showNotification(title, {
+                body,
+                tag: id,
+                icon: '/icon-192x192.png',
+                vibrate: [200, 100, 200],
+                data: { id }
+              } as any);
+            }).catch(() => {
+              // Fallback to basic notification if SW fails or is unavailable
+              new Notification(title, { body, tag: id });
+            });
+          } else {
+            new Notification(title, { body, tag: id });
+          }
+        } catch (e) {
+          console.error("[useAlerts] Notification failed:", e);
+        }
+      }
     }
   }, []);
 
@@ -438,7 +479,7 @@ export function useAlerts(
     });
 
     return () => unsubscribe();
-  }, [user, logAlertAction, showSystemNotification, handleFirestoreError]);
+  }, [user, showSystemNotification, handleFirestoreError]);
 
   const handleAlertAction = useCallback(async (alert: ActiveAlert, action: 'acknowledge' | 'escalate' | 'hide') => {
     if (action === 'hide') {
@@ -458,14 +499,20 @@ export function useAlerts(
     showToast(`Alert ${action === 'acknowledge' ? 'Acknowledged' : 'Escalated'}`, "success");
   }, [user, logAlertAction, showToast]);
 
-  const testAlert = useCallback(() => {
+  const testAlert = useCallback(async () => {
+    const granted = await requestNotificationPermission();
+    if (!granted) {
+      showToast("Notification permission denied or blocked.", "error");
+      return;
+    }
+    
     showSystemNotification(
       "🔔 TEST ALERT",
       "This is a test notification to verify background alerts are working.",
       "test-alert-" + Date.now()
     );
     showToast("Test alert triggered!", "success");
-  }, [showSystemNotification, showToast]);
+  }, [requestNotificationPermission, showSystemNotification, showToast]);
 
   return { 
     activeAlerts, alertLogs, minimizedAlerts, setMinimizedAlerts, 

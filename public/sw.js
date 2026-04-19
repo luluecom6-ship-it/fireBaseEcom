@@ -6,6 +6,37 @@ const ASSETS_TO_CACHE = [
   'https://cdn-icons-png.flaticon.com/512/3081/3081559.png'
 ];
 
+// Firebase Scripts for Service Worker
+importScripts('https://www.gstatic.com/firebasejs/12.12.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/12.12.0/firebase-messaging-compat.js');
+
+// Initialize Firebase in Service Worker
+firebase.initializeApp({
+  projectId: "myecomlulu",
+  appId: "1:38939626534:web:a404455dd600fab9bfeae7",
+  apiKey: "AIzaSyA7PoNtBzgg1gW0w6giXk-YwOYHf0Ev9pQ",
+  authDomain: "myecomlulu.firebaseapp.com",
+  storageBucket: "myecomlulu.firebasestorage.app",
+  messagingSenderId: "38939626534"
+});
+
+const messaging = firebase.messaging();
+
+messaging.onBackgroundMessage((payload) => {
+  console.log('[SW] Received background message ', payload);
+  
+  const notificationTitle = payload.notification?.title || 'Alert';
+  const notificationOptions = {
+    body: payload.notification?.body || 'New alert received',
+    icon: '/favicon.ico',
+    badge: '/favicon.ico',
+    tag: payload.data?.alertId || 'alert',
+    data: payload.data || {}
+  };
+
+  self.registration.showNotification(notificationTitle, notificationOptions);
+});
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
@@ -66,6 +97,9 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      const data = event.notification.data || {};
+      const targetUrl = typeof data === 'string' ? data : (data.click_action || data.url || '/');
+
       if (clientList.length > 0) {
         let client = clientList[0];
         for (let i = 0; i < clientList.length; i++) {
@@ -75,13 +109,22 @@ self.addEventListener('notificationclick', (event) => {
         }
         return client.focus();
       }
-      return self.clients.openWindow('/');
+      return self.clients.openWindow(targetUrl);
     })
   );
 });
 
 self.addEventListener('push', (event) => {
-  const data = event.data ? event.data.json() : {};
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (e) {
+    data = { 
+      title: 'Matrix Alert', 
+      body: event.data ? event.data.text() : 'New notification' 
+    };
+  }
+  
   const title = data.title || 'Matrix Alert';
   const options = {
     body: data.body || 'New alert triggered',

@@ -10,9 +10,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 0. Authentication Check
   const monitorKey = req.headers['x-monitor-key'];
+  const isVercelCron = req.headers['x-vercel-cron'] === '1';
   const secretKey = process.env.MONITOR_SECRET_KEY;
 
-  if (secretKey && (!monitorKey || monitorKey !== secretKey)) {
+  if (secretKey && !isVercelCron && (!monitorKey || monitorKey !== secretKey)) {
     console.warn('[API Monitor] Unauthorized request attempt');
     return res.status(401).json({ error: 'Unauthorized' });
   }

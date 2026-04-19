@@ -69,7 +69,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   useEffect(() => {
     setIsInIframe(window.self !== window.top);
-    // Check permission status periodically or on focus
+    
     const checkPermission = () => {
       if ("Notification" in window) {
         setNotifPermission(Notification.permission);
@@ -77,11 +77,23 @@ export const Dashboard: React.FC<DashboardProps> = ({
     };
     
     window.addEventListener('focus', checkPermission);
-    const interval = setInterval(checkPermission, 2000);
+    
+    // Use Permissions API if available for modern event-based tracking
+    let interval: any;
+    if (navigator.permissions && (navigator as any).permissions.query) {
+      navigator.permissions.query({ name: 'notifications' as PermissionName }).then(status => {
+        status.onchange = checkPermission;
+      }).catch(() => {
+        // Fallback for Safari/Legacy browsers (every 10s is plenty)
+        interval = setInterval(checkPermission, 10000);
+      });
+    } else {
+      interval = setInterval(checkPermission, 10000);
+    }
     
     return () => {
       window.removeEventListener('focus', checkPermission);
-      clearInterval(interval);
+      if (interval) clearInterval(interval);
     };
   }, []);
 
