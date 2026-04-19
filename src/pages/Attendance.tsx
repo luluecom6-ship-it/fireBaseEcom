@@ -93,7 +93,7 @@ export const Attendance: React.FC<AttendanceProps> = ({
                   animate={{ opacity: 1, scale: 1 }}
                   className="relative overflow-hidden rounded-xl border-4 border-slate-50 shadow-lg group aspect-video"
                 >
-                  <img src={img} className="w-full h-full object-cover" alt={`Preview ${index + 1}`} />
+                  <img src={img} className="w-full h-full object-cover" alt={`Preview ${index + 1}`} referrerPolicy="no-referrer" />
                   <button 
                     onClick={() => setImagePreviews([])}
                     className="absolute top-2 right-2 h-8 w-8 rounded-full bg-red-500 text-white flex items-center justify-center shadow-lg transition-all hover:scale-110 active:scale-90 z-10"

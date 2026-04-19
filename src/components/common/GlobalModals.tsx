@@ -98,6 +98,7 @@ export const GlobalModals: React.FC<GlobalModalsProps> = ({
                 className="max-w-none rounded-lg shadow-2xl pointer-events-none" 
                 style={{ maxHeight: '85vh' }}
                 alt="Full View" 
+                referrerPolicy="no-referrer"
               />
             </motion.div>
           </div>
@@ -143,7 +144,7 @@ export const GlobalModals: React.FC<GlobalModalsProps> = ({
                         className="aspect-video h-32 rounded-2xl overflow-hidden border-4 border-slate-50 shadow-inner flex-shrink-0 cursor-zoom-in"
                         onClick={() => setFullImage(fixImageUrl(img))}
                       >
-                        <img src={fixImageUrl(img)} className="w-full h-full object-cover" alt="Existing" />
+                        <img src={fixImageUrl(img)} className="w-full h-full object-cover" alt="Existing" referrerPolicy="no-referrer" />
                       </div>
                     ))}
                   </div>
@@ -153,7 +154,7 @@ export const GlobalModals: React.FC<GlobalModalsProps> = ({
                   <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
                     {imagePreviews.map((img, idx) => (
                       <div key={idx} className="aspect-video h-32 rounded-2xl overflow-hidden border-4 border-blue-50 shadow-inner flex-shrink-0">
-                        <img src={img} className="w-full h-full object-cover" alt="New" />
+                        <img src={img} className="w-full h-full object-cover" alt="New" referrerPolicy="no-referrer" />
                       </div>
                     ))}
                   </div>
@@ -235,7 +236,7 @@ export const GlobalModals: React.FC<GlobalModalsProps> = ({
               <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide justify-center">
                 {getImages(successOrder.imageUrl).map((img, idx) => (
                   <div key={idx} className="aspect-video h-20 rounded-xl overflow-hidden border-2 border-green-100 flex-shrink-0">
-                    <img src={fixImageUrl(img)} className="w-full h-full object-cover" alt="Success" />
+                    <img src={fixImageUrl(img)} className="w-full h-full object-cover" alt="Success" referrerPolicy="no-referrer" />
                   </div>
                 ))}
               </div>

@@ -139,7 +139,7 @@ export const Upload: React.FC<UploadProps> = ({
                   animate={{ opacity: 1, scale: 1 }}
                   className="relative overflow-hidden rounded-[1.5rem] sm:rounded-[2rem] border-4 border-slate-50 shadow-lg group aspect-video"
                 >
-                  <img src={img} className="w-full h-full object-cover" alt={`Preview ${index + 1}`} />
+                  <img src={img} className="w-full h-full object-cover" alt={`Preview ${index + 1}`} referrerPolicy="no-referrer" />
                   <button 
                     onClick={() => setImagePreviews(prev => prev.filter((_, i) => i !== index))}
                     className="absolute top-2 right-2 sm:top-3 sm:right-3 h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-red-500 text-white flex items-center justify-center shadow-lg transition-all hover:scale-110 active:scale-90 z-10"

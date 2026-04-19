@@ -93,6 +93,7 @@ export const Search: React.FC<SearchProps> = ({
                           className="w-full h-full object-cover cursor-zoom-in transition-transform duration-500 group-hover:scale-110" 
                           alt={`Order ${idx + 1}`} 
                           onClick={() => onViewImage(fixImageUrl(img))}
+                          referrerPolicy="no-referrer"
                         />
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center pointer-events-none">
                           <SearchIcon className="text-white" size={20} />

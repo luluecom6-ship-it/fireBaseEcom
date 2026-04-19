@@ -16,7 +16,7 @@ if (typeof window !== 'undefined') {
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     // Add versioning to force update if needed
-    navigator.serviceWorker.register('/sw.js?v=3.2').catch(err => {
+    navigator.serviceWorker.register('/sw.js?v=4.2').catch(err => {
       console.error('ServiceWorker registration failed: ', err);
     });
   });

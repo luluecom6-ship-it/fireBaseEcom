@@ -17,7 +17,7 @@ export async function runMonitorTick(db: any, messaging: any) {
     };
 
     // 2. Fetch Matrix Data & Admin Data from GAS via common service
-    const baseUrl = (process.env.GAS_API_URL || "https://script.google.com/macros/s/AKfycbym9GP8SjMCgi23bsgU1Ex-Q08iczLyRwqnKJJl9P-2TEHCCv5H4tOy-Vr7XFUWneMJ/exec");
+    const baseUrl = (process.env.GAS_API_URL || "https://script.google.com/macros/s/AKfycbyyN9uR3twJmu1zo5_yjw1wIiP6IgGRZLdctZ31DBnVsvpBguq1XUyh42Ro8k7x48es/exec");
     
     console.log("[Monitor] Fetching data via gasService...");
 

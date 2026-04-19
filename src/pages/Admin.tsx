@@ -1058,7 +1058,7 @@ export const Admin: React.FC<AdminProps> = ({
                           onClick={() => onViewImage(fixImageUrl(record.imageUrl))}
                           className="relative aspect-square overflow-hidden rounded-2xl sm:rounded-3xl border-4 border-slate-50 shadow-lg cursor-zoom-in"
                         >
-                          <img src={fixImageUrl(record.imageUrl)} className="w-full h-full object-cover" alt={type} />
+                          <img src={fixImageUrl(record.imageUrl)} className="w-full h-full object-cover" alt={type} referrerPolicy="no-referrer" />
                           <div className="absolute bottom-0 inset-x-0 bg-black/50 p-1.5 sm:p-2 text-[8px] sm:text-[10px] text-white font-black text-center backdrop-blur-sm">
                             {new Date(record.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
                           </div>
@@ -1187,7 +1187,7 @@ export const Admin: React.FC<AdminProps> = ({
                               onClick={() => onViewImage(fixImageUrl(img))}
                               className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg overflow-hidden cursor-zoom-in flex-shrink-0 border border-white shadow-sm bg-slate-100"
                             >
-                              <img src={fixImageUrl(img)} className="w-full h-full object-cover" alt="Order" />
+                              <img src={fixImageUrl(img)} className="w-full h-full object-cover" alt="Order" referrerPolicy="no-referrer" />
                             </div>
                           ))}
                         </div>

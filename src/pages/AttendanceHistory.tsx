@@ -222,7 +222,7 @@ export const AttendanceHistory: React.FC<AttendanceHistoryProps> = ({
 
               <div className="space-y-6">
                 <div className="relative aspect-square overflow-hidden rounded-3xl border-4 border-slate-50 shadow-lg cursor-zoom-in" onClick={() => onViewImage(fixImageUrl(selectedRecord.imageUrl))}>
-                  <img src={fixImageUrl(selectedRecord.imageUrl)} className="w-full h-full object-cover" alt="Verification" />
+                  <img src={fixImageUrl(selectedRecord.imageUrl)} className="w-full h-full object-cover" alt="Verification" referrerPolicy="no-referrer" />
                   <div className="absolute bottom-0 inset-x-0 bg-black/50 p-3 text-xs text-white font-black text-center backdrop-blur-sm">
                     {parseServerDate(selectedRecord.timestamp).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
                   </div>
