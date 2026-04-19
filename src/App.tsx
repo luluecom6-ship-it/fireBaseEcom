@@ -182,16 +182,21 @@ export default function App() {
       }
       lastRefreshRef.current = now;
 
-      console.log("[App] App returned to foreground, triggering refresh...");
-      fetchMatrixData();
-      const role = String(user.role || "").toLowerCase().trim();
-      if (page === "admin" || role === "admin" || role === "supervisor") {
-        fetchAdminData();
-      }
-      fetchStatus(user.empId);
-      if ((window as any).refreshAlertHistory) {
-        (window as any).refreshAlertHistory();
-      }
+      // Random delay between 0 and 3 seconds to spread the load
+      const jitter = Math.floor(Math.random() * 3000);
+      
+      setTimeout(() => {
+        console.log("[App] App returned to foreground, triggering refresh (with jitter)...");
+        fetchMatrixData();
+        const role = String(user.role || "").toLowerCase().trim();
+        if (page === "admin" || role === "admin" || role === "supervisor") {
+          fetchAdminData();
+        }
+        fetchStatus(user.empId);
+        if ((window as any).refreshAlertHistory) {
+          (window as any).refreshAlertHistory();
+        }
+      }, jitter);
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);

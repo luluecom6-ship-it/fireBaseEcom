@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { User, AttendanceStatus } from '../types';
 import { API_URL } from '../constants';
 import { robustFetch, parseServerDate } from '../utils/api';
+import { compressImage } from '../utils/imageUtils';
 
 export function useAttendance(
   user: User | null,
@@ -33,13 +34,18 @@ export function useAttendance(
       
       const res = await robustFetch(urlObj.toString());
       const text = await res.text();
-      let response;
-      try {
-        response = JSON.parse(text);
-      } catch (parseErr) {
-        console.error("[useAttendance] Failed to parse JSON:", text.substring(0, 100));
+      const trimmed = text.trim();
+      const isJson = trimmed.startsWith('{') || trimmed.startsWith('[');
+      const isHtml = trimmed.toLowerCase().includes('<!doctype') || trimmed.toLowerCase().includes('<html');
+
+      if (!isJson) {
+        if (!isHtml) {
+          console.error("[useAttendance] Failed to parse JSON:", text.substring(0, 100));
+        }
         return;
       }
+      
+      const response = JSON.parse(text);
       
       const data = response.status === "success" ? response.data : response;
       
@@ -178,13 +184,16 @@ export function useAttendance(
     setLoading(true);
     const type = (attendanceStatus.inTime && !attendanceStatus.outTime && !attendanceStatus.missingPunchOut) ? "Out" : "In";
     try {
+      // Compress selfie to save storage
+      const compressedImage = await compressImage(image, 800, 0.5);
+
       const params = new URLSearchParams();
       params.append("action", "attendance");
       params.append("empId", user.empId);
       params.append("name", user.name);
       params.append("storeId", user.storeId);
       params.append("type", type);
-      params.append("image", image);
+      params.append("image", compressedImage);
 
       await robustFetch(API_URL, {
         method: "POST",

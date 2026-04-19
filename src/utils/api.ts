@@ -42,8 +42,9 @@ export async function robustFetch(
       }
 
       if ((response.status === 429 || response.status >= 500) && retries > 0) {
-        console.warn(`[Fetch] Server error ${response.status}. Retrying in ${backoff}ms... (${retries} left)`);
-        await new Promise(resolve => setTimeout(resolve, backoff));
+        const retryBackoff = response.status === 429 ? backoff * 3 : backoff;
+        console.warn(`[Fetch] Server error ${response.status}. Retrying in ${retryBackoff}ms... (${retries} left)`);
+        await new Promise(resolve => setTimeout(resolve, retryBackoff));
         return robustFetch(url, options, retries - 1, backoff * 2);
       }
       throw new Error(`HTTP error! status: ${response.status}`);

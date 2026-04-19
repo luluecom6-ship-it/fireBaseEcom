@@ -71,9 +71,20 @@ export function useAlerts(
     });
   }, [user]);
 
+  const lastHistoryFetchRef = useRef(0);
+
   // Fetch historical logs from Legacy API
   const fetchAlertHistory = useCallback(async () => {
     if (!user) return;
+    
+    // Throttling: Prevents hitting GAS more than once every 60 seconds for logs
+    const now = Date.now();
+    if (now - lastHistoryFetchRef.current < 60000) {
+      console.log("[useAlerts] Skipping history fetch (throttled)");
+      return;
+    }
+    lastHistoryFetchRef.current = now;
+
     try {
       let urlObj: URL;
       try {

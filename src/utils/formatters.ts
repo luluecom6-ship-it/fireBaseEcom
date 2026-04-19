@@ -3,12 +3,30 @@ import { AGE_BUCKETS } from '../constants';
 export const fixImageUrl = (url: any) => {
   if (!url) return "";
   const str = String(url);
+  
+  // Handle Google Drive links
   if (str.includes("drive.google.com")) {
     const id = str.split("id=")[1] || str.split("/d/")[1]?.split("/")[0];
     if (!id) return str;
-    return `https://lh3.googleusercontent.com/d/${id}`;
+    
+    // Using lh3.googleusercontent.com/d/ID is the standard way to bypass Drive's HTML wrapper.
+    // We add =s1000 to ensure we get a high-quality version that mobile browsers can handle better.
+    return `https://lh3.googleusercontent.com/d/${id}=s1000`;
   }
+  
   return str;
+};
+
+/**
+ * Alternative URL format if the primary one fails.
+ * Some mobile browsers prefer the direct uc?id format.
+ */
+export const getAltImageUrl = (url: string) => {
+  if (url.includes("lh3.googleusercontent.com/d/")) {
+    const id = url.split("/d/")[1]?.split("=")[0];
+    return `https://drive.google.com/uc?export=view&id=${id}`;
+  }
+  return url;
 };
 
 export const getImages = (url: any): string[] => {

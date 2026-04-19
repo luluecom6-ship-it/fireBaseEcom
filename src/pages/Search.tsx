@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { Search as SearchIcon, X, RefreshCw } from 'lucide-react';
 import { OrderRecord, User } from '../types';
 import { Header } from '../components/layout/Header';
+import { SmartImage } from '../components/common/SmartImage';
 import { fixImageUrl, getImages } from '../utils/formatters';
 import { cn } from '../lib/utils';
 
@@ -69,7 +70,22 @@ export const Search: React.FC<SearchProps> = ({
         </div>
 
         <div className="space-y-4">
-          {searchResults.length > 0 ? (
+          {isSearching ? (
+            <div className="space-y-4 animate-pulse">
+              {[1, 2].map((i) => (
+                <div key={i} className="bg-white rounded-[1.5rem] sm:rounded-[2rem] h-64 border border-slate-100 flex flex-col p-4 gap-4">
+                  <div className="h-40 bg-slate-50 rounded-xl" />
+                  <div className="space-y-2">
+                    <div className="h-4 w-1/2 bg-slate-50 rounded" />
+                    <div className="h-3 w-1/3 bg-slate-50 rounded" />
+                  </div>
+                </div>
+              ))}
+              <div className="text-center py-4">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest animate-bounce">Searching Vault...</p>
+              </div>
+            </div>
+          ) : searchResults.length > 0 ? (
             searchResults.map((order, i) => (
               <motion.div 
                 key={`${order.orderId}-${order.timestamp}-${i}`}
@@ -88,12 +104,11 @@ export const Search: React.FC<SearchProps> = ({
                           getImages(order.imageUrl).length === 1 ? "col-span-2 aspect-video" : "aspect-square"
                         )}
                       >
-                        <img 
+                        <SmartImage 
                           src={fixImageUrl(img)} 
-                          className="w-full h-full object-cover cursor-zoom-in transition-transform duration-500 group-hover:scale-110" 
+                          className="w-full h-full cursor-zoom-in transition-transform duration-500 group-hover:scale-110" 
                           alt={`Order ${idx + 1}`} 
                           onClick={() => onViewImage(fixImageUrl(img))}
-                          referrerPolicy="no-referrer"
                         />
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center pointer-events-none">
                           <SearchIcon className="text-white" size={20} />

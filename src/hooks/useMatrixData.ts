@@ -4,7 +4,7 @@ import { API_URL } from '../constants';
 import { robustFetch } from '../utils/api';
 import { getBucketFromAgeing } from '../utils/formatters';
 
-export function useMatrixData(autoRefresh = true, intervalMs = 90000) {
+export function useMatrixData(autoRefresh = true, intervalMs = 120000) {
   const [matrixData, setMatrixData] = useState<MatrixData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,21 +17,23 @@ export function useMatrixData(autoRefresh = true, intervalMs = 90000) {
     setIsLoading(true);
     setError(null);
     try {
-      let urlObj: URL;
-      try {
-        urlObj = new URL(API_URL.trim());
-      } catch (urlErr) {
-        urlObj = new URL(API_URL.trim(), window.location.origin);
-      }
-      urlObj.searchParams.set('action', 'getMatrixData');
+      const baseUrl = API_URL.trim();
+      const searchParams = new URLSearchParams();
+      searchParams.set('action', 'getMatrixData');
       if (isManual) {
-        urlObj.searchParams.set('cache', 'skip');
+        searchParams.set('cache', 'skip');
       }
       
-      const res = await robustFetch(urlObj.toString());
+      const queryStr = searchParams.toString();
+      const finalUrl = baseUrl.includes('?') 
+        ? `${baseUrl}&${queryStr}` 
+        : `${baseUrl}?${queryStr}`;
+      
+      const res = await robustFetch(finalUrl);
       const text = await res.text();
+      const trimmed = text.trim();
 
-      if (text.trim().startsWith('{') || text.trim().startsWith('[')) {
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
         const data = JSON.parse(text);
         const matrix = data.status === "success" ? data.data : data;
         
@@ -72,8 +74,12 @@ export function useMatrixData(autoRefresh = true, intervalMs = 90000) {
           throw new Error("Invalid matrix data format");
         }
       } else {
-        console.error("[useMatrixData] Non-JSON response:", text.substring(0, 200));
-        throw new Error(`Server returned non-JSON response: ${text.substring(0, 50)}...`);
+        const isHtml = trimmed.toLowerCase().includes('<!doctype') || trimmed.toLowerCase().includes('<html');
+        if (isHtml) {
+          console.warn("[useMatrixData] Server is still booting, received HTML. Retrying soon...");
+        } else {
+          console.error("[useMatrixData] Non-JSON response:", text.substring(0, 200));
+        }
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

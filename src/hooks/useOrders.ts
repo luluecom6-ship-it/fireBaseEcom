@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { User, OrderRecord } from '../types';
 import { API_URL } from '../constants';
 import { robustFetch } from '../utils/api';
+import { compressImage } from '../utils/imageUtils';
 
 export function useOrders(
   user: User | null, 
@@ -38,13 +39,18 @@ export function useOrders(
     setDuplicateErrorId(null);
     
     try {
+      // Compress all images before submission to save bandwidth and drive space
+      const compressedPreviews = await Promise.all(
+        previews.map(base64 => compressImage(base64, 1000, 0.6))
+      );
+
       const params = new URLSearchParams();
       params.append("action", "uploadOrder");
       params.append("orderId", orderId.trim());
       params.append("storeId", user.storeId);
       params.append("pickerName", user.name);
       params.append("uploadedBy", user.name);
-      params.append("image", previews.join("|||"));
+      params.append("image", compressedPreviews.join("|||"));
 
       const res = await robustFetch(API_URL, {
         method: "POST",
@@ -106,20 +112,25 @@ export function useOrders(
     setIsSearching(true);
     try {
       const baseUrl = API_URL.trim();
-      let urlObj: URL;
-      try {
-        urlObj = new URL(baseUrl);
-      } catch (e) {
-        urlObj = new URL(baseUrl, window.location.origin);
-      }
-      urlObj.searchParams.set('action', 'getAdminData');
-      urlObj.searchParams.set('type', 'orders');
-      urlObj.searchParams.set('role', user.role || "");
-      urlObj.searchParams.set('region', user.region || "");
-      urlObj.searchParams.set('_t', Date.now().toString());
+      const searchParams = new URLSearchParams();
+      searchParams.set('action', 'getAdminData');
+      searchParams.set('type', 'orders');
+      searchParams.set('role', user.role || "");
+      searchParams.set('region', user.region || "");
+      searchParams.set('_t', Date.now().toString());
       
-      const res = await robustFetch(urlObj.toString());
+      const queryStr = searchParams.toString();
+      const finalUrl = baseUrl.includes('?') 
+        ? `${baseUrl}&${queryStr}` 
+        : `${baseUrl}?${queryStr}`;
+      
+      console.log(`[Search] Fetching from: ${finalUrl}`);
+      
+      const res = await robustFetch(finalUrl);
       const response = await res.json();
+      
+      console.log(`[Search] Response received:`, response.status);
+      
       let data = response.status === "success" ? response.data : response;
       
       // Handle case where backend returns full admin object instead of just orders array
@@ -127,21 +138,29 @@ export function useOrders(
         data = data.orders;
       }
       
-      if (!Array.isArray(data)) throw new Error("Invalid response format");
+      if (!Array.isArray(data)) {
+        console.error("[Search] Data is not an array:", data);
+        throw new Error("Invalid response format");
+      }
+
+      console.log(`[Search] Total orders to filter: ${data.length}`);
 
       const normalizeId = (id: string) => String(id).replace(/^(Lulu-|Jee-)/i, '').replace(/INP1$/i, '').trim();
       const normalizedQuery = normalizeId(query.toLowerCase());
+      const queryLower = query.toLowerCase().trim();
 
       let filtered = data.filter(o => {
         const orderIdValue = o.orderId || o.OrderID || o.order_id || "";
-        const orderIdStr = String(orderIdValue).toLowerCase();
+        const orderIdStr = String(orderIdValue).toLowerCase().trim();
         const normalizedOrderId = normalizeId(orderIdStr);
         
         // Match if direct match, includes, OR both numeric parts match
-        return orderIdStr.includes(query.toLowerCase()) || 
-               query.toLowerCase().includes(orderIdStr) ||
-               (normalizedQuery.length >= 8 && normalizedOrderId.includes(normalizedQuery)) ||
-               (normalizedOrderId.length >= 8 && normalizedQuery.includes(normalizedOrderId));
+        const isMatch = orderIdStr.includes(queryLower) || 
+                        queryLower.includes(orderIdStr) ||
+                        (normalizedQuery.length >= 4 && normalizedOrderId.includes(normalizedQuery)) ||
+                        (normalizedOrderId.length >= 4 && normalizedQuery.includes(normalizedOrderId));
+        
+        return isMatch;
       }).map(o => ({
         ...o,
         orderId: String(o.orderId || o.OrderID || o.order_id || ""),
@@ -152,15 +171,26 @@ export function useOrders(
         imageUrl: String(o.imageUrl || o.ImageUrl || o.image_url || o.image || "")
       }));
       
+      console.log(`[Search] Matches found after ID filter: ${filtered.length}`);
+      
+      // Role-based filtering (Restrict what non-admins can see)
       if (user.role !== 'admin' && user.role !== 'supervisor') {
         const userStoreId = String(user.storeId || "").trim().toLowerCase();
+        const userNameRaw = String(user.name || "").trim().toLowerCase();
+        
         if ((user.role === 'manager' || user.role === 'store') && userStoreId !== 'all') {
           filtered = filtered.filter(o => String(o.storeId || "").trim().toLowerCase() === userStoreId);
         } else {
-          filtered = filtered.filter(o => o.uploadedBy === user.name);
+          // Normal staff: see only their own uploads
+          filtered = filtered.filter(o => {
+            const uploadedBy = String(o.uploadedBy || "").trim().toLowerCase();
+            const pickerName = String(o.pickerName || "").trim().toLowerCase();
+            return uploadedBy === userNameRaw || pickerName === userNameRaw;
+          });
         }
       }
       
+      console.log(`[Search] Final results after role filter: ${filtered.length}`);
       setSearchResults(filtered);
     } catch (e) {
       console.error("Search error:", e);

@@ -44,14 +44,21 @@ export function useAdmin(
       
       const res = await robustFetch(urlObj.toString());
       const text = await res.text();
-      let response;
-      try {
-        response = JSON.parse(text);
-      } catch (parseErr) {
-        console.error("Admin sync failed: Response was not JSON", text.substring(0, 100));
-        if (isManual) showToast("Server Error: Invalid data format", "error");
+      const trimmed = text.trim();
+      const isJson = trimmed.startsWith('{') || trimmed.startsWith('[');
+      const isHtml = trimmed.toLowerCase().includes('<!doctype') || trimmed.toLowerCase().includes('<html');
+
+      if (!isJson) {
+        if (isHtml) {
+          console.warn("Admin sync skipped: Server is still booting (received HTML)");
+        } else {
+          console.error("Admin sync failed: Response was not JSON", text.substring(0, 100));
+        }
+        if (isManual && !isHtml) showToast("Server Error: Invalid data format", "error");
         return;
       }
+
+      const response = JSON.parse(text);
       const data = response.status === "success" ? response.data : response;
       
       if (data && (data.users || data.attendance || data.orders || data.regions)) {

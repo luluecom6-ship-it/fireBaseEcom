@@ -7,8 +7,8 @@ import cors from "cors";
 import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import fs from "fs";
-import { runMonitorTick } from "./src/services/monitorService";
-import { executeGasRequest } from "./src/services/gasService";
+import { runMonitorTick } from "./src/services/monitorService.ts";
+import { executeGasRequest } from "./src/services/gasService.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -95,7 +95,7 @@ async function startServer() {
     
     // Consistent fallback across all environments
     if (!rawUrl || rawUrl === "undefined" || !rawUrl.startsWith("http")) {
-      rawUrl = "https://script.google.com/macros/s/AKfycbyyN9uR3twJmu1zo5_yjw1wIiP6IgGRZLdctZ31DBnVsvpBguq1XUyh42Ro8k7x48es/exec";
+      rawUrl = "https://script.google.com/macros/s/AKfycbyj8wQ6A7bGSn28_NG-PEOqb2hCH8bZ3Cav6kYOvLgoTsq6aroyNCKi1Bf70S43x3DQ/exec";
     }
 
     let urlObj: URL;
@@ -141,9 +141,14 @@ async function startServer() {
     try {
       const skipCache = req.method !== 'GET' || req.query.cache === 'skip' || req.query._skipCache === 'true';
       const response = await executeGasRequest(config, { skipCache, cacheKey });
-      if (response.headers['content-type']) res.setHeader('Content-Type', response.headers['content-type']);
+      if (response.headers && response.headers['content-type']) {
+        res.setHeader('Content-Type', response.headers['content-type']);
+      }
       
-      const dataStr = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+      const dataStr = response.data 
+        ? (typeof response.data === 'string' ? response.data : JSON.stringify(response.data)) 
+        : "";
+        
       if (dataStr.includes('goog-script-error') || dataStr.includes('Rate exceeded')) {
         const isRate = dataStr.includes('Rate exceeded');
         return res.status(isRate ? 429 : 502).json({ 

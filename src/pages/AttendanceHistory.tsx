@@ -4,6 +4,7 @@ import { Clock, RefreshCw, Calendar, X, AlertCircle } from 'lucide-react';
 import { User, AttendanceRecord } from '../types';
 import { Header } from '../components/layout/Header';
 import { fixImageUrl } from '../utils/formatters';
+import { SmartImage } from '../components/common/SmartImage';
 import { cn } from '../lib/utils';
 import { robustFetch, parseServerDate } from '../utils/api';
 import { API_URL } from '../constants';
@@ -222,7 +223,11 @@ export const AttendanceHistory: React.FC<AttendanceHistoryProps> = ({
 
               <div className="space-y-6">
                 <div className="relative aspect-square overflow-hidden rounded-3xl border-4 border-slate-50 shadow-lg cursor-zoom-in" onClick={() => onViewImage(fixImageUrl(selectedRecord.imageUrl))}>
-                  <img src={fixImageUrl(selectedRecord.imageUrl)} className="w-full h-full object-cover" alt="Verification" referrerPolicy="no-referrer" />
+                  <SmartImage 
+                    src={fixImageUrl(selectedRecord.imageUrl)} 
+                    className="w-full h-full" 
+                    alt="Verification" 
+                  />
                   <div className="absolute bottom-0 inset-x-0 bg-black/50 p-3 text-xs text-white font-black text-center backdrop-blur-sm">
                     {parseServerDate(selectedRecord.timestamp).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
                   </div>

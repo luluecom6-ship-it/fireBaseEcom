@@ -1,5 +1,5 @@
-import { detectAlerts } from "../utils/alertLogic";
-import { executeGasRequest } from "./gasService";
+import { detectAlerts } from "../utils/alertLogic.ts";
+import { executeGasRequest } from "./gasService.ts";
 
 export async function runMonitorTick(db: any, messaging: any) {
   try {
@@ -17,7 +17,7 @@ export async function runMonitorTick(db: any, messaging: any) {
     };
 
     // 2. Fetch Matrix Data & Admin Data from GAS via common service
-    const baseUrl = (process.env.GAS_API_URL || "https://script.google.com/macros/s/AKfycbyyN9uR3twJmu1zo5_yjw1wIiP6IgGRZLdctZ31DBnVsvpBguq1XUyh42Ro8k7x48es/exec");
+    const baseUrl = (process.env.GAS_API_URL || "https://script.google.com/macros/s/AKfycbyj8wQ6A7bGSn28_NG-PEOqb2hCH8bZ3Cav6kYOvLgoTsq6aroyNCKi1Bf70S43x3DQ/exec");
     
     console.log("[Monitor] Fetching data via gasService...");
 
