@@ -341,6 +341,11 @@ export function useAuth() {
             // Force role to admin if it's a default admin
             if (isDefaultAdmin) newUser.role = 'admin';
 
+            // BUG FIX: setUser was missing here — without this the app
+            // renders in a logged-out state even though auth succeeded.
+            setUser(newUser);
+            localStorage.setItem("lulu_user", JSON.stringify(newUser));
+
             setDoc(userRef, { ...newUser, updatedAt: new Date().toISOString() }, { merge: true });
           }
         }, (err) => {
