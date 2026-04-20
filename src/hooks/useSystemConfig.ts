@@ -102,7 +102,6 @@ export function useSystemConfig(
     } catch (error) {
       console.error("Failed to save config to Firebase", error);
       
-      // Enhanced error reporting for Firestore
       const errInfo = {
         error: error instanceof Error ? error.message : String(error),
         operationType: 'write',
@@ -113,6 +112,18 @@ export function useSystemConfig(
         }
       };
       console.error('Firestore Error Detail:', JSON.stringify(errInfo));
+
+      // When Firebase is using anonymous auth, the admin role claim is absent from
+      // the token so Firestore rules reject the write. This happens when the
+      // /api/auth/token endpoint is failing (missing Vercel env vars).
+      if (auth.currentUser?.isAnonymous) {
+        const msg = "Cannot save: Firebase auth is anonymous (token endpoint failing). " +
+          "Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY in " +
+          "Vercel Dashboard → Project → Settings → Environment Variables, then re-deploy and log in again.";
+        if (showToast) showToast("⚠️ Firebase env vars not configured — see console", "error");
+        console.error("[useSystemConfig] FIX REQUIRED:", msg);
+        return { success: false, message: msg };
+      }
 
       if (showToast) showToast("Failed to save to Firebase: " + (error as any).message, "error");
       return { success: false, message: "Failed to save to Firebase" };

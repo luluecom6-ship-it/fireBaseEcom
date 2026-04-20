@@ -97,9 +97,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Issue a custom Firebase auth token bound to this empId.
-    // The client calls signInWithCustomToken(auth, token) which satisfies
-    // isAuthenticated() in Firestore rules, allowing all listeners to start.
-    const token = await admin.auth(app).createCustomToken(String(empId));
+    // IMPORTANT: We embed the role as a custom claim so Firestore rules can check
+    // request.auth.token.role directly — no Firestore document lookup needed.
+    // Without claims, isAdmin() has a chicken-and-egg problem: it tries to read
+    // users/{uid}.role to decide if the write is allowed, but the user can't write
+    // the profile document until isAdmin() returns true.
+    const roleClaim = user?.role ? { role: String(user.role).toLowerCase().trim() } : {};
+    const token = await admin.auth(app).createCustomToken(String(empId), roleClaim);
     console.log(`[auth/token] Custom token issued for "${empId}"`);
 
     return res.status(200).json({ token, databaseId: databaseId || '(default)' });
