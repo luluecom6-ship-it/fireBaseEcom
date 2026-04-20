@@ -4,10 +4,31 @@ import { API_URL } from '../constants';
 import { robustFetch } from '../utils/api';
 import { getBucketFromAgeing } from '../utils/formatters';
 
+// Cooldown between monitor pings (ms). Every matrix refresh triggers a
+// monitor tick so alert detection runs in real time instead of waiting
+// for the Vercel cron (which only fires every 5 min on Pro, or daily on Hobby).
+const MONITOR_PING_COOLDOWN = 90_000; // 90 seconds
+
+async function pingMonitor() {
+  try {
+    // Fire-and-forget: don't await the full response, just kick it off.
+    // Use keepalive so the request survives a page navigation.
+    const monitorSecret = (import.meta as any).env?.VITE_MONITOR_SECRET_KEY || '';
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (monitorSecret) headers['x-monitor-key'] = monitorSecret;
+    fetch('/api/monitor', { method: 'POST', headers, keepalive: true }).catch(() => {});
+    console.log('[useMatrixData] Monitor tick pinged');
+  } catch {
+    // Silently ignore — alert detection will still run on the next cycle
+  }
+}
+
 export function useMatrixData(autoRefresh = true, intervalMs = 120000) {
   const [matrixData, setMatrixData] = useState<MatrixData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const lastMonitorPingRef = useRef(0);
 
   const fetchData = useCallback(async (isManual = false) => {
     if (!API_URL) {
@@ -53,14 +74,7 @@ export function useMatrixData(autoRefresh = true, intervalMs = 120000) {
                 bucket = getBucketFromAgeing(timestamp);
               }
 
-              return {
-                status,
-                storeID,
-                orderID,
-                slot,
-                bucket,
-                timestamp
-              };
+              return { status, storeID, orderID, slot, bucket, timestamp };
             });
           };
 
@@ -70,6 +84,17 @@ export function useMatrixData(autoRefresh = true, intervalMs = 120000) {
             syncTime: matrix.syncTime || data.timestamp || matrix.timestamp || null,
             timestamp: new Date().toISOString()
           });
+
+          // ── Bug C fix: Trigger monitor tick after every successful matrix fetch ──
+          // This ensures alert detection + broadcast processing runs in real time
+          // regardless of the Vercel cron schedule (which is daily on Hobby plan).
+          // A 90-second cooldown prevents hammering the endpoint when multiple
+          // tabs are open or when the user manually refreshes.
+          const now = Date.now();
+          if (now - lastMonitorPingRef.current > MONITOR_PING_COOLDOWN) {
+            lastMonitorPingRef.current = now;
+            pingMonitor();
+          }
         } else {
           throw new Error("Invalid matrix data format");
         }

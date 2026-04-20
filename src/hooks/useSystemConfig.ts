@@ -70,7 +70,7 @@ export function useSystemConfig(
     });
 
     return () => unsubscribe();
-  }, [showToast]);
+  }, [isFirebaseAuthenticated, showToast]);
 
   const saveSystemConfig = useCallback(async () => {
     if (!user || user.role !== 'admin') {

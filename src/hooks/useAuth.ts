@@ -173,8 +173,19 @@ export function useAuth() {
           
           if (tokenRes.data.token) {
             // Now that backend has synced the data, we authenticate.
-            // The onSnapshot listener (triggered by this call) will now read the updated doc.
+            // Bug G fix: sign in first, then await state propagation so
+            // isFirebaseAuthenticated is true before the caller's useEffect
+            // hooks re-run. Without this wait there is a timing window where
+            // alerts, presence, FCM token registration, and broadcast listeners
+            // all start with no Firebase session.
             await signInWithCustomToken(auth, tokenRes.data.token);
+            await new Promise<void>((resolve) => {
+              const unsub = onAuthStateChanged(auth, (u) => {
+                if (u) { unsub(); resolve(); }
+              });
+              // Safety timeout: resolve after 5 s even if auth never fires
+              setTimeout(() => { unsub(); resolve(); }, 5000);
+            });
             console.log(`[useAuth] Authenticated standard session with Custom Token: ${userData.empId}`);
           }
         } catch (tokenErr) {
@@ -341,12 +352,18 @@ export function useAuth() {
             // Force role to admin if it's a default admin
             if (isDefaultAdmin) newUser.role = 'admin';
 
-            // BUG FIX: setUser was missing here — without this the app
-            // renders in a logged-out state even though auth succeeded.
+            // Wait for profile to land in named DB *before* setting user state.
+            // This prevents useStaffStatus / useAlerts from racing the write
+            // (Bug E fix). We still fire-and-forget if this throws so the UI
+            // is never permanently blocked.
+            try {
+              await setDoc(userRef, { ...newUser, updatedAt: new Date().toISOString() }, { merge: true });
+            } catch (writeErr) {
+              console.warn("[useAuth] Profile create failed (will retry on next snapshot):", writeErr);
+            }
+
             setUser(newUser);
             localStorage.setItem("lulu_user", JSON.stringify(newUser));
-
-            setDoc(userRef, { ...newUser, updatedAt: new Date().toISOString() }, { merge: true });
           }
         }, (err) => {
           console.error("User profile sync error:", err);
