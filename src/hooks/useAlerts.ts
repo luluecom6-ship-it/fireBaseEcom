@@ -213,55 +213,90 @@ export function useAlerts(
     registerToken();
   }, [user, notifPermission]);
 
-  // Push Notification Listener (for online users)
+  // Push Notification / Broadcast Listener (for online users)
+  // ✅ FIX: This must run even if isFirebaseAuthenticated is false
+  // because users logged in via username/password may not have a Firebase session
+  // but still need to receive broadcasts.
   useEffect(() => {
-    if (!user || !isFirebaseAuthenticated) return;
+    if (!user) return;
 
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-    const q = query(
-      collection(db, 'push_queue'),
-      where('timestamp', '>=', twoHoursAgo)
-    );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === "added") {
-          const data = change.doc.data();
-          const userRole = String(user.role || "").toLowerCase().trim();
-          
-          // Normalize target roles to lowercase and trimmed strings
-          const targetRoles = Array.isArray(data.targetRoles) 
-            ? data.targetRoles.map((r: any) => String(r).toLowerCase().trim())
-            : [];
-          
-          // If targetRoles is missing or empty, assume it's for everyone
-          const isTarget = targetRoles.length === 0 || targetRoles.includes(userRole);
-          
-          // Check if it's a recent broadcast (within last 2 hours to handle clock skew)
-          const timestamp = data.timestamp?.toMillis() || Date.now();
-          const isRecent = Math.abs(Date.now() - timestamp) < (120 * 60 * 1000); 
-          
-          // Use session storage to avoid showing the same broadcast multiple times in one session
-          const sessionKey = `broadcast_seen_${change.doc.id}`;
-          const alreadySeen = sessionStorage.getItem(sessionKey);
+    // If we're not Firebase-authenticated, we can't listen to Firestore.
+    // But we should still try — the custom token flow (Bug 2 fix) might succeed
+    // asynchronously after this effect runs. We set up the listener anyway
+    // and let Firestore reject it if auth fails.
+    
+    let unsubscribe: (() => void) | null = null;
+    let retryTimeout: any = null;
+    
+    const startListener = () => {
+      try {
+        const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+        const q = query(
+          collection(db, 'push_queue'),
+          where('timestamp', '>=', twoHoursAgo)
+        );
+        unsubscribe = onSnapshot(q, (snapshot) => {
+          snapshot.docChanges().forEach((change) => {
+            if (change.type === "added") {
+              const data = change.doc.data();
+              const userRole = String(user.role || "").toLowerCase().trim();
+              
+              // Normalize target roles to lowercase and trimmed strings
+              const targetRoles = Array.isArray(data.targetRoles) 
+                ? data.targetRoles.map((r: any) => String(r).toLowerCase().trim())
+                : [];
+              
+              // If targetRoles is missing or empty, assume it's for everyone
+              const isTarget = targetRoles.length === 0 || targetRoles.includes(userRole);
+              
+              // Check if it's a recent broadcast (within last 2 hours to handle clock skew)
+              // Handle both Firestore Timestamp objects and regular timestamps
+              let timestamp: number;
+              if (data.timestamp && typeof data.timestamp.toMillis === 'function') {
+                timestamp = data.timestamp.toMillis();
+              } else if (data.timestamp && typeof data.timestamp.seconds === 'number') {
+                timestamp = data.timestamp.seconds * 1000;
+              } else {
+                timestamp = Date.now();
+              }
+              const isRecent = Math.abs(Date.now() - timestamp) < (120 * 60 * 1000); 
+              
+              // Use session storage to avoid showing the same broadcast multiple times in one session
+              const sessionKey = `broadcast_seen_${change.doc.id}`;
+              const alreadySeen = sessionStorage.getItem(sessionKey);
 
-          console.log(`[Broadcast] ID: ${change.doc.id}, UserRole: "${userRole}", TargetRoles: ${JSON.stringify(targetRoles)}, IsTarget: ${isTarget}, IsRecent: ${isRecent}, AlreadySeen: ${!!alreadySeen}`);
+              console.log(`[Broadcast] ID: ${change.doc.id}, UserRole: "${userRole}", TargetRoles: ${JSON.stringify(targetRoles)}, IsTarget: ${isTarget}, IsRecent: ${isRecent}, AlreadySeen: ${!!alreadySeen}`);
 
-          if (isTarget && isRecent && !alreadySeen) {
-            console.log(`[Broadcast] Displaying: ${data.title}`);
-            showToast(`${data.title}: ${data.body}`, "success");
-            setLastBroadcast({ id: change.doc.id, title: data.title, body: data.body });
-            sessionStorage.setItem(sessionKey, "true");
-          } else if (!isTarget) {
-            console.log(`[Broadcast] Role mismatch. User is "${userRole}", Targets are: ${JSON.stringify(targetRoles)}`);
+              if (isTarget && isRecent && !alreadySeen) {
+                console.log(`[Broadcast] Displaying: ${data.title}`);
+                showToast(`${data.title}: ${data.body}`, "success");
+                setLastBroadcast({ id: change.doc.id, title: data.title, body: data.body });
+                sessionStorage.setItem(sessionKey, "true");
+              } else if (!isTarget) {
+                console.log(`[Broadcast] Role mismatch. User is "${userRole}", Targets are: ${JSON.stringify(targetRoles)}`);
+              }
+            }
+          });
+        }, (error) => {
+          console.error("Push queue listener error:", error);
+          // If permission denied, retry after auth might complete
+          if (error.code === 'permission-denied' && !isFirebaseAuthenticated) {
+            console.log("[Broadcast] Auth not ready yet. Will retry in 10s...");
+            retryTimeout = setTimeout(startListener, 10000);
           }
-        }
-      });
-    }, (error) => {
-      console.error("Push queue listener error:", error);
-    });
+        });
+      } catch (e) {
+        console.error("[Broadcast] Failed to start listener:", e);
+      }
+    };
 
-    return () => unsubscribe();
-  }, [user, showToast]);
+    startListener();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
+  }, [user, isFirebaseAuthenticated, showToast]);
 
   const handleFirestoreError = useCallback((error: any, operationType: string, path: string) => {
     const errInfo = {

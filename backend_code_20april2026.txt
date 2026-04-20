@@ -374,6 +374,24 @@ function uploadImageToDrive(base64, fileName, rootFolderId, pathSegments) {
 }
 
 // ─────────────────────────────────────────────
+// VERCEL MONITOR TRIGGER (set up as GAS time-based trigger)
+// ─────────────────────────────────────────────
+function triggerVercelMonitor() {
+  const url = "https://fire-base-ecom.vercel.app/api/monitor";
+  const key = "https://script.google.com/macros/s/AKfycbyPS7j9nxob6HmqNEfN-2eIXBLGoprMZ4SqFf1WpfffTGWPiGveJzlh9zIVkPb9VD0E/exec";
+  try {
+    const res = UrlFetchApp.fetch(url, {
+      "method": "get",
+      "muteHttpExceptions": true,
+      "headers": { "x-monitor-key": key }
+    });
+    Logger.log("Monitor: " + res.getResponseCode());
+  } catch (e) {
+    Logger.log("Monitor Error: " + e.toString());
+  }
+}
+
+// ─────────────────────────────────────────────
 // UTILITIES
 // ─────────────────────────────────────────────
 function getOrCreateSheet(ss, name) {
