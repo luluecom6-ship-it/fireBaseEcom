@@ -146,21 +146,6 @@ export const Admin: React.FC<AdminProps> = ({
 
   const handleBroadcast = async () => {
     if (!broadcastMessage.trim() || !isFirebaseAuthenticated || targetRoles.length === 0) return;
-
-    // Block broadcast if the current Firebase session is anonymous.
-    // Anonymous sessions have no role claim so Firestore rules deny the write to push_queue.
-    const { auth } = await import('../firebase');
-    if (auth.currentUser?.isAnonymous) {
-      showToast("⚠️ Cannot broadcast: Firebase env vars not configured on Vercel. Check console.", "error");
-      console.error(
-        "[Admin] Broadcast blocked — Firebase session is anonymous (token endpoint failing).
-" +
-        "FIX: Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY in " +
-        "Vercel Dashboard → Project → Settings → Environment Variables, then re-deploy and log in again."
-      );
-      return;
-    }
-
     setIsBroadcasting(true);
     try {
       const notificationId = `broadcast-${Date.now()}`;
@@ -174,13 +159,8 @@ export const Admin: React.FC<AdminProps> = ({
       });
       showToast("Broadcast sent successfully!", "success");
       setBroadcastMessage("");
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error sending broadcast:", error);
-      if (error?.code === 'permission-denied') {
-        showToast("Permission denied — ensure Firebase rules are deployed to the named database.", "error");
-      } else {
-        showToast("Broadcast failed: " + (error?.message || "Unknown error"), "error");
-      }
     } finally {
       setIsBroadcasting(false);
     }
