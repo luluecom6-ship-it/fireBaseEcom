@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+#reader {
+  border: none !important;
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+#reader__dashboard_section_csr button {
+  background-color: #2563eb !important;
+  color: white !important;
+  border: none !important;
+  padding: 0.5rem 1rem !important;
+  border-radius: 0.75rem !important;
+  font-weight: 900 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.1em !important;
+  font-size: 10px !important;
+  cursor: pointer !important;
+  transition: all 0.2s !important;
+}
+
+#reader__dashboard_section_csr button:hover {
+  background-color: #1d4ed8 !important;
+  transform: scale(1.05);
+}
+
+#reader__status_span {
+  font-weight: 900 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.1em !important;
+  font-size: 10px !important;
+  color: #64748b !important;
+}
+
+#reader__camera_selection {
+  padding: 0.5rem !important;
+  border-radius: 0.75rem !important;
+  border: 1px solid #e2e8f0 !important;
+  font-weight: 700 !important;
+  font-size: 12px !important;
+  outline: none !important;
+}
+
+.matrix-refresh-btn {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.matrix-refresh-btn:hover {
+  box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.4) !important;
+  transform: translateY(-2px) !important;
+}
+
+.matrix-refresh-btn:active {
+  transform: translateY(0) scale(0.95) !important;
+}
+
+.matrix-refresh-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: white;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.matrix-refresh-btn:active::after {
+  opacity: 0.2;
+}
+
+th.bg-slate-50\/50 {
+  background-color: rgba(248, 250, 252, 0.8) !important;
+  backdrop-filter: blur(4px);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #cbd5e1;
+}
+
+/* Audible Buzzer Card Style Enhancement */
+div#root:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(1) {
+  position: relative;
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  letter-spacing: 0.05em;
+}
+
+div#root:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(1):hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 15px 30px -5px rgba(0, 0, 0, 0.2);
+}
