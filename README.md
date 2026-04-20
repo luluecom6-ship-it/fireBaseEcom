@@ -1,10 +1,20 @@
-# Firebase Service Account JSON (Stringified)
-# Get this from Firebase Console > Project Settings > Service Accounts > Generate New Private Key
-FIREBASE_SERVICE_ACCOUNT=
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
 
-# Google Apps Script API URL
-VITE_GAS_API_URL=https://script.google.com/macros/s/AKfycbyj8wQ6A7bGSn28_NG-PEOqb2hCH8bZ3Cav6kYOvLgoTsq6aroyNCKi1Bf70S43x3DQ/exec
-GAS_API_URL=https://script.google.com/macros/s/AKfycbyj8wQ6A7bGSn28_NG-PEOqb2hCH8bZ3Cav6kYOvLgoTsq6aroyNCKi1Bf70S43x3DQ/exec
+# Run and deploy your AI Studio app
 
-# Monitor Endpoint Secret Key
-MONITOR_SECRET_KEY=
+This contains everything you need to run your app locally.
+
+View your app in AI Studio: https://ai.studio/apps/589cf723-ab60-4b6f-a2cd-f84f8c8c1b48
+
+## Run Locally
+
+**Prerequisites:**  Node.js
+
+
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`
