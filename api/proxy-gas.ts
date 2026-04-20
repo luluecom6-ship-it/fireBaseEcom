@@ -16,11 +16,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  let gasUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
+  let gasUrl = (process.env.GAS_API_URL || "").trim();
   
-  // Fallback to the known working URL
-  if (!gasUrl || gasUrl === "undefined" || !gasUrl.startsWith("http")) {
-    gasUrl = "https://script.google.com/macros/s/AKfycbyj8wQ6A7bGSn28_NG-PEOqb2hCH8bZ3Cav6kYOvLgoTsq6aroyNCKi1Bf70S43x3DQ/exec";
+  // ✅ BUG 6 FIX: Return structured error instead of silently using a hardcoded URL
+  if (!gasUrl || gasUrl === "undefined" || !gasUrl.startsWith("https://script.google.com")) {
+    console.error("[proxy-gas] FATAL: GAS_API_URL env var is missing or invalid.");
+    return res.status(503).json({
+      status: "error",
+      message: "Backend proxy is misconfigured. Contact system administrator.",
+      code: "GAS_URL_MISSING"
+    });
   }
 
   try {

@@ -93,7 +93,10 @@ export function useAdmin(
           pickerName: String(o.pickerName || o.PickerName || o.picker_name || o.picker || "").trim(),
           uploadedBy: String(o.uploadedBy || o.UploadedBy || o.uploaded_by || "").trim(),
           timestamp: String(o.timestamp || o.Timestamp || o.Time || o.dateTime || "").trim(),
-          imageUrl: String(o.imageUrl || o.ImageUrl || o.image_url || o.image || "").trim()
+          imageUrl: String(o.imageUrl || o.ImageUrl || o.image_url || o.image || "").trim(),
+          allImages: String(o.allImages || o.imageUrl || o.ImageUrl || o.image_url || o.image || "").trim(),
+          imageUrls: String(o.allImages || o.imageUrl || o.ImageUrl || o.image_url || o.image || "")
+            .split(",").map((s: string) => s.trim()).filter(Boolean)
         }));
 
         setAdminData({
@@ -115,20 +118,18 @@ export function useAdmin(
   }, [user, showToast, setLoading]);
 
   const isFetchingRegions = useRef(false);
+  const lastRegionFetchRef = useRef(0);
 
   const fetchRegions = useCallback(async () => {
     if (!user || !API_URL || isFetchingRegions.current) return;
     
-    // Prevent excessive calls within a short window (5 minutes)
+    // ✅ BUG 10 FIX: Use ref instead of window global + remove regions.length from deps
     const now = Date.now();
-    const lastFetch = (window as any)._lastRegionsFetch || 0;
-    if (now - lastFetch < 300000 && adminData.regions.length > 0) {
-      return;
-    }
+    if (now - lastRegionFetchRef.current < 300000) return; // 5min throttle
 
     isFetchingRegions.current = true;
+    lastRegionFetchRef.current = now;
     try {
-      (window as any)._lastRegionsFetch = now;
       const res = await robustFetch(`${API_URL}?action=getRegions`);
       const response = await res.json();
       if (response.status === "success" && Array.isArray(response.data)) {
@@ -143,7 +144,7 @@ export function useAdmin(
     } finally {
       isFetchingRegions.current = false;
     }
-  }, [user, API_URL, adminData.regions.length]);
+  }, [user]); // ✅ Only depends on user, not on regions array length
 
   const handleResetAttendance = useCallback(async (empId: string, filterDate: string) => {
     setLoading(true);

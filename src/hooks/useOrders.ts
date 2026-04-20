@@ -117,6 +117,8 @@ export function useOrders(
       searchParams.set('type', 'orders');
       searchParams.set('role', user.role || "");
       searchParams.set('region', user.region || "");
+      // ✅ BUG 7 FIX: Pass storeId so GAS can pre-filter server-side for non-admin users
+      searchParams.set('storeId', user.storeId || "");
       searchParams.set('_t', Date.now().toString());
       
       const queryStr = searchParams.toString();
@@ -168,7 +170,11 @@ export function useOrders(
         pickerName: String(o.pickerName || o.PickerName || o.picker_name || o.picker || ""),
         uploadedBy: String(o.uploadedBy || o.UploadedBy || o.uploaded_by || ""),
         timestamp: String(o.timestamp || o.Timestamp || o.Time || o.dateTime || ""),
-        imageUrl: String(o.imageUrl || o.ImageUrl || o.image_url || o.image || "")
+        imageUrl: String(o.imageUrl || o.ImageUrl || o.image_url || o.image || ""),
+        // ✅ BUG 4 FIX: Include allImages and parsed imageUrls array
+        allImages: String(o.allImages || o.imageUrl || o.ImageUrl || o.image_url || o.image || "").trim(),
+        imageUrls: String(o.allImages || o.imageUrl || o.ImageUrl || o.image_url || o.image || "")
+          .split(",").map((s: string) => s.trim()).filter(Boolean)
       }));
       
       console.log(`[Search] Matches found after ID filter: ${filtered.length}`);

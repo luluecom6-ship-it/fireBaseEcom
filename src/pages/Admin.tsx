@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { parseServerDate } from '../utils/api';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Clock, RefreshCw, Package, Users, UserCheck, TrendingUp, 
@@ -165,24 +166,37 @@ export const Admin: React.FC<AdminProps> = ({
     }
   };
 
+  // ✅ Helper: check if a timestamp matches filterDate using parseServerDate (Bug 1 fix)
+  const matchesFilterDate = React.useCallback((timestamp: any): boolean => {
+    try {
+      const d = parseServerDate(timestamp);
+      return !isNaN(d.getTime()) && d.toISOString().startsWith(filterDate);
+    } catch { return false; }
+  }, [filterDate]);
+
   const filteredOrders = React.useMemo(() => {
     return adminData.orders
-      .filter(o => String(o.timestamp || "").includes(filterDate))
-      .filter(o => selectedRegion === "All" || storeToRegion[String(o.storeId)] === selectedRegion);
-  }, [adminData.orders, filterDate, selectedRegion, storeToRegion]);
+      .filter(o => matchesFilterDate(o.timestamp)) // ✅ BUG 1 FIX
+      .filter(o => {
+        if (selectedRegion === "All") return true;
+        const region = storeToRegion[String(o.storeId)] || "";
+        return region === selectedRegion; // ✅ BUG 9 FIX: unmapped stores only under "All"
+      })
+      .filter(o => adminStoreFilter === "All" || String(o.storeId).trim() === adminStoreFilter); // ✅ BUG 8 FIX
+  }, [adminData.orders, filterDate, selectedRegion, adminStoreFilter, storeToRegion, matchesFilterDate]);
 
   const filteredAttendance = React.useMemo(() => {
     return adminData.attendance
-      .filter(a => String(a.timestamp || "").includes(filterDate))
+      .filter(a => matchesFilterDate(a.timestamp)) // ✅ BUG 1 FIX
       .filter(a => {
-        // Try to find user in Excel list first, then Firestore list
         const u = adminData.users.find(usr => String(usr.empId).trim() === String(a.empId).trim());
         const fsUser = staffStatus.find(s => String(s.empId).trim() === String(a.empId).trim());
-        
-        const region = (u?.region || fsUser?.region || storeToRegion[String(u?.storeId || fsUser?.storeId || "")]) || "All";
-        return selectedRegion === "All" || String(region).trim() === selectedRegion;
-      });
-  }, [adminData.attendance, adminData.users, staffStatus, filterDate, selectedRegion, storeToRegion]);
+        const region = (u?.region || fsUser?.region || storeToRegion[String(u?.storeId || fsUser?.storeId || "")]) || "";
+        if (selectedRegion === "All") return true; // ✅ BUG 9 FIX
+        return String(region).trim() === selectedRegion;
+      })
+      .filter(a => adminStoreFilter === "All" || String(a.storeId).trim() === adminStoreFilter); // ✅ BUG 8 FIX
+  }, [adminData.attendance, adminData.users, staffStatus, filterDate, selectedRegion, adminStoreFilter, storeToRegion, matchesFilterDate]);
 
   const activeStaff = filteredAttendance.filter(a => a.type === "In" && !adminData.users.find(u => String(u.empId).trim() === String(a.empId).trim() && String(u.role).toLowerCase() === 'admin')).length;
 
@@ -928,9 +942,9 @@ export const Admin: React.FC<AdminProps> = ({
             {operationalStaffList.map((u, i) => {
               const uId = String(u.empId).trim();
               // Backend is New to Old, so reverse it to find the FIRST In
-              const inRecord = [...adminData.attendance].reverse().find(a => String(a.empId).trim() === uId && a.type === "In" && String(a.timestamp || "").includes(filterDate));
+              const inRecord = [...adminData.attendance].reverse().find(a => String(a.empId).trim() === uId && a.type === "In" && matchesFilterDate(a.timestamp));
               // Backend is New to Old, so first match is LATEST Out
-              const outRecord = adminData.attendance.find(a => String(a.empId).trim() === uId && a.type === "Out" && String(a.timestamp || "").includes(filterDate));
+              const outRecord = adminData.attendance.find(a => String(a.empId).trim() === uId && a.type === "Out" && matchesFilterDate(a.timestamp));
               
               const isToday = filterDate === new Date().toISOString().split("T")[0];
               let duration = "--";
@@ -1047,8 +1061,8 @@ export const Admin: React.FC<AdminProps> = ({
                   // For "In", we want the first one of the day (Oldest) -> Reverse the New-to-Old list
                   // For "Out", we want the latest one of the day (Newest) -> Standard search on New-to-Old list
                   const record = type === "In" 
-                    ? [...adminData.attendance].reverse().find(a => String(a.empId).trim() === uId && a.type === type && String(a.timestamp || "").includes(filterDate))
-                    : adminData.attendance.find(a => String(a.empId).trim() === uId && a.type === type && String(a.timestamp || "").includes(filterDate));
+                    ? [...adminData.attendance].reverse().find(a => String(a.empId).trim() === uId && a.type === type && matchesFilterDate(a.timestamp))
+                    : adminData.attendance.find(a => String(a.empId).trim() === uId && a.type === type && matchesFilterDate(a.timestamp));
                   
                   return (
                     <div key={type} className="space-y-2 sm:space-y-3">
@@ -1078,8 +1092,8 @@ export const Admin: React.FC<AdminProps> = ({
               <div className="space-y-3 sm:space-y-4">
                 {(() => {
                   const uId = String(selectedUser.empId).trim();
-                  const inRec = [...adminData.attendance].reverse().find(a => String(a.empId).trim() === uId && a.type === "In" && String(a.timestamp || "").includes(filterDate));
-                  const outRec = adminData.attendance.find(a => String(a.empId).trim() === uId && a.type === "Out" && String(a.timestamp || "").includes(filterDate));
+                  const inRec = [...adminData.attendance].reverse().find(a => String(a.empId).trim() === uId && a.type === "In" && matchesFilterDate(a.timestamp));
+                  const outRec = adminData.attendance.find(a => String(a.empId).trim() === uId && a.type === "Out" && matchesFilterDate(a.timestamp));
                   const isToday = filterDate === new Date().toISOString().split("T")[0];
                   let dur = "--";
                   if (inRec) {
@@ -1109,10 +1123,10 @@ export const Admin: React.FC<AdminProps> = ({
 
                 <div className="p-3 sm:p-4 bg-slate-50 rounded-xl sm:rounded-2xl flex items-center justify-between">
                   <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">Orders Today</span>
-                  <span className="font-black text-blue-600 text-sm sm:text-base">{adminData.orders.filter(o => (o.pickerName === selectedUser.name || (o as any).uploadedBy === selectedUser.empId) && String(o.timestamp || "").includes(filterDate)).length}</span>
+                  <span className="font-black text-blue-600 text-sm sm:text-base">{adminData.orders.filter(o => (o.pickerName === selectedUser.name || (o as any).uploadedBy === selectedUser.empId) && matchesFilterDate(o.timestamp)).length}</span>
                 </div>
 
-                {adminData.attendance.some(a => String(a.empId).trim() === String(selectedUser.empId).trim() && String(a.timestamp || "").includes(filterDate)) && (
+                {adminData.attendance.some(a => String(a.empId).trim() === String(selectedUser.empId).trim() && matchesFilterDate(a.timestamp)) && (
                   <motion.button
                     whileTap={{ scale: 0.95 }}
                     onClick={() => onResetAttendance(selectedUser.empId, filterDate)}

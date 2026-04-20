@@ -51,6 +51,7 @@ export interface OrderRecord {
   uploadedBy: string;
   timestamp: string;
   imageUrl: string; // Keep for compatibility, can be a delimited string
+  allImages?: string; // comma-separated all images from GAS column 7
   imageUrls?: string[]; // Optional array for easier frontend handling
 }
 

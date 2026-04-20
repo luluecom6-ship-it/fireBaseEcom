@@ -2,6 +2,10 @@
   "version": 2,
   "rewrites": [
     {
+      "source": "/api/auth/token",
+      "destination": "/api/auth/token.ts"
+    },
+    {
       "source": "/api/monitor",
       "destination": "/api/monitor.ts"
     },
