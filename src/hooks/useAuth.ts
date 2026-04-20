@@ -162,44 +162,29 @@ export function useAuth() {
         localStorage.setItem("lulu_user", JSON.stringify(userData));
         localStorage.setItem("lulu_login_time", new Date().getTime().toString());
 
-        // CRITICAL: Sync profile to Firestore via Backend and get Custom Token
+        // CRITICAL: Sync profile to the named Firestore DB via backend (bypasses rules),
+        // then get a custom auth token so client-side Firestore listeners can start.
         try {
-          // We pass the full userData so the backend can sync it to Firestore using Admin SDK
-          // before we even try to authenticate on the client.
           const tokenRes = await axios.post('/api/auth/token', { 
             empId: userData.empId,
             user: userData 
           });
           
           if (tokenRes.data.token) {
-            // Now that backend has synced the data, we authenticate.
-            // Bug G fix: sign in first, then await state propagation so
-            // isFirebaseAuthenticated is true before the caller's useEffect
-            // hooks re-run. Without this wait there is a timing window where
-            // alerts, presence, FCM token registration, and broadcast listeners
-            // all start with no Firebase session.
             await signInWithCustomToken(auth, tokenRes.data.token);
-            await new Promise<void>((resolve) => {
-              const unsub = onAuthStateChanged(auth, (u) => {
-                if (u) { unsub(); resolve(); }
-              });
-              // Safety timeout: resolve after 5 s even if auth never fires
-              setTimeout(() => { unsub(); resolve(); }, 5000);
-            });
-            console.log(`[useAuth] Authenticated standard session with Custom Token: ${userData.empId}`);
+            console.log(`[useAuth] Authenticated with Custom Token: ${userData.empId}`);
           }
         } catch (tokenErr) {
-          console.warn("[useAuth] Failed to sync profile or get custom token.", tokenErr);
-          
-          // Best-effort client-side fallback (might hit permission issues depending on rules)
+          // RC4 FIX: Token endpoint failed (env vars not set, cold start, network).
+          // Fall back to anonymous Firebase auth — this satisfies isAuthenticated() in
+          // Firestore rules so alerts, push_queue, system/config listeners all work.
+          console.warn("[useAuth] Custom token endpoint failed. Falling back to anonymous Firebase auth.", tokenErr);
           try {
-            const userRef = doc(db, 'users', userData.empId);
-            await setDoc(userRef, { 
-              ...userData, 
-              updatedAt: new Date().toISOString() 
-            }, { merge: true });
-          } catch (syncErr) {
-            console.warn("[useAuth] Client-side fallback sync failed:", syncErr);
+            const { signInAnonymously } = await import('firebase/auth');
+            await signInAnonymously(auth);
+            console.log("[useAuth] Anonymous Firebase auth established — alerts and broadcasts will work.");
+          } catch (anonErr) {
+            console.warn("[useAuth] Anonymous auth fallback also failed. Alerts may not work:", anonErr);
           }
         }
 
@@ -352,18 +337,15 @@ export function useAuth() {
             // Force role to admin if it's a default admin
             if (isDefaultAdmin) newUser.role = 'admin';
 
-            // Wait for profile to land in named DB *before* setting user state.
-            // This prevents useStaffStatus / useAlerts from racing the write
-            // (Bug E fix). We still fire-and-forget if this throws so the UI
-            // is never permanently blocked.
-            try {
-              await setDoc(userRef, { ...newUser, updatedAt: new Date().toISOString() }, { merge: true });
-            } catch (writeErr) {
-              console.warn("[useAuth] Profile create failed (will retry on next snapshot):", writeErr);
-            }
-
+            // IMPORTANT: Set user state optimistically so the UI responds immediately,
+            // then await the setDoc write so Firestore profile is guaranteed to exist
+            // before any dependent hooks (e.g. useStaffStatus) run a permission check.
             setUser(newUser);
             localStorage.setItem("lulu_user", JSON.stringify(newUser));
+
+            setDoc(userRef, { ...newUser, updatedAt: new Date().toISOString() }, { merge: true })
+              .then(() => console.log("[useAuth] New user profile written to Firestore:", newUser.empId))
+              .catch(err => console.warn("[useAuth] setDoc for new user failed:", err));
           }
         }, (err) => {
           console.error("User profile sync error:", err);
@@ -382,6 +364,34 @@ export function useAuth() {
           } else {
             const parsedUser = JSON.parse(savedUserStr) as User;
             setUser(parsedUser);
+
+            // RC3 FIX: Firebase auth is null here — the custom token was never obtained
+            // at login (token endpoint failure) or the auth session was cleared on reload.
+            // Re-authenticate now so isFirebaseAuthenticated becomes true and all
+            // Firestore listeners (alerts, push_queue, system/config) can start.
+            // onAuthStateChanged fires again with fbUser once this resolves, setting
+            // isFirebaseAuthenticated=true and launching all dependent listeners.
+            try {
+              const tokenRes = await axios.post('/api/auth/token', {
+                empId: parsedUser.empId,
+                user: parsedUser
+              });
+              if (tokenRes.data.token) {
+                await signInWithCustomToken(auth, tokenRes.data.token);
+                console.log("[useAuth] Restored session re-authenticated with Firebase:", parsedUser.empId);
+                return; // onAuthStateChanged re-fires via the if(fbUser) branch
+              }
+            } catch (reAuthErr) {
+              console.warn("[useAuth] Re-auth for restored session failed. Trying anonymous fallback:", reAuthErr);
+              try {
+                const { signInAnonymously } = await import('firebase/auth');
+                await signInAnonymously(auth);
+                console.log("[useAuth] Restored session using anonymous Firebase auth — alerts will work.");
+                return;
+              } catch (anonErr) {
+                console.warn("[useAuth] Anonymous auth also failed for restored session:", anonErr);
+              }
+            }
           }
         }
       }

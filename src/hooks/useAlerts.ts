@@ -182,13 +182,8 @@ export function useAlerts(
   }, [notifPermission]);
 
   // FCM Token Registration
-  // Bug F fix: must be gated on isFirebaseAuthenticated as well as notifPermission.
-  // Without Firebase auth the setDoc to fcm_tokens is rejected by Firestore rules
-  // (rule: request.auth.uid == userId). Pickers logged in via username/password
-  // only become Firebase-authenticated after the custom token exchange completes,
-  // which can happen *after* this effect first runs.
   useEffect(() => {
-    if (!user || notifPermission !== "granted" || !isFirebaseAuthenticated) return;
+    if (!user || notifPermission !== "granted") return;
 
     const registerToken = async () => {
       try {
@@ -201,22 +196,22 @@ export function useAlerts(
           const tokenRef = doc(db, 'fcm_tokens', fbUser.uid);
           await setDoc(tokenRef, {
             token,
-            userId: user.empId || fbUser.uid,
+            userId: user.empId || fbUser.uid, // Defensive: use UID if empId is missing
             fbUid: fbUser.uid,
             role: String(user.role || "").toLowerCase().trim(),
             storeId: user.storeId || "ALL",
             region: user.region || "",
             updatedAt: serverTimestamp()
           }, { merge: true });
-          console.log("[useAlerts] FCM Token registered for Firebase UID:", fbUser.uid, "role:", user.role);
+          console.log("FCM Token registered for Firebase UID:", fbUser.uid);
         }
       } catch (error) {
-        console.error("[useAlerts] Error registering FCM token:", error);
+        console.error("Error registering FCM token:", error);
       }
     };
 
     registerToken();
-  }, [user, notifPermission, isFirebaseAuthenticated]);
+  }, [user, notifPermission]);
 
   // Push Notification / Broadcast Listener (for online users)
   // ✅ FIX: This must run even if isFirebaseAuthenticated is false

@@ -1,26 +1,27 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
+import { readFileSync } from 'fs';
+import path from 'path';
 
-// ── Named database ID ──────────────────────────────────────────────────────
-// Must match `firestoreDatabaseId` in firebase-applet-config.json AND the
-// initializeFirestore(..., databaseId) call in the client's firebase.ts.
-//
-// BUG FIX: The previous code used `admin.firestore()` which targets the
-// (default) database. Every profile written there was invisible to the client
-// (which uses the named DB) and to Firestore security rules — so isAdmin()
-// always returned false and broadcast writes were silently rejected.
-const FIRESTORE_DATABASE_ID =
-  process.env.FIRESTORE_DATABASE_ID ||
-  'ai-studio-589cf723-ab60-4b6f-a2cd-f84f8c8c1b48';
+// Read named database ID from the same config the client uses (mirrors monitor.ts pattern)
+let firestoreDatabaseId: string | undefined;
+try {
+  const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
+  firestoreDatabaseId = config.firestoreDatabaseId || undefined;
+  console.log('[auth/token] Using Firestore database:', firestoreDatabaseId || '(default)');
+} catch (e) {
+  console.warn('[auth/token] Could not read firebase-applet-config.json — falling back to (default) database');
+}
 
-// Lazy-initialize Firebase Admin once
+// Lazy-initialize Firebase Admin once per Vercel function instance
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert({
       projectId: process.env.FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      // Replace literal \n in env var
+      // Env vars encode literal \n — replace with real newlines
       privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
     }),
   });
@@ -37,19 +38,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { empId, user } = req.body;
     if (!empId) return res.status(400).json({ error: 'empId required' });
 
-    // Sync user profile to the NAMED Firestore database using Admin SDK
-    // (bypasses security rules). getFirestore(app, databaseId) is required
-    // to target any non-default database from the Admin SDK.
+    // CRITICAL FIX: Write to the SAME named database the client reads from.
+    // Previously this used admin.firestore() which targets (default), causing
+    // every client-side Firestore listener to fail with permission-denied because
+    // the user profile never existed in the named database the client queried.
     if (user) {
-      const db = getFirestore(admin.app(), FIRESTORE_DATABASE_ID);
+      const db = firestoreDatabaseId
+        ? getFirestore(admin.app(), firestoreDatabaseId)
+        : admin.firestore();
+
       await db.collection('users').doc(String(empId)).set({
         ...user,
         updatedAt: new Date().toISOString(),
       }, { merge: true });
-      console.log(`[auth/token] Profile synced for ${empId} → named DB (${FIRESTORE_DATABASE_ID})`);
+
+      console.log(`[auth/token] Synced profile for ${empId} to database: ${firestoreDatabaseId || '(default)'}`);
     }
 
-    // Create custom auth token for this empId
+    // Issue a custom auth token — client calls signInWithCustomToken() with this
     const token = await admin.auth().createCustomToken(String(empId));
     return res.status(200).json({ token });
   } catch (err: any) {
