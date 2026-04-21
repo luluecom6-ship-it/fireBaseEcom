@@ -10,41 +10,21 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // isAdmin() has two paths:
-    //   PATH A — Custom token (username/password login via /api/auth/token):
-    //            The token carries a 'role' claim embedded at token creation time.
-    //            No Firestore document lookup needed — avoids chicken-and-egg.
-    //   PATH B — Google / email Firebase auth:
-    //            No role claim; look up the users/{uid} document instead.
-    //   PATH C — Hardcoded admin emails (Google-auth only; email_verified must be true).
     function isAdmin() {
-      return isAuthenticated() && (
-        // PATH A: custom token with role claim
-        request.auth.token.get('role', '') == 'admin' ||
-        // PATH B: Firestore document lookup
+      return isAuthenticated() &&
         (
-          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
-        ) ||
-        // PATH C: known admin emails (Google / email auth)
-        (
-          request.auth.token.email in ["luluecom6@gmail.com", "505011@sa.lulumea.com"] &&
-          request.auth.token.email_verified == true
-        )
-      );
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+          (request.auth.token.email in ["luluecom6@gmail.com", "505011@sa.lulumea.com"] && request.auth.token.email_verified == true)
+        );
     }
 
     function isSupervisor() {
-      return isAuthenticated() && (
-        isAdmin() ||
-        // Custom token role claim
-        request.auth.token.get('role', '') in ['supervisor', 'manager', 'store'] ||
-        // Firestore document lookup
+      return isAuthenticated() &&
         (
-          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['supervisor', 'manager', 'store']
-        )
-      );
+          isAdmin() ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['supervisor', 'manager', 'store'])
+        );
     }
 
     function isValidUser(data) {
@@ -55,6 +35,7 @@ service cloud.firestore {
              (!('region' in data) || (data.region is string && data.region.size() < 50));
     }
 
+    // Heartbeat logic: Allow partial creation/update for presence
     function isHeartbeat(data) {
       return data.keys().hasOnly(['lastSeen', 'updatedAt', 'soundAlertsEnabled', 'empId', 'name', 'role', 'storeId', 'email', 'status', 'region']) &&
              data.keys().hasAny(['lastSeen', 'updatedAt']);
@@ -75,8 +56,6 @@ service cloud.firestore {
                         (request.resource.data.keys().hasAll(['lastSeen']) && request.resource.data.keys().size() <= 5)
                       );
       
-      // Admin can update any profile. Users can update their own presence/sound only.
-      // Custom-token users (empId == uid) can also update their own full profile.
       allow update: if isAuthenticated() && (
         isAdmin() ||
         (
@@ -104,7 +83,7 @@ service cloud.firestore {
       allow write: if isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Push Notification Queue — broadcast messages
+    // Push Notification Queue
     match /push_queue/{notificationId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
@@ -113,11 +92,11 @@ service cloud.firestore {
     // Real-time Alerts
     match /alerts/{alertId} {
       allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated();
+      allow create, update: if isAuthenticated(); // Restrict creation to authenticated users
       allow delete: if isAdmin();
     }
 
-    // User Presence / Heartbeats
+    // User Presence/Heartbeats
     match /presence/{userId} {
       allow read: if isSupervisor();
       allow write: if isAuthenticated() && request.auth.uid == userId;

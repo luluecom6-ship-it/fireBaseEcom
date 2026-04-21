@@ -70,7 +70,7 @@ export function useSystemConfig(
     });
 
     return () => unsubscribe();
-  }, [isFirebaseAuthenticated, showToast]);
+  }, [showToast]);
 
   const saveSystemConfig = useCallback(async () => {
     if (!user || user.role !== 'admin') {
@@ -79,47 +79,30 @@ export function useSystemConfig(
     }
 
     setIsSavingConfig(true);
-
-    const configData = {
-      escalationRules,
-      maxImages,
-      scheduledThreshold,
-      scheduledPastSlot: { isActive: scheduledPastSlotActive, regions: scheduledPastSlotRegions },
-      scheduledRunningSlot: { isActive: scheduledRunningSlotActive, regions: scheduledRunningSlotRegions },
-      soundAlertsEnabled,
-    };
-
-    try {
-      // PRIMARY PATH: Use the backend admin-write endpoint (bypasses Firestore rules).
-      // This works even when the Firebase session is anonymous (token endpoint failing)
-      // because the backend uses Firebase Admin SDK which bypasses all rules.
-      const res = await fetch('/api/admin-write', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ operation: 'save_config', empId: user.empId, data: configData }),
-      });
-      const json = await res.json();
-
-      if (res.ok && json.success) {
-        if (showToast) showToast("System Configuration Saved", "success");
-        return { success: true };
-      }
-
-      // If backend returns 500 (env vars not configured), fall through to direct Firestore write
-      console.warn('[useSystemConfig] Backend admin-write failed:', json.error, '— falling back to Firestore direct write');
-    } catch (backendErr) {
-      console.warn('[useSystemConfig] Backend admin-write unreachable — falling back to Firestore direct write:', backendErr);
-    }
-
-    // FALLBACK PATH: Direct Firestore write (requires non-anonymous Firebase auth with admin role claim)
     try {
       const configDoc = doc(db, 'system', 'config');
-      await setDoc(configDoc, { ...configData, updatedAt: new Date().toISOString() });
+      await setDoc(configDoc, {
+        escalationRules,
+        maxImages,
+        scheduledThreshold,
+        scheduledPastSlot: {
+          isActive: scheduledPastSlotActive,
+          regions: scheduledPastSlotRegions
+        },
+        scheduledRunningSlot: {
+          isActive: scheduledRunningSlotActive,
+          regions: scheduledRunningSlotRegions
+        },
+        soundAlertsEnabled,
+        updatedAt: new Date().toISOString()
+      });
+      
       if (showToast) showToast("System Configuration Saved to Firebase", "success");
       return { success: true };
     } catch (error) {
       console.error("Failed to save config to Firebase", error);
       
+      // Enhanced error reporting for Firestore
       const errInfo = {
         error: error instanceof Error ? error.message : String(error),
         operationType: 'write',
@@ -130,18 +113,6 @@ export function useSystemConfig(
         }
       };
       console.error('Firestore Error Detail:', JSON.stringify(errInfo));
-
-      // When Firebase is using anonymous auth, the admin role claim is absent from
-      // the token so Firestore rules reject the write. This happens when the
-      // /api/auth/token endpoint is failing (missing Vercel env vars).
-      if (auth.currentUser?.isAnonymous) {
-        const msg = "Cannot save: Firebase auth is anonymous (token endpoint failing). " +
-          "Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY in " +
-          "Vercel Dashboard → Project → Settings → Environment Variables, then re-deploy and log in again.";
-        if (showToast) showToast("⚠️ Firebase env vars not configured — see console", "error");
-        console.error("[useSystemConfig] FIX REQUIRED:", msg);
-        return { success: false, message: msg };
-      }
 
       if (showToast) showToast("Failed to save to Firebase: " + (error as any).message, "error");
       return { success: false, message: "Failed to save to Firebase" };

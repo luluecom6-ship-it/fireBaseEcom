@@ -162,44 +162,33 @@ export function useAuth() {
         localStorage.setItem("lulu_user", JSON.stringify(userData));
         localStorage.setItem("lulu_login_time", new Date().getTime().toString());
 
-        // CRITICAL: Sync profile to the named Firestore DB via backend (bypasses rules),
-        // then get a custom auth token so client-side Firestore listeners can start.
+        // CRITICAL: Sync profile to Firestore via Backend and get Custom Token
         try {
+          // We pass the full userData so the backend can sync it to Firestore using Admin SDK
+          // before we even try to authenticate on the client.
           const tokenRes = await axios.post('/api/auth/token', { 
             empId: userData.empId,
             user: userData 
           });
           
           if (tokenRes.data.token) {
+            // Now that backend has synced the data, we authenticate.
+            // The onSnapshot listener (triggered by this call) will now read the updated doc.
             await signInWithCustomToken(auth, tokenRes.data.token);
-            console.log(`[useAuth] Authenticated with Custom Token: ${userData.empId}`);
+            console.log(`[useAuth] Authenticated standard session with Custom Token: ${userData.empId}`);
           }
-        } catch (tokenErr: any) {
-          // Token endpoint failed (most likely cause: Vercel env vars not configured).
-          // Log the server's hint if available so the developer can act on it.
-          const serverHint = tokenErr?.response?.data?.hint || tokenErr?.response?.data?.error || '';
-          console.warn(
-            "[useAuth] /api/auth/token returned an error. " +
-            (serverHint ? `Server hint: ${serverHint}` : "Check Vercel function logs.") +
-            "\n→ Falling back to anonymous Firebase auth so the UI stays functional.",
-            tokenErr
-          );
-
-          // Anonymous auth fallback:
-          // - satisfies isAuthenticated() in Firestore rules IF rules are deployed to the named DB
-          // - isFirebaseAuthenticated will become true → alerts/push_queue listeners start
-          // - The anonymous UID is random, but our GUARD in onAuthStateChanged (fbUser.isAnonymous)
-          //   ensures it does NOT overwrite the supervisor/picker role obtained from the GAS login
+        } catch (tokenErr) {
+          console.warn("[useAuth] Failed to sync profile or get custom token.", tokenErr);
+          
+          // Best-effort client-side fallback (might hit permission issues depending on rules)
           try {
-            const { signInAnonymously } = await import('firebase/auth');
-            await signInAnonymously(auth);
-            console.log(
-              "[useAuth] Anonymous Firebase auth established. Role preserved:",
-              userData.role,
-              "\n⚠️  If alerts still fail with permission-denied, run: firebase deploy --only firestore:rules"
-            );
-          } catch (anonErr) {
-            console.warn("[useAuth] Anonymous auth fallback also failed. Alerts will not work:", anonErr);
+            const userRef = doc(db, 'users', userData.empId);
+            await setDoc(userRef, { 
+              ...userData, 
+              updatedAt: new Date().toISOString() 
+            }, { merge: true });
+          } catch (syncErr) {
+            console.warn("[useAuth] Client-side fallback sync failed:", syncErr);
           }
         }
 
@@ -269,42 +258,6 @@ export function useAuth() {
       }
 
       if (fbUser) {
-        // ─────────────────────────────────────────────────────────────────────
-        // ANONYMOUS AUTH GUARD — CRITICAL
-        // When /api/auth/token fails, we fall back to signInAnonymously().
-        // The anonymous session gives a random UID like "Xk3mZ9..." which is
-        // NEVER equal to the picker/supervisor empId (e.g. "4444").
-        //
-        // Without this guard the code reaches the onSnapshot else-branch, finds
-        // no Firestore document for the random UID, and calls:
-        //   setUser({ empId: 'Xk3mZ9...', role: 'picker', ... })
-        // which OVERWRITES the real supervisor role that came from the GAS login.
-        //
-        // Fix: skip ALL Firestore profile logic for anonymous sessions.
-        // isFirebaseAuthenticated is already set to true above, so the
-        // alerts / push_queue / system/config listeners will still start.
-        // ─────────────────────────────────────────────────────────────────────
-        if (fbUser.isAnonymous) {
-          console.log("[useAuth] Anonymous Firebase session active — preserving GAS session role, skipping Firestore profile sync.");
-          // Ensure the GAS-authenticated user is in React state (may have been
-          // cleared if this is a page-reload restore path).
-          const savedUserStr = localStorage.getItem("lulu_user");
-          if (savedUserStr) {
-            try {
-              const savedUser = JSON.parse(savedUserStr) as User;
-              setUser(prev => {
-                // Only restore if state is empty — don't overwrite a good session
-                if (!prev || !prev.empId) return savedUser;
-                return prev;
-              });
-            } catch (e) {
-              console.warn("[useAuth] Failed to parse saved user during anon-auth restore:", e);
-            }
-          }
-          setLoading(false);
-          return; // ⛔ Do NOT set up onSnapshot for anonymous UIDs
-        }
-
         // Set up real-time listener for user profile using Firebase UID
         const userRef = doc(db, 'users', fbUser.uid);
         userUnsubscribe = onSnapshot(userRef, (snap) => {
@@ -388,15 +341,7 @@ export function useAuth() {
             // Force role to admin if it's a default admin
             if (isDefaultAdmin) newUser.role = 'admin';
 
-            // IMPORTANT: Set user state optimistically so the UI responds immediately,
-            // then await the setDoc write so Firestore profile is guaranteed to exist
-            // before any dependent hooks (e.g. useStaffStatus) run a permission check.
-            setUser(newUser);
-            localStorage.setItem("lulu_user", JSON.stringify(newUser));
-
-            setDoc(userRef, { ...newUser, updatedAt: new Date().toISOString() }, { merge: true })
-              .then(() => console.log("[useAuth] New user profile written to Firestore:", newUser.empId))
-              .catch(err => console.warn("[useAuth] setDoc for new user failed:", err));
+            setDoc(userRef, { ...newUser, updatedAt: new Date().toISOString() }, { merge: true });
           }
         }, (err) => {
           console.error("User profile sync error:", err);
@@ -415,44 +360,6 @@ export function useAuth() {
           } else {
             const parsedUser = JSON.parse(savedUserStr) as User;
             setUser(parsedUser);
-
-            // RC3 FIX: Firebase auth is null here — the custom token was never obtained
-            // at login (token endpoint failure) or the auth session was cleared on reload.
-            // Re-authenticate now so isFirebaseAuthenticated becomes true and all
-            // Firestore listeners (alerts, push_queue, system/config) can start.
-            // onAuthStateChanged fires again with fbUser once this resolves, setting
-            // isFirebaseAuthenticated=true and launching all dependent listeners.
-            try {
-              const tokenRes = await axios.post('/api/auth/token', {
-                empId: parsedUser.empId,
-                user: parsedUser
-              });
-              if (tokenRes.data.token) {
-                await signInWithCustomToken(auth, tokenRes.data.token);
-                console.log("[useAuth] Restored session re-authenticated with Firebase:", parsedUser.empId);
-                return; // onAuthStateChanged re-fires via the if(fbUser) branch
-              }
-            } catch (reAuthErr: any) {
-              const serverHint = reAuthErr?.response?.data?.hint || reAuthErr?.response?.data?.error || '';
-              console.warn(
-                "[useAuth] Re-auth for restored session failed. " +
-                (serverHint ? `Server hint: ${serverHint}` : "Check Vercel env vars."),
-                reAuthErr
-              );
-              // Anonymous fallback — the isAnonymous guard in onAuthStateChanged ensures
-              // this does NOT overwrite the role/empId stored in localStorage.
-              try {
-                const { signInAnonymously } = await import('firebase/auth');
-                await signInAnonymously(auth);
-                console.log(
-                  "[useAuth] Restored session using anonymous Firebase auth. Role preserved:",
-                  parsedUser.role
-                );
-                return;
-              } catch (anonErr) {
-                console.warn("[useAuth] Anonymous auth also failed for restored session:", anonErr);
-              }
-            }
           }
         }
       }

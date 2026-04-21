@@ -97,53 +97,25 @@ export function useStaffStatus(
       setStaffStatus(combined);
     };
 
-    let retryUsersTimeout: any = null;
-    let retryPresenceTimeout: any = null;
-    let unsubUsers: (() => void) | null = null;
-    let unsubPresence: (() => void) | null = null;
-
-    const startUsersListener = () => {
-      unsubUsers = onSnapshot(qUsers, (snapshot) => {
-        snapshot.forEach(doc => {
-          users[doc.id] = doc.data() as User;
-        });
-        updateCombinedStatus();
-        setLoading(false);
-      }, (error) => {
-        console.error('[useStaffStatus] Users listener error:', error);
-        if (error.code === 'permission-denied') {
-          console.warn('[useStaffStatus] Permission denied on users — retrying in 8s (profile may still be healing)');
-          retryUsersTimeout = setTimeout(startUsersListener, 8000);
-        } else {
-          setLoading(false);
-        }
+    const unsubUsers = onSnapshot(qUsers, (snapshot) => {
+      snapshot.forEach(doc => {
+        users[doc.id] = doc.data() as User;
       });
-    };
+      updateCombinedStatus();
+      setLoading(false);
+    });
 
-    const startPresenceListener = () => {
-      unsubPresence = onSnapshot(qPresence, (snapshot) => {
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          if (data.uid) presence[data.uid] = data;
-        });
-        updateCombinedStatus();
-      }, (error) => {
-        console.error('[useStaffStatus] Presence listener error:', error);
-        if (error.code === 'permission-denied') {
-          console.warn('[useStaffStatus] Permission denied on presence — retrying in 8s');
-          retryPresenceTimeout = setTimeout(startPresenceListener, 8000);
-        }
+    const unsubPresence = onSnapshot(qPresence, (snapshot) => {
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        if (data.uid) presence[data.uid] = data;
       });
-    };
-
-    startUsersListener();
-    startPresenceListener();
+      updateCombinedStatus();
+    });
 
     return () => {
-      if (unsubUsers) unsubUsers();
-      if (unsubPresence) unsubPresence();
-      if (retryUsersTimeout) clearTimeout(retryUsersTimeout);
-      if (retryPresenceTimeout) clearTimeout(retryPresenceTimeout);
+      unsubUsers();
+      unsubPresence();
     };
   }, [user, isFirebaseAuthenticated, selectedStoreId]);
 

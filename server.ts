@@ -2,6 +2,9 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
+import dotenv from "dotenv";
+dotenv.config();
+
 import axios from "axios";
 import cors from "cors";
 import admin from "firebase-admin";
@@ -198,8 +201,24 @@ async function startServer() {
 
   // Monitor Logic
   if (db && messaging) {
-    console.log("Monitor started (10m interval)");
-    // Increase to 10 minutes to save quota
+    console.log("Monitor started. Running initial tick now, then every 10m.");
+    
+    // Setup manual trigger for local testing
+    app.all("/api/monitor", async (req, res) => {
+      try {
+        await runMonitorTick(db, messaging);
+        res.json({ status: "success", message: "Manual monitor tick completed" });
+      } catch (e: any) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // Run initial tick immediately (non-blocking)
+    setTimeout(() => {
+      runMonitorTick(db, messaging).catch(e => console.error("Initial monitor tick error:", e));
+    }, 5000); // 5 sec delay to ensure server fully binds
+
+    // Interval tick
     setInterval(() => runMonitorTick(db, messaging).catch(e => console.error(e)), 600000);
   }
 

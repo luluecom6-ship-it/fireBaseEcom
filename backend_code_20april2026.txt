@@ -81,8 +81,7 @@ function getAdminData(ss, params) {
 
   if (usersSheet) {
     const data = usersSheet.getDataRange().getValues();
-    //const headers = data.shift().map(h => String(h).toLowerCase().trim());
-    const headers = data.shift().map(h => String(h).trim()); // ← remove .toLowerCase();	
+    const headers = data.shift().map(h => String(h).toLowerCase().trim());
     result.users = data.map(r => {
       let obj = {};
       headers.forEach((h, i) => { if (h !== "password") obj[h] = r[i]; });
