@@ -1,65 +1,74 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import * as admin from 'firebase-admin';
+// ─────────────────────────────────────────────────────────────────────────────
+// IMPORTANT: Use the modular firebase-admin API (firebase-admin/app etc.) NOT
+// the legacy namespace import (import * as admin from 'firebase-admin').
+//
+// This project has "type": "module" in package.json (ESM). With firebase-admin
+// v11+ in ESM, `import * as admin from 'firebase-admin'` resolves to the module
+// namespace object, NOT the compat Admin instance — so admin.apps, admin.auth()
+// etc. are undefined and the function crashes with a non-descriptive error before
+// our validation code even runs. The modular API has no such ambiguity.
+// ─────────────────────────────────────────────────────────────────────────────
+import { initializeApp, getApps, getApp, cert, App } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { readFileSync } from 'fs';
 import path from 'path';
 
+const APP_NAME = 'lulu-admin';
+
 /**
- * Reads the named Firestore database ID from:
- *   1. FIRESTORE_DATABASE_ID env var (set this in Vercel → most reliable)
- *   2. firebase-applet-config.json (fallback, works locally and in Vercel if file is present)
- *   3. "(default)" if neither is available
+ * Reads the named Firestore database ID.
+ * Priority: FIRESTORE_DATABASE_ID env var → firebase-applet-config.json → undefined (default)
  */
 function getDatabaseId(): string | undefined {
-  if (process.env.FIRESTORE_DATABASE_ID) {
-    return process.env.FIRESTORE_DATABASE_ID;
-  }
+  if (process.env.FIRESTORE_DATABASE_ID) return process.env.FIRESTORE_DATABASE_ID;
   try {
     const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-    const config = JSON.parse(readFileSync(configPath, 'utf8'));
-    return config.firestoreDatabaseId || undefined;
+    const cfg = JSON.parse(readFileSync(configPath, 'utf8'));
+    return cfg.firestoreDatabaseId || undefined;
   } catch {
     return undefined;
   }
 }
 
 /**
- * Initializes (or retrieves) the Firebase Admin app.
- * IMPORTANT: This is called INSIDE the handler, not at module level.
- * Module-level init throws before the handler's try/catch can catch it,
- * causing unrecoverable 500s when env vars are missing.
+ * Initialises (or retrieves) the Firebase Admin app using the MODULAR API.
+ * Called inside the handler so any init error is caught and returned as JSON.
  */
-function getAdminApp(): admin.app.App {
-  if (admin.apps.length > 0) return admin.app();
+function getAdminApp(): App {
+  const existing = getApps().find(a => a.name === APP_NAME);
+  if (existing) return existing;
 
   const projectId   = process.env.FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  // Vercel stores literal \n — replace with real newlines.
   const privateKey  = (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
 
-  // Validate all required env vars upfront so the error message is actionable
   const missing: string[] = [];
   if (!projectId)   missing.push('FIREBASE_PROJECT_ID');
   if (!clientEmail) missing.push('FIREBASE_CLIENT_EMAIL');
   if (!privateKey)  missing.push('FIREBASE_PRIVATE_KEY');
 
   if (missing.length > 0) {
-    const msg = `[auth/token] Missing Vercel env vars: ${missing.join(', ')}. ` +
-      'Add them in Vercel Dashboard → Project → Settings → Environment Variables.';
-    console.error(msg);
-    throw new Error(msg);
+    throw new Error(
+      `Missing Vercel env vars: ${missing.join(', ')}. ` +
+      'Go to Vercel Dashboard → your project → Settings → Environment Variables and add them.'
+    );
   }
 
-  // Validate private key format (common issue: copied without -----BEGIN----- header)
   if (!privateKey.includes('-----BEGIN')) {
-    const msg = '[auth/token] FIREBASE_PRIVATE_KEY appears malformed (missing -----BEGIN PRIVATE KEY----- header). ' +
-      'Ensure the value includes the full key with literal \\n for newlines.';
-    console.error(msg);
-    throw new Error(msg);
+    throw new Error(
+      'FIREBASE_PRIVATE_KEY is malformed (missing -----BEGIN PRIVATE KEY----- header). ' +
+      'Paste the complete private key from the Firebase service-account JSON, ' +
+      'including the header/footer lines, with literal \\n for newlines.'
+    );
   }
 
-  return admin.initializeApp({
-    credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
-  });
+  return initializeApp(
+    { credential: cert({ projectId: projectId!, clientEmail: clientEmail!, privateKey }) },
+    APP_NAME
+  );
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -70,54 +79,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    // Initialize admin INSIDE the handler so errors are caught and returned as JSON
     const app = getAdminApp();
 
     const { empId, user } = req.body;
     if (!empId) return res.status(400).json({ error: 'empId required' });
 
     const databaseId = getDatabaseId();
-    console.log(`[auth/token] Request for empId="${empId}" using database="${databaseId || '(default)'}"`);
+    console.log(`[auth/token] empId="${empId}" role="${user?.role}" db="${databaseId || '(default)'}"`);
 
-    // Sync user profile to the CORRECT named Firestore database.
-    // Previously admin.firestore() was used which targets (default), meaning
-    // the profile was written to the wrong DB and every client-side listener
-    // returned permission-denied because the document didn't exist where expected.
+    // Write the user profile to the CORRECT named Firestore database.
     if (user) {
-      const db = databaseId
-        ? getFirestore(app, databaseId)
-        : admin.firestore();
-
-      await db.collection('users').doc(String(empId)).set({
-        ...user,
-        updatedAt: new Date().toISOString(),
-      }, { merge: true });
-
-      console.log(`[auth/token] Profile synced for "${empId}" → database "${databaseId || '(default)'}"`);
+      const db = databaseId ? getFirestore(app, databaseId) : getFirestore(app);
+      await db.collection('users').doc(String(empId)).set(
+        { ...user, updatedAt: new Date().toISOString() },
+        { merge: true }
+      );
+      console.log(`[auth/token] Profile synced for "${empId}"`);
     }
 
-    // Issue a custom Firebase auth token bound to this empId.
-    // IMPORTANT: We embed the role as a custom claim so Firestore rules can check
-    // request.auth.token.role directly — no Firestore document lookup needed.
-    // Without claims, isAdmin() has a chicken-and-egg problem: it tries to read
-    // users/{uid}.role to decide if the write is allowed, but the user can't write
-    // the profile document until isAdmin() returns true.
+    // Embed the role as a custom claim so Firestore rules can check
+    // request.auth.token.role == 'admin' without doing a document lookup.
     const roleClaim = user?.role ? { role: String(user.role).toLowerCase().trim() } : {};
-    const token = await admin.auth(app).createCustomToken(String(empId), roleClaim);
-    console.log(`[auth/token] Custom token issued for "${empId}"`);
+    const token = await getAuth(app).createCustomToken(String(empId), roleClaim);
+    console.log(`[auth/token] Custom token issued for "${empId}" with role="${user?.role}"`);
 
     return res.status(200).json({ token, databaseId: databaseId || '(default)' });
 
   } catch (err: any) {
-    // Return a structured JSON error so the client can log a meaningful message
-    // instead of treating the 500 body as opaque.
     const message = err?.message || String(err);
-    console.error('[auth/token] Handler error:', message);
+    console.error('[auth/token] Error:', message);
+
+    const isConfigError = message.includes('env var') || message.includes('FIREBASE_') || message.includes('malformed');
     return res.status(500).json({
       error: message,
-      hint: message.includes('env var') || message.includes('FIREBASE_')
-        ? 'Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY in Vercel Environment Variables.'
-        : 'Check Vercel function logs for details.',
+      hint: isConfigError
+        ? 'Add FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY (and optionally FIRESTORE_DATABASE_ID) in Vercel Dashboard → Project → Settings → Environment Variables, then redeploy.'
+        : 'Check Vercel function logs for the full stack trace.',
     });
   }
 }

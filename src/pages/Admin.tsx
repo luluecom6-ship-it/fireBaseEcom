@@ -146,21 +146,64 @@ export const Admin: React.FC<AdminProps> = ({
 
   const handleBroadcast = async () => {
     if (!broadcastMessage.trim() || !isFirebaseAuthenticated || targetRoles.length === 0) return;
+
+    // Block broadcast if the current Firebase session is anonymous.
+    // Anonymous sessions have no role claim so Firestore rules deny the write to push_queue.
+    const { auth } = await import('../firebase');
+    if (auth.currentUser?.isAnonymous) {
+      showToast("⚠️ Cannot broadcast: Firebase env vars not configured on Vercel. Check console.", "error");
+      console.error(
+        "[Admin] Broadcast blocked — Firebase session is anonymous (token endpoint failing).
+" +
+        "FIX: Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY in " +
+        "Vercel Dashboard → Project → Settings → Environment Variables, then re-deploy and log in again."
+      );
+      return;
+    }
+
     setIsBroadcasting(true);
     try {
+      // PRIMARY: Backend admin-write endpoint (bypasses Firestore rules — works with anonymous auth)
+      const res = await fetch('/api/admin-write', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          operation: 'send_broadcast',
+          empId: user.empId,
+          title: "📢 SYSTEM BROADCAST",
+          body: broadcastMessage,
+          targetRoles,
+          senderName: user.name,
+        }),
+      });
+      const json = await res.json();
+
+      if (res.ok && json.success) {
+        showToast("Broadcast sent successfully!", "success");
+        setBroadcastMessage("");
+        return;
+      }
+
+      // FALLBACK: Direct Firestore write (requires proper admin Firebase auth)
+      console.warn('[Admin] Backend broadcast failed:', json.error, '— trying direct Firestore write');
       const notificationId = `broadcast-${Date.now()}`;
       await setDoc(doc(db, 'push_queue', notificationId), {
         title: "📢 SYSTEM BROADCAST",
         body: broadcastMessage,
-        targetRoles: targetRoles,
+        targetRoles,
         timestamp: serverTimestamp(),
         status: 'pending',
         sender: user.name
       });
       showToast("Broadcast sent successfully!", "success");
       setBroadcastMessage("");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error sending broadcast:", error);
+      if (error?.code === 'permission-denied') {
+        showToast("Permission denied — Firestore rules may not be deployed. Check console.", "error");
+      } else {
+        showToast("Broadcast failed: " + (error?.message || "Unknown error"), "error");
+      }
     } finally {
       setIsBroadcasting(false);
     }

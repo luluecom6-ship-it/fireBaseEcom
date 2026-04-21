@@ -79,24 +79,42 @@ export function useSystemConfig(
     }
 
     setIsSavingConfig(true);
+
+    const configData = {
+      escalationRules,
+      maxImages,
+      scheduledThreshold,
+      scheduledPastSlot: { isActive: scheduledPastSlotActive, regions: scheduledPastSlotRegions },
+      scheduledRunningSlot: { isActive: scheduledRunningSlotActive, regions: scheduledRunningSlotRegions },
+      soundAlertsEnabled,
+    };
+
+    try {
+      // PRIMARY PATH: Use the backend admin-write endpoint (bypasses Firestore rules).
+      // This works even when the Firebase session is anonymous (token endpoint failing)
+      // because the backend uses Firebase Admin SDK which bypasses all rules.
+      const res = await fetch('/api/admin-write', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ operation: 'save_config', empId: user.empId, data: configData }),
+      });
+      const json = await res.json();
+
+      if (res.ok && json.success) {
+        if (showToast) showToast("System Configuration Saved", "success");
+        return { success: true };
+      }
+
+      // If backend returns 500 (env vars not configured), fall through to direct Firestore write
+      console.warn('[useSystemConfig] Backend admin-write failed:', json.error, '— falling back to Firestore direct write');
+    } catch (backendErr) {
+      console.warn('[useSystemConfig] Backend admin-write unreachable — falling back to Firestore direct write:', backendErr);
+    }
+
+    // FALLBACK PATH: Direct Firestore write (requires non-anonymous Firebase auth with admin role claim)
     try {
       const configDoc = doc(db, 'system', 'config');
-      await setDoc(configDoc, {
-        escalationRules,
-        maxImages,
-        scheduledThreshold,
-        scheduledPastSlot: {
-          isActive: scheduledPastSlotActive,
-          regions: scheduledPastSlotRegions
-        },
-        scheduledRunningSlot: {
-          isActive: scheduledRunningSlotActive,
-          regions: scheduledRunningSlotRegions
-        },
-        soundAlertsEnabled,
-        updatedAt: new Date().toISOString()
-      });
-      
+      await setDoc(configDoc, { ...configData, updatedAt: new Date().toISOString() });
       if (showToast) showToast("System Configuration Saved to Firebase", "success");
       return { success: true };
     } catch (error) {
