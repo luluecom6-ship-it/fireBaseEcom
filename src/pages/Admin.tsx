@@ -153,8 +153,7 @@ export const Admin: React.FC<AdminProps> = ({
     if (auth.currentUser?.isAnonymous) {
       showToast("⚠️ Cannot broadcast: Firebase env vars not configured on Vercel. Check console.", "error");
       console.error(
-        "[Admin] Broadcast blocked — Firebase session is anonymous (token endpoint failing).
-" +
+        "[Admin] Broadcast blocked — Firebase session is anonymous (token endpoint failing). " +
         "FIX: Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY in " +
         "Vercel Dashboard → Project → Settings → Environment Variables, then re-deploy and log in again."
       );
