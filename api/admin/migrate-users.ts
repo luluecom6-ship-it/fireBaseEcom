@@ -7,13 +7,28 @@ const FIRESTORE_DB_ID = process.env.FIREBASE_DATABASE_ID || '(default)';
 
 if (!admin.apps.length) {
   try {
+    const projectId = process.env.FIREBASE_PROJECT_ID;
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY || '';
+    
+    // Aggressive cleaning for Vercel/Environment variables
+    privateKey = privateKey.trim();
+    if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+      privateKey = privateKey.substring(1, privateKey.length - 1);
+    }
+    privateKey = privateKey.replace(/\\n/g, '\n');
+
+    if (!projectId || !clientEmail || !privateKey) {
+      throw new Error("Missing required Firebase environment variables (PROJECT_ID, CLIENT_EMAIL, or PRIVATE_KEY)");
+    }
+
     admin.initializeApp({
       credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+        projectId,
+        clientEmail,
+        privateKey,
       }),
-      databaseURL: `https://${process.env.FIREBASE_PROJECT_ID}.firebaseio.com`
+      databaseURL: `https://${projectId}.firebaseio.com`
     });
     console.log("[Vercel Admin] Firebase Admin initialized successfully");
   } catch (e: any) {
@@ -79,6 +94,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     res.status(200).json({ status: "success", count: results.length, details: results });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    const errorMsg = error.message || "Unknown server error";
+    const isCryptoError = errorMsg.includes('DECODER') || errorMsg.includes('PEM');
+    res.status(500).json({ 
+      error: errorMsg + (isCryptoError ? " (Firebase Private Key format issue)" : ""),
+      code: error.code || 'UNKNOWN'
+    });
   }
 }
