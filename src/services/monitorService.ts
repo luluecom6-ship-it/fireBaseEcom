@@ -16,6 +16,8 @@ export async function runMonitorTick(db: any, messaging: any) {
       runningSlot: config.scheduledRunningSlot
     };
 
+    console.log(`[Monitor] Found ${escalationRules.length} active escalation rules.`);
+
     // 2. Fetch Matrix Data & Admin Data from GAS via common service
     const baseUrl = (process.env.GAS_API_URL || "https://script.google.com/macros/s/AKfycbyj8wQ6A7bGSn28_NG-PEOqb2hCH8bZ3Cav6kYOvLgoTsq6aroyNCKi1Bf70S43x3DQ/exec");
     

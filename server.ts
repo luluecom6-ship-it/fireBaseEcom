@@ -10,8 +10,11 @@ import cors from "cors";
 import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import fs from "fs";
-import { runMonitorTick } from "./src/services/monitorService.ts";
 import { executeGasRequest } from "./src/services/gasService.ts";
+import { runMonitorTick } from "./src/services/monitorService.ts";
+
+const FIRESTORE_DB_ID = 'ai-studio-589cf723-ab60-4b6f-a2cd-f84f8c8c1b48';
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,45 +41,53 @@ try {
 
 async function startServer() {
   // Initialize Firebase Admin
-  let serviceAccount = null;
-  try {
-    const saVar = process.env.FIREBASE_SERVICE_ACCOUNT;
-    if (saVar) {
-      let raw = String(saVar).trim();
-      const firstBrace = raw.indexOf('{');
-      const lastBrace = raw.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-        raw = raw.substring(firstBrace, lastBrace + 1);
-      }
-      try {
-        serviceAccount = JSON.parse(raw);
-      } catch (parseErr) {
-        if (raw.startsWith('"') && raw.endsWith('"')) {
-          try {
-            const unquoted = JSON.parse(raw);
-            serviceAccount = typeof unquoted === 'string' ? JSON.parse(unquoted) : unquoted;
-          } catch (e) { throw parseErr; }
-        } else { throw parseErr; }
-      }
-    }
-  } catch (err) {
-    console.error("CRITICAL: FIREBASE_SERVICE_ACCOUNT parsing failed.", err);
-  }
-
-  if (serviceAccount && !admin.apps.length) {
+  if (!admin.apps.length) {
     try {
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-        databaseURL: `https://${serviceAccount.project_id}.firebaseio.com`
-      });
-      console.log("Firebase Admin initialized successfully.");
-    } catch (initErr) {
-      console.error("Firebase Admin initialization error:", initErr);
+      const saVar = process.env.FIREBASE_SERVICE_ACCOUNT;
+      let config: any = null;
+
+      if (saVar) {
+        console.log("[Server] Using FIREBASE_SERVICE_ACCOUNT string");
+        let raw = String(saVar).trim();
+        const firstBrace = raw.indexOf('{');
+        const lastBrace = raw.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          raw = raw.substring(firstBrace, lastBrace + 1);
+        }
+        try {
+          config = JSON.parse(raw);
+        } catch (e) {
+          if (raw.startsWith('"') && raw.endsWith('"')) {
+            const unquoted = JSON.parse(raw);
+            config = typeof unquoted === 'string' ? JSON.parse(unquoted) : unquoted;
+          }
+        }
+      } else if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL) {
+        console.log("[Server] Reconstructing Service Account from individual components");
+        config = {
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+        };
+      }
+
+      if (config) {
+        admin.initializeApp({
+          credential: admin.credential.cert(config),
+          databaseURL: `https://${config.projectId || config.project_id}.firebaseio.com`
+        });
+        console.log("Firebase Admin initialized successfully.");
+      } else {
+        console.error("CRITICAL: No Firebase Service Account configuration found.");
+      }
+    } catch (err) {
+      console.error("CRITICAL: FIREBASE_SERVICE_ACCOUNT initialization failed.", err);
     }
   }
 
-  const db = serviceAccount ? getFirestore(admin.app(), firebaseConfig.firestoreDatabaseId) : null;
-  const messaging = serviceAccount ? admin.messaging() : null;
+  const db = admin.apps.length ? getFirestore(admin.app(), FIRESTORE_DB_ID) : null;
+  const messaging = admin.apps.length ? admin.messaging() : null;
+
 
   const app = express();
   const PORT = 3000;
@@ -199,30 +210,277 @@ async function startServer() {
     }
   });
 
-  // Monitor Logic
-  if (db && messaging) {
-    console.log("Monitor started. Running initial tick now, then every 10m.");
-    
-    // Setup manual trigger for local testing
-    app.all("/api/monitor", async (req, res) => {
-      try {
-        await runMonitorTick(db, messaging);
-        res.json({ status: "success", message: "Manual monitor tick completed" });
-      } catch (e: any) {
-        res.status(500).json({ error: e.message });
+  // --- ADMIN USER MANAGEMENT ---
+
+  const mapUsernameToEmail = (username: string) => `${username.toLowerCase().trim()}@lulu-ecom.local`;
+
+  // Helper for one-way sync to GAS
+  const syncUserToGas = async (user: any, action: 'upsert' | 'delete') => {
+    try {
+      const baseUrl = (process.env.GAS_API_URL || "https://script.google.com/macros/s/AKfycbynf6n_5CXYyb4xXqwR-EoO_50BFgsiT98_JkRdftZDsDN7UQvgZoJCcuEN0Yr0vuIR/exec").trim();
+      const params = new URLSearchParams();
+      params.append('action', 'syncUser');
+      params.append('syncAction', action);
+      params.append('username', user.username || "");
+      params.append('empId', user.empId || "");
+      params.append('name', user.name || "");
+      params.append('role', user.role || "");
+      params.append('storeId', user.storeId || "");
+      params.append('region', user.region || "");
+      params.append('status', user.status || "Active");
+      if (user.password) params.append('password', user.password);
+
+      console.log(`[Sync] Triggering GAS sync for ${user.username} (${action})...`);
+      await axios.post(baseUrl, params.toString(), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 10000 // 10 second timeout
+      });
+      console.log(`[Sync] GAS sync completed for ${user.username}`);
+    } catch (e: any) {
+      console.error(`[Sync] GAS sync failed for ${user.username}:`, e.message);
+    }
+  };
+
+  // 1. Upsert User (Create or Update)
+  app.post("/api/admin/users/upsert", async (req, res) => {
+    try {
+      const { user: userData, password, requesterId } = req.body;
+      if (!userData || !userData.username || !userData.empId) {
+        return res.status(400).json({ error: "Missing required user fields" });
       }
-    });
+      if (!requesterId) return res.status(401).json({ error: "Requester ID required" });
 
-    // Run initial tick immediately (non-blocking)
-    setTimeout(() => {
-      runMonitorTick(db, messaging).catch(e => console.error("Initial monitor tick error:", e));
-    }, 5000); // 5 sec delay to ensure server fully binds
+      // Admin access check
+      if (db) {
+        const rId = String(requesterId).trim();
+        let isAdmin = rId === 'SYSTEM_MIGRATION'; // Bypass for self-migration during login
+        let currentRole = isAdmin ? 'admin' : 'Unknown';
 
-    // Interval tick
-    setInterval(() => runMonitorTick(db, messaging).catch(e => console.error(e)), 600000);
-  }
+        if (!isAdmin) {
+          const adminDoc = await db.collection('users').doc(rId).get();
+          const adminData = adminDoc.data();
+          isAdmin = adminDoc.exists && String(adminData?.role || "").toLowerCase() === 'admin';
+          currentRole = adminData?.role || 'Unknown';
+        }
+
+        console.log(`[Admin Check] Requester: ${rId}, isAdmin: ${isAdmin}, Role: ${currentRole}`);
+
+        if (!isAdmin) {
+          console.warn(`[Admin Check] Access denied for ${rId}. Role found: ${currentRole}`);
+          return res.status(403).json({ error: `Access denied: Admin role required. Your role is ${currentRole}` });
+        }
+      }
+
+      const email = mapUsernameToEmail(userData.username);
+      const uid = String(userData.empId).trim();
+
+      // Check if user exists in Auth
+      let authUser;
+      try {
+        authUser = await admin.auth().getUser(uid);
+      } catch (e) {
+        // User doesn't exist, will create below
+      }
+
+      if (authUser) {
+        // Update existing
+        await admin.auth().updateUser(uid, {
+          email,
+          displayName: userData.name,
+          ...(password ? { password } : {})
+        });
+        console.log(`[Admin] Updated Auth for ${uid}`);
+      } else {
+        // Create new
+        await admin.auth().createUser({
+          uid,
+          email,
+          password: password || "Lulu@123", // Default if missing
+          displayName: userData.name,
+          emailVerified: true
+        });
+        console.log(`[Admin] Created Auth for ${uid}`);
+      }
+
+      // Sync Firestore
+      if (db) {
+        await db.collection('users').doc(uid).set({
+          ...userData,
+          role: String(userData.role || "picker").toLowerCase(),
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      }
+
+      // One-way sync to GAS (non-blocking)
+      syncUserToGas({ ...userData, password }, 'upsert');
+
+      res.json({ status: "success", message: "User upserted successfully" });
+    } catch (error: any) {
+      console.error("[Admin] Upsert error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // 2. Delete User
+  app.post("/api/admin/users/delete", async (req, res) => {
+    try {
+      const { empId, username, requesterId } = req.body;
+      if (!empId) return res.status(400).json({ error: "empId required" });
+      if (!requesterId) return res.status(401).json({ error: "Requester ID required for security check" });
+
+      // Admin access check
+      if (db) {
+        const rId = String(requesterId).trim();
+        let isAdmin = rId === 'SYSTEM_MIGRATION';
+        let currentRole = isAdmin ? 'admin' : 'Unknown';
+
+        if (!isAdmin) {
+          const adminDoc = await db.collection('users').doc(rId).get();
+          const adminData = adminDoc.data();
+          isAdmin = adminDoc.exists && String(adminData?.role || "").toLowerCase() === 'admin';
+          currentRole = adminData?.role || 'Unknown';
+        }
+
+        if (!isAdmin) {
+          console.warn(`[Admin Check] Access denied for ${rId}. Role found: ${currentRole}`);
+          return res.status(403).json({ error: `Access denied: Only administrators can delete users. Your role is ${currentRole}` });
+        }
+      }
+
+      const uid = String(empId).trim();
+      console.log(`[Admin] Deleting user ${uid} (requested by ${requesterId})`);
+
+      // Delete from Auth
+      try {
+        await admin.auth().deleteUser(uid);
+      } catch (e: any) {
+        if (e.code === 'auth/user-not-found') {
+          console.warn(`[Admin] User ${uid} not found in Auth during deletion`);
+        } else {
+          throw e; // Throw other auth errors
+        }
+      }
+
+      // Delete from Firestore
+      if (db) {
+        await db.collection('users').doc(uid).delete();
+      }
+
+      // One-way sync to GAS (non-blocking)
+      syncUserToGas({ empId: uid, username }, 'delete');
+
+      res.json({ status: "success", message: "User deleted successfully" });
+    } catch (error: any) {
+      console.error("[Admin] Deletion error:", error);
+      res.status(500).json({ error: error.message || "Failed to delete user" });
+    }
+  });
+
+  // 3. Reset Password
+  app.post("/api/admin/users/reset-password", async (req, res) => {
+    try {
+      const { empId, newPassword, requesterId } = req.body;
+      if (!empId || !newPassword) return res.status(400).json({ error: "empId and newPassword required" });
+      if (!requesterId) return res.status(401).json({ error: "Requester ID required" });
+
+      // Admin access check
+      if (db) {
+        const rId = String(requesterId).trim();
+        let isAdmin = rId === 'SYSTEM_MIGRATION';
+        let currentRole = isAdmin ? 'admin' : 'Unknown';
+
+        if (!isAdmin) {
+          const adminDoc = await db.collection('users').doc(rId).get();
+          const adminData = adminDoc.data();
+          isAdmin = adminDoc.exists && String(adminData?.role || "").toLowerCase() === 'admin';
+          currentRole = adminData?.role || 'Unknown';
+        }
+
+        if (!isAdmin) {
+          console.warn(`[Admin Check] Access denied for ${rId}. Role found: ${currentRole}`);
+          return res.status(403).json({ error: `Access denied: Admin role required. Your role is ${currentRole}` });
+        }
+      }
+
+      await admin.auth().updateUser(String(empId).trim(), {
+        password: newPassword
+      });
+
+      // Fetch user to sync password back to GAS
+      if (db) {
+        const snap = await db.collection('users').doc(String(empId).trim()).get();
+        if (snap.exists) {
+          await syncUserToGas({ ...snap.data(), password: newPassword }, 'upsert');
+        }
+      }
+
+      res.json({ status: "success", message: "Password reset successfully" });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // 4. One-time Migration Utility
+  app.get("/api/admin/migrate-users", async (req, res) => {
+    try {
+      // 1. Fetch users from GAS
+      const baseUrl = (process.env.GAS_API_URL || "https://script.google.com/macros/s/AKfycbynf6n_5CXYyb4xXqwR-EoO_50BFgsiT98_JkRdftZDsDN7UQvgZoJCcuEN0Yr0vuIR/exec").trim();
+      const gasRes = await axios.get(`${baseUrl}?action=getAdminData&role=admin`);
+      const users = gasRes.data.data?.users || gasRes.data.users || [];
+
+      console.log(`[Migrate] Starting migration for ${users.length} users...`);
+      const results = [];
+
+      for (const user of users) {
+        try {
+          const uid = String(user.empId || user.EmpId || "").trim();
+          const username = String(user.username || "").trim();
+          const password = String(user.password || "").trim();
+          if (!uid || !username) continue;
+
+          console.log(`[Migrate] Processing ${username} (${uid})...`);
+          const email = mapUsernameToEmail(username);
+
+          // Create in Auth (ignore if exists)
+          try {
+            await admin.auth().createUser({
+              uid,
+              email,
+              password: password || "Lulu@123",
+              displayName: user.name,
+              emailVerified: true
+            });
+          } catch (e: any) {
+            if (e.code === 'auth/uid-already-exists') {
+              console.log(`[Migrate] Auth user ${uid} already exists, updating...`);
+              await admin.auth().updateUser(uid, { email, displayName: user.name });
+            } else { throw e; }
+          }
+
+          // Create in Firestore
+          if (db) {
+            await db.collection('users').doc(uid).set({
+              ...user,
+              empId: uid, // Normalize keys
+              role: String(user.role || "picker").toLowerCase(),
+              updatedAt: new Date().toISOString()
+            }, { merge: true });
+          }
+          results.push({ username, status: "migrated" });
+        } catch (err: any) {
+          console.error(`[Migrate] Failed user ${user.username}:`, err.message);
+          results.push({ username: user.username, status: "failed", error: err.message });
+        }
+      }
+
+      res.json({ status: "success", count: results.length, details: results });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
 
   // Vite
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
     app.use(vite.middlewares);
@@ -232,7 +490,23 @@ async function startServer() {
     app.get("*", (req, res) => res.sendFile(path.join(distPath, "index.html")));
   }
 
-  app.listen(PORT, "0.0.0.0", () => console.log(`Server on :${PORT}`));
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server on :${PORT}`);
+    
+    // Start background monitor (wait 10s for stability, then recursively schedule)
+    if (db && messaging) {
+      const runTick = async () => {
+        try {
+          await runMonitorTick(db, messaging);
+        } catch (e) {
+          console.error("[Monitor] Tick failed:", e);
+        } finally {
+          setTimeout(runTick, 60000); // Schedule next tick 60s after previous one finished
+        }
+      };
+      setTimeout(runTick, 10000);
+    }
+  });
 }
 
 startServer().catch(err => {

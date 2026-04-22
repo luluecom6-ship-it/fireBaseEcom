@@ -14,6 +14,22 @@
       "destination": "/api/proxy-gas.ts"
     },
     {
+      "source": "/api/admin/users/upsert",
+      "destination": "/api/admin/users/upsert.ts"
+    },
+    {
+      "source": "/api/admin/users/delete",
+      "destination": "/api/admin/users/delete.ts"
+    },
+    {
+      "source": "/api/admin/users/reset-password",
+      "destination": "/api/admin/users/reset-password.ts"
+    },
+    {
+      "source": "/api/admin/migrate-users",
+      "destination": "/api/admin/migrate-users.ts"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

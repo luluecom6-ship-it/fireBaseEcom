@@ -37,33 +37,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!admin.apps.length) {
       console.log('[API Monitor] Initializing Firebase Admin...');
       const saEnv = process.env.FIREBASE_SERVICE_ACCOUNT;
-      if (!saEnv) {
-        console.error('[API Monitor] FIREBASE_SERVICE_ACCOUNT is missing');
-        throw new Error('FIREBASE_SERVICE_ACCOUNT environment variable is missing');
+      let serviceAccount: any = null;
+
+      if (saEnv) {
+        try {
+          let raw = saEnv.trim();
+          if (raw.startsWith('"') && raw.endsWith('"')) {
+            raw = JSON.parse(raw);
+          }
+          serviceAccount = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          console.log('[API Monitor] Service Account parsed from env string');
+        } catch (parseErr: any) {
+          console.error('[API Monitor] Failed to parse FIREBASE_SERVICE_ACCOUNT:', parseErr);
+        }
+      } 
+      
+      if (!serviceAccount && process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL) {
+        console.log('[API Monitor] Reconstructing Service Account from components');
+        serviceAccount = {
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+        };
       }
 
-      let serviceAccount;
-      try {
-        // Handle potential double-quoting or escaped characters
-        let raw = saEnv.trim();
-        if (raw.startsWith('"') && raw.endsWith('"')) {
-          raw = JSON.parse(raw);
-        }
-        serviceAccount = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        console.log('[API Monitor] Service Account parsed successfully');
-      } catch (parseErr: any) {
-        console.error('[API Monitor] Failed to parse FIREBASE_SERVICE_ACCOUNT:', parseErr);
-        throw new Error(`Service Account Parse Failed: ${parseErr.message}`);
+      if (!serviceAccount) {
+        throw new Error('No Firebase configuration found (FIREBASE_SERVICE_ACCOUNT or components missing)');
       }
 
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
-        databaseURL: `https://${serviceAccount.project_id}.firebaseio.com`
+        databaseURL: `https://${serviceAccount.projectId || serviceAccount.project_id}.firebaseio.com`
       });
       console.log('[API Monitor] Firebase Admin initialized');
     }
 
-    const db = getFirestore(admin.app(), firebaseConfig.firestoreDatabaseId);
+    const FIRESTORE_DB_ID = 'ai-studio-589cf723-ab60-4b6f-a2cd-f84f8c8c1b48';
+    const db = getFirestore(admin.app(), FIRESTORE_DB_ID);
     const messaging = admin.messaging();
 
     // 3. Run the Monitor Logic

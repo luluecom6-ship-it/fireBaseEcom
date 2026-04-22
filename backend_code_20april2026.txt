@@ -33,12 +33,66 @@ function handleRequest(e) {
     if (action === "getmatrixdata")     return getMatrixData(ss);
     if (action === "getalertlogs")      return getAlertLogs(ss);
     if (action === "getregions")        return getRegions(ss);
-    if (action === "resetattendance")   return resetAttendance(ss, payload); // ✅ FIXED BUG 3
+    if (action === "resetattendance")   return resetAttendance(ss, payload);
+    if (action === "syncuser")          return syncUser(ss, payload); // ✅ NEW: One-way sync from PWA
     return jsonResponse({ status: "error", message: "Invalid action: " + action });
   } catch (err) {
     return jsonResponse({ status: "error", message: err.toString() });
   }
 }
+
+/**
+ * SYNC USER — ✅ NEW: Keeps "Users" sheet updated when changes happen in PWA Admin
+ */
+function syncUser(ss, params) {
+  const sheet = ss.getSheetByName("Users") || ss.insertSheet("Users");
+  const data = sheet.getDataRange().getValues();
+  
+  if (data.length === 0) {
+    const defaultHeaders = ["username", "password", "role", "storeId", "name", "status", "empId", "ProfileImage", "region"];
+    sheet.appendRow(defaultHeaders);
+    data.push(defaultHeaders);
+  }
+
+  const headers = data[0].map(h => String(h).toLowerCase().trim());
+  const ei = headers.indexOf("empid");
+  const actionType = String(params.syncAction || "upsert").toLowerCase();
+  const empId = String(params.empId || "").trim();
+  
+  if (!empId) return jsonResponse({ status: "error", message: "empId required for sync" });
+
+  let foundRow = -1;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][ei]).trim() === empId) {
+      foundRow = i + 1;
+      break;
+    }
+  }
+
+  if (actionType === "delete") {
+    if (foundRow !== -1) {
+      sheet.deleteRow(foundRow);
+      return jsonResponse({ status: "success", message: "User deleted from sheet" });
+    }
+    return jsonResponse({ status: "success", message: "User not in sheet" });
+  }
+
+  // Upsert logic
+  const rowData = headers.map(h => {
+    // Exact mapping for params from PWA
+    if (h === "status") return params.status || "Active";
+    return params[h] !== undefined ? params[h] : "";
+  });
+
+  if (foundRow !== -1) {
+    sheet.getRange(foundRow, 1, 1, rowData.length).setValues([rowData]);
+    return jsonResponse({ status: "success", message: "User updated in sheet" });
+  } else {
+    sheet.appendRow(rowData);
+    return jsonResponse({ status: "success", message: "User appended to sheet" });
+  }
+}
+
 
 // ─────────────────────────────────────────────
 // LOGIN

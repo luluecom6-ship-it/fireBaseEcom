@@ -69,11 +69,55 @@ export function detectAlerts(
   }
 ): AlertTriggerResult[] {
   const results: AlertTriggerResult[] = [];
+  // Use UTC as base for all calculations
+  const utcNow = new Date();
+  
+  // Helper to get local minutes for a specific region
+  const getLocalMins = (region: string) => {
+    const r = (region || "").toUpperCase().trim();
+    
+    // Default to IST (+5:30) as per previous requirement, but allow overrides
+    let offsetMinutes = 330; 
+    
+    // Mapping of common regions to their UTC offsets in minutes
+    const OFFSETS: Record<string, number> = {
+      'DUBAI': 240,    // UTC+4
+      'UAE': 240,
+      'SHARJAH': 240,
+      'ABUDHABI': 240,
+      'SAUDI': 180,    // UTC+3
+      'RIYADH': 180,
+      'JEDDAH': 180,
+      'QATAR': 180,
+      'DOHA': 180,
+      'KUWAIT': 180,
+      'BAHRAIN': 180,
+      'OMAN': 240,     // UTC+4
+      'MUSCAT': 240,
+      'INDIA': 330,    // UTC+5:30
+      'MUMBAI': 330,
+      'DELHI': 330,
+      'BENGALURU': 330,
+      'CHENNAI': 330,
+      'HYDERABAD': 330,
+      'EGYPT': 120,     // UTC+2
+      'CAIRO': 120,
+    };
+
+    // Check if the region name (or part of it) matches an offset
+    for (const [key, offset] of Object.entries(OFFSETS)) {
+      if (r.includes(key)) {
+        offsetMinutes = offset;
+        break;
+      }
+    }
+
+    const utcMins = utcNow.getUTCHours() * 60 + utcNow.getUTCMinutes();
+    return (utcMins + offsetMinutes) % 1440;
+  };
+
   const normalize = (s: string) => (s || "").toString().toUpperCase().replace(/\s+/g, '').trim();
   const activeRules = escalationRules.filter(r => r.isActive);
-  
-  const now = new Date();
-  const nowMins = now.getHours() * 60 + now.getMinutes();
 
   // 1. Quick Commerce Alerts
   if (activeRules.length > 0) {
@@ -115,12 +159,17 @@ export function detectAlerts(
 
   // 2. Scheduled Commerce Alerts
   (matrixData.schedule || []).forEach(item => {
+    const itemStoreId = String(item.storeID || "").trim();
+    const itemRegion = storeToRegion[itemStoreId] || "";
+    const nowMins = getLocalMins(itemRegion);
+
     // Check if slot contains a date and if it's today
     if (item.slot) {
       const dateMatch = item.slot.match(/([A-Za-z]{3}\s\d{1,2},\s\d{4})/);
       if (dateMatch) {
         const d = new Date(dateMatch[1]);
         if (!isNaN(d.getTime())) {
+          // Compare using local date of the region if possible, but ISO today is usually fine for daily resets
           const today = new Date();
           const isToday = d.getDate() === today.getDate() && 
                           d.getMonth() === today.getMonth() && 
@@ -134,8 +183,6 @@ export function detectAlerts(
     if (!slotInfo) return;
 
     const status = (item.status || "").toUpperCase().trim();
-    const itemStoreId = String(item.storeID || "").trim();
-    const itemRegion = storeToRegion[itemStoreId] || "";
     
     let shouldTrigger = false;
     let triggerType: 'PAST' | 'RUNNING' | null = null;

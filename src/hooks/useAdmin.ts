@@ -61,17 +61,35 @@ export function useAdmin(
       const response = JSON.parse(text);
       const data = response.status === "success" ? response.data : response;
       
-      if (data && (data.users || data.attendance || data.orders || data.regions)) {
-        // Normalize Users
-        const rawUsers = Array.isArray(data.users) ? data.users : [];
-        const normalizedUsers = rawUsers.map((u: any) => ({
-          ...u,
-          empId: String(u.empId || u.EmpId || u.emp_id || u.EMPID || "").trim(),
-          name: String(u.name || u.Name || u.NAME || u.username || "").trim(),
-          storeId: String(u.storeId || u.storeID || u.StoreID || u.store_id || "").trim(),
-          role: String(u.role || u.Role || "user").toLowerCase().trim() as any,
-          region: String(u.region || u.Region || "").trim()
-        }));
+      if (data && (data.attendance || data.orders || data.regions)) {
+        // --- FETCH USERS FROM FIRESTORE (Source of Truth) ---
+        let firestoreUsers: User[] = [];
+        try {
+          const { db } = await import('../firebase');
+          const { collection, getDocs } = await import('firebase/firestore');
+          const querySnapshot = await getDocs(collection(db, 'users'));
+          querySnapshot.forEach((doc: any) => {
+            const u = doc.data();
+            firestoreUsers.push({
+              ...u,
+              empId: String(u.empId || doc.id).trim(),
+              name: String(u.name || "").trim(),
+              storeId: String(u.storeId || "").trim(),
+              role: String(u.role || "user").toLowerCase().trim() as any,
+              region: String(u.region || "").trim()
+            });
+          });
+        } catch (fsErr) {
+          console.error("[useAdmin] Firestore user fetch failed, falling back to GAS data", fsErr);
+          firestoreUsers = (Array.isArray(data.users) ? data.users : []).map((u: any) => ({
+            ...u,
+            empId: String(u.empId || u.EmpId || u.emp_id || u.EMPID || "").trim(),
+            name: String(u.name || u.Name || u.NAME || u.username || "").trim(),
+            storeId: String(u.storeId || u.storeID || u.StoreID || u.store_id || "").trim(),
+            role: String(u.role || u.Role || "user").toLowerCase().trim() as any,
+            region: String(u.region || u.Region || "").trim()
+          }));
+        }
 
         // Normalize Attendance
         const rawAttendance = Array.isArray(data.attendance) ? data.attendance : [];
@@ -100,7 +118,7 @@ export function useAdmin(
         }));
 
         setAdminData({
-          users: normalizedUsers,
+          users: firestoreUsers,
           attendance: normalizedAttendance,
           orders: normalizedOrders,
           regions: data.regions || []

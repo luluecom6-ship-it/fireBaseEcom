@@ -3,8 +3,11 @@ import { parseServerDate } from '../utils/api';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Clock, RefreshCw, Package, Users, UserCheck, TrendingUp, 
-  ShieldCheck, AlertTriangle, History, Save, X, AlertCircle, Send
+  ShieldCheck, AlertTriangle, History, Save, X, AlertCircle, Send,
+  UserPlus, UserMinus, Key, Trash2, Edit3, Settings, LayoutDashboard
 } from 'lucide-react';
+import axios from 'axios';
+
 import { 
   User, AdminData, EscalationRule, OrderRecord 
 } from '../types';
@@ -99,7 +102,53 @@ export const Admin: React.FC<AdminProps> = ({
   const [showEmailLogin, setShowEmailLogin] = useState(false);
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPass, setAdminPass] = useState("");
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'settings'>('dashboard');
+  
+  // User Management State
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [showEditUserModal, setShowEditUserModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<any>(null);
+  const [isProcessingUser, setIsProcessingUser] = useState(false);
+  const [isMigrating, setIsMigrating] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<any>(null);
+  
+  // Form State
+  const [userForm, setUserForm] = useState({
+    username: '',
+    name: '',
+    empId: '',
+    role: 'picker',
+    storeId: '',
+    region: '',
+    password: ''
+  });
 
+  const handleDeleteUser = async (u: any) => {
+    console.log("[Admin] Delete initiated for:", u.empId);
+    setUserToDelete(u);
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!userToDelete) return;
+    const u = userToDelete;
+    
+    try {
+      console.log("[Admin] Sending DELETE request to backend for:", u.empId);
+      const response = await axios.post('/api/admin/users/delete', { 
+        empId: u.empId, 
+        username: u.username,
+        requesterId: user?.empId 
+      });
+      console.log("[Admin] Delete success:", response.data);
+      showToast("User deleted successfully", "success");
+      setUserToDelete(null);
+      onRefetch(true);
+    } catch (e: any) {
+      console.error("[Admin] Delete error caught:", e);
+      showToast(e.response?.data?.error || "Deletion failed", "error");
+      setUserToDelete(null);
+    }
+  };
   const storeToRegion = React.useMemo(() => {
     const map: Record<string, string> = {};
     if (adminData.regions) {
@@ -248,12 +297,50 @@ export const Admin: React.FC<AdminProps> = ({
 
   return (
     <motion.div 
-      key="admin"
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      className="min-h-screen bg-slate-50 pb-20"
+      initial={{ opacity: 0 }} 
+      animate={{ opacity: 1 }} 
+      className="min-h-screen bg-slate-50"
     >
+      {/* Top Navigation Tab Bar */}
+      <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-100 px-4 sm:px-6">
+        <div className="max-w-4xl mx-auto flex items-center justify-between h-14 sm:h-16">
+          <div className="flex items-center gap-6 sm:gap-8">
+            {[
+              { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+              { id: 'users', label: 'Users', icon: Users },
+              { id: 'settings', label: 'Settings', icon: Settings },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={cn(
+                  "flex items-center gap-2 py-4 sm:py-5 border-b-2 transition-all relative",
+                  activeTab === tab.id 
+                    ? "border-blue-600 text-blue-600 font-black" 
+                    : "border-transparent text-slate-400 font-bold hover:text-slate-600"
+                )}
+              >
+                <tab.icon size={16} className={cn(activeTab === tab.id && "animate-pulse")} />
+                <span className="text-[10px] sm:text-xs uppercase tracking-widest">{tab.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {activeTab === 'users' && (
+            <button 
+              onClick={() => {
+                setUserForm({ username: '', name: '', empId: '', role: 'picker', storeId: '', region: '', password: '' });
+                setShowAddUserModal(true);
+              }}
+              className="bg-blue-600 text-white p-2 rounded-xl shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all flex items-center gap-2"
+            >
+              <UserPlus size={16} />
+              <span className="hidden sm:inline text-[10px] font-black uppercase tracking-widest px-1">Add User</span>
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Top Loading Bar */}
       <AnimatePresence>
         {isAdminLoading && (
@@ -268,7 +355,10 @@ export const Admin: React.FC<AdminProps> = ({
       </AnimatePresence>
 
       <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-4 sm:space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        {activeTab === 'dashboard' && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 sm:space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+
           <div className="text-center sm:text-left">
             <h2 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">System Admin</h2>
             <p className="text-slate-500 font-bold text-xs mt-1">Manage escalation rules and system settings</p>
@@ -417,131 +507,125 @@ export const Admin: React.FC<AdminProps> = ({
             </div>
           </motion.div>
         )}
-
-        {/* System Settings */}
-        {String(user.role || "").toLowerCase().trim() === "admin" && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-            <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden p-5 sm:p-6">
-              <div className="flex items-center justify-between mb-4 sm:mb-6">
-                <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
-                  <ShieldCheck size={18} className="text-blue-600 sm:hidden" />
-                  <ShieldCheck size={20} className="text-blue-600 hidden sm:block" />
-                  System Configuration
-                </h4>
-              </div>
-              <div className="p-4 sm:p-5 bg-slate-50 rounded-2xl sm:rounded-3xl border border-slate-100">
-                <div className="flex items-center justify-between mb-3 sm:mb-4">
-                  <div>
-                    <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Max Images Per Order</p>
-                    <p className="text-[10px] sm:text-xs font-bold text-slate-600 mt-1">Currently set to {maxImages}</p>
-                  </div>
-                  <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl bg-blue-600 flex items-center justify-center text-white font-black text-sm sm:text-base">
-                    {maxImages}
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  {[1, 2, 3, 4].map(num => (
-                    <button
-                      key={num}
-                      onClick={() => setMaxImages(num)}
-                      className={cn(
-                        "flex-1 py-1.5 sm:py-2 rounded-lg sm:rounded-xl font-black text-[10px] sm:text-xs transition-all",
-                        maxImages === num 
-                          ? "bg-blue-600 text-white shadow-lg shadow-blue-200" 
-                          : "bg-white text-slate-400 border border-slate-200 hover:border-blue-300"
-                      )}
-                    >
-                      {num}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="p-4 sm:p-5 bg-slate-50 rounded-2xl sm:rounded-3xl border border-slate-100 mt-4">
-                <div className="flex items-center justify-between mb-3 sm:mb-4">
-                  <div>
-                    <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Scheduled Alert Threshold</p>
-                    <p className="text-[10px] sm:text-xs font-bold text-slate-600 mt-1">Alert {scheduledThreshold} mins prior to slot end</p>
-                  </div>
-                  <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl bg-emerald-600 flex items-center justify-center text-white font-black text-sm sm:text-base">
-                    {scheduledThreshold}
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  {[15, 30, 45, 60].map(num => (
-                    <button
-                      key={num}
-                      onClick={() => setScheduledThreshold(num)}
-                      className={cn(
-                        "flex-1 py-1.5 sm:py-2 rounded-lg sm:rounded-xl font-black text-[10px] sm:text-xs transition-all",
-                        scheduledThreshold === num 
-                          ? "bg-emerald-600 text-white shadow-lg shadow-emerald-200" 
-                          : "bg-white text-slate-400 border border-slate-200 hover:border-emerald-300"
-                      )}
-                    >
-                      {num}m
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden p-5 sm:p-6">
-              <div className="flex items-center justify-between mb-4 sm:mb-6">
-                <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
-                  <Send size={18} className="text-emerald-600 sm:hidden" />
-                  <Send size={20} className="text-emerald-600 hidden sm:block" />
-                  Broadcast Notification
-                </h4>
-              </div>
-              <div className="space-y-3">
-                <div className="flex flex-wrap gap-2 mb-1">
-                  {['picker', 'supervisor', 'manager', 'store', 'driver', 'admin', 'user'].map(role => (
-                    <button
-                      key={role}
-                      type="button"
-                      onClick={() => {
-                        setTargetRoles(prev => 
-                          prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]
-                        );
-                      }}
-                      className={cn(
-                        "px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border",
-                        targetRoles.includes(role) 
-                          ? "bg-emerald-600 text-white border-emerald-600 shadow-sm" 
-                          : "bg-white text-slate-400 border-slate-200 hover:border-emerald-300"
-                      )}
-                    >
-                      {role}
-                    </button>
-                  ))}
-                </div>
-                <textarea 
-                  value={broadcastMessage}
-                  onChange={(e) => setBroadcastMessage(e.target.value)}
-                  placeholder="Type message to selected roles..."
-                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-xs font-bold text-slate-700 outline-none focus:border-emerald-500 min-h-[80px] resize-none"
-                />
-                <motion.button
-                  whileTap={{ scale: 0.95 }}
-                  onClick={handleBroadcast}
-                  disabled={isBroadcasting || !broadcastMessage.trim() || !isFirebaseAuthenticated || targetRoles.length === 0}
-                  className={cn(
-                    "w-full py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2",
-                    (isBroadcasting || !broadcastMessage.trim() || !isFirebaseAuthenticated || targetRoles.length === 0)
-                      ? "bg-slate-100 text-slate-400"
-                      : "bg-emerald-600 text-white shadow-lg shadow-emerald-200 hover:bg-emerald-700"
-                  )}
-                >
-                  {isBroadcasting ? "Sending..." : "Send Broadcast"} <Send size={14} />
-                </motion.button>
-              </div>
-            </div>
-          </div>
+          </motion.div>
         )}
 
-        {/* Escalation Matrix Configuration */}
-        {String(user.role || "").toLowerCase().trim() === 'admin' && (
+        {/* --- USERS TAB --- */}
+        {activeTab === 'users' && (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }} 
+            animate={{ opacity: 1, y: 0 }} 
+            className="space-y-6"
+          >
+            <div className="flex items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+              <div>
+                <h3 className="font-black text-slate-800 tracking-tight">Active Accounts</h3>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Manage Firebase & Sheet users</p>
+              </div>
+              <button 
+                onClick={async () => {
+                  if (!window.confirm("Run one-time migration from Google Sheets to Firebase?")) return;
+                  setIsMigrating(true);
+                  try {
+                    const res = await axios.get('/api/admin/migrate-users');
+                    showToast(`Migration complete: ${res.data.count} users processed`, "success");
+                    onRefetch(true);
+                  } catch (e) {
+                    showToast("Migration failed", "error");
+                  } finally {
+                    setIsMigrating(false);
+                  }
+                }}
+                disabled={isMigrating}
+                className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-amber-100 hover:text-amber-700 transition-all flex items-center gap-2"
+              >
+                <RefreshCw size={12} className={cn(isMigrating && "animate-spin")} />
+                {isMigrating ? "Migrating..." : "Sync from Sheet"}
+              </button>
+            </div>
+
+            <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left min-w-[700px]">
+                  <thead>
+                    <tr className="bg-slate-50/50 border-b border-slate-100">
+                      <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">User Profile</th>
+                      <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Auth ID</th>
+                      <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Store/Region</th>
+                      <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Role</th>
+                      <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {adminData.users.map((u: any) => (
+                      <tr key={u.empId} className="hover:bg-slate-50/50 transition-all group">
+                        <td className="p-4">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-sm">
+                              {u.name.charAt(0)}
+                            </div>
+                            <div>
+                              <p className="font-black text-slate-800 text-sm leading-none">{u.name}</p>
+                              <p className="text-[10px] font-bold text-slate-400 mt-1.5">{u.username || "no-username"}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-4 font-mono text-[10px] text-slate-400">{u.empId}</td>
+                        <td className="p-4">
+                          <p className="font-black text-slate-700 text-[10px] uppercase">{u.storeId || "All Stores"}</p>
+                          <p className="text-[9px] font-bold text-slate-400 mt-1 italic">{u.region || "No Region"}</p>
+                        </td>
+                        <td className="p-4">
+                          <span className={cn(
+                            "px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest",
+                            u.role === 'admin' ? "bg-purple-100 text-purple-600" :
+                            u.role === 'supervisor' ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-600"
+                          )}>
+                            {u.role}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <div className="flex items-center justify-center gap-1 opacity-20 group-hover:opacity-100 transition-opacity">
+                            <button 
+                              onClick={() => {
+                                setEditingUser(u);
+                                setUserForm({
+                                  username: u.username || '',
+                                  name: u.name || '',
+                                  empId: u.empId || '',
+                                  role: u.role || 'picker',
+                                  storeId: u.storeId || '',
+                                  region: u.region || '',
+                                  password: ''
+                                });
+                                setShowEditUserModal(true);
+                              }}
+                              className="p-2 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors"
+                            >
+                              <Edit3 size={16} />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteUser(u)}
+                              className="p-2 hover:bg-red-50 text-red-500 rounded-lg transition-colors"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* --- SETTINGS TAB (Existing Config) --- */}
+        {activeTab === 'settings' && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+               {/* Escalation Matrix Configuration */}
+               {String(user.role || "").toLowerCase().trim() === 'admin' && (
           <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
             <div className="p-4 sm:p-6 bg-slate-50/50 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
@@ -921,8 +1005,10 @@ export const Admin: React.FC<AdminProps> = ({
                 </button>
               </div>
             </div>
-          </div>
         </div>
+      </div>
+        )}
+          </motion.div>
         )}
 
         {/* Staff Table */}
@@ -1025,7 +1111,127 @@ export const Admin: React.FC<AdminProps> = ({
 
       {/* Modals */}
       <AnimatePresence>
+
+        {/* User Upsert Modal (Combined Add/Edit) */}
+        {(showAddUserModal || showEditUserModal) && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
+              className="w-full max-w-lg bg-white rounded-[2rem] p-6 sm:p-8 shadow-2xl space-y-6"
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-black tracking-tight">{showAddUserModal ? "Add New User" : "Edit User Profile"}</h3>
+                <button onClick={() => { setShowAddUserModal(false); setShowEditUserModal(false); }} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Username (Login ID)</label>
+                  <input 
+                    type="text" value={userForm.username}
+                    onChange={e => setUserForm({...userForm, username: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Employee ID (UID)</label>
+                  <input 
+                    type="text" value={userForm.empId} disabled={showEditUserModal}
+                    onChange={e => setUserForm({...userForm, empId: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold disabled:opacity-50"
+                  />
+                </div>
+                <div className="col-span-2 space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Full Name</label>
+                  <input 
+                    type="text" value={userForm.name}
+                    onChange={e => setUserForm({...userForm, name: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Role</label>
+                  <select 
+                    value={userForm.role}
+                    onChange={e => setUserForm({...userForm, role: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold"
+                  >
+                    <option value="picker">Picker</option>
+                    <option value="supervisor">Supervisor</option>
+                    <option value="manager">Manager</option>
+                    <option value="store">Store Admin</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Store ID</label>
+                  <input 
+                    type="text" value={userForm.storeId}
+                    onChange={e => setUserForm({...userForm, storeId: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Region</label>
+                  <select 
+                    value={userForm.region}
+                    onChange={e => setUserForm({...userForm, region: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold"
+                  >
+                    <option value="">No Region</option>
+                    {availableRegions.map(reg => (
+                      <option key={reg} value={reg}>{reg}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="col-span-2 space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Password {showEditUserModal && "(Leave blank to keep current)"}</label>
+                  <div className="relative">
+                    <input 
+                      type="password" value={userForm.password}
+                      onChange={e => setUserForm({...userForm, password: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold pl-10"
+                      placeholder="••••••••"
+                    />
+                    <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                  </div>
+                </div>
+              </div>
+
+              <button 
+                onClick={async () => {
+                  setIsProcessingUser(true);
+                  try {
+                    await axios.post('/api/admin/users/upsert', { 
+                      user: userForm, 
+                      password: userForm.password,
+                      requesterId: user.empId
+                    });
+                    showToast("User updated successfully", "success");
+                    setShowAddUserModal(false);
+                    setShowEditUserModal(false);
+                    onRefetch(true);
+                  } catch (e: any) {
+                    showToast(e.response?.data?.error || "User update failed", "error");
+                  } finally {
+                    setIsProcessingUser(false);
+                  }
+                }}
+                disabled={isProcessingUser || !userForm.username || !userForm.empId}
+                className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-blue-200 disabled:opacity-50"
+              >
+                {isProcessingUser ? "Processing..." : (showAddUserModal ? "Create User Account" : "Save Changes")}
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+
         {selectedUser && (
+
           <motion.div 
             key="selected-user-modal"
             initial={{ opacity: 0 }}
@@ -1230,6 +1436,40 @@ export const Admin: React.FC<AdminProps> = ({
                     <p className="font-black uppercase tracking-widest text-[10px] sm:text-xs">No orders found</p>
                   </div>
                 )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+        {userToDelete && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/90 backdrop-blur-sm p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
+              className="bg-white rounded-[2rem] p-8 max-w-sm w-full shadow-2xl text-center"
+            >
+              <div className="h-16 w-16 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <Trash2 size={32} />
+              </div>
+              <h3 className="text-xl font-black text-slate-800 mb-2">Delete Account?</h3>
+              <p className="text-sm text-slate-500 font-medium mb-8 leading-relaxed">
+                Are you sure you want to delete <span className="font-black text-slate-800">{userToDelete.name || 'this user'}</span>? 
+                This will remove their access from both Firebase and the database.
+              </p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setUserToDelete(null)}
+                  className="flex-1 py-4 rounded-xl bg-slate-100 text-slate-600 font-black uppercase tracking-widest text-[10px] hover:bg-slate-200 transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={confirmDeleteUser}
+                  className="flex-1 py-4 rounded-xl bg-red-600 text-white font-black uppercase tracking-widest text-[10px] shadow-lg shadow-red-200 hover:bg-red-700 transition-all"
+                >
+                  Confirm Delete
+                </button>
               </div>
             </motion.div>
           </motion.div>
