@@ -1006,6 +1006,81 @@ export const Admin: React.FC<AdminProps> = ({
               </div>
             </div>
         </div>
+
+        {/* System Broadcast Section */}
+        <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+          <div className="p-4 sm:p-6 bg-emerald-50/50 border-b border-emerald-100 flex items-center justify-between">
+            <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
+              <Send size={18} className="text-emerald-600 sm:hidden" />
+              <Send size={20} className="text-emerald-600 hidden sm:block" />
+              Global Broadcast
+            </h4>
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-[8px] sm:text-[10px] font-black uppercase tracking-widest">Push Notification</span>
+            </div>
+          </div>
+          
+          <div className="p-4 sm:p-6 space-y-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Target Roles</label>
+              <div className="flex flex-wrap gap-2">
+                {['picker', 'supervisor', 'manager', 'store'].map(role => (
+                  <button
+                    key={role}
+                    onClick={() => {
+                      setTargetRoles(prev => 
+                        prev.includes(role) 
+                          ? prev.filter(r => r !== role) 
+                          : [...prev, role]
+                      );
+                    }}
+                    className={cn(
+                      "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all",
+                      targetRoles.includes(role) 
+                        ? "bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-100" 
+                        : "bg-white text-slate-400 border-slate-100"
+                    )}
+                  >
+                    {role}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Message Content</label>
+              <textarea
+                value={broadcastMessage}
+                onChange={(e) => setBroadcastMessage(e.target.value)}
+                placeholder="Type your message to all online staff..."
+                className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 min-h-[120px] resize-none"
+              />
+            </div>
+
+            <button
+              onClick={handleBroadcast}
+              disabled={isBroadcasting || !broadcastMessage.trim() || targetRoles.length === 0 || !isFirebaseAuthenticated}
+              className={cn(
+                "w-full py-4 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2 transition-all shadow-lg",
+                (isBroadcasting || !broadcastMessage.trim() || targetRoles.length === 0 || !isFirebaseAuthenticated)
+                  ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                  : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200"
+              )}
+            >
+              {isBroadcasting ? (
+                <>
+                  <RefreshCw size={16} className="animate-spin" />
+                  Sending Broadcast...
+                </>
+              ) : (
+                <>
+                  <Send size={16} />
+                  Push Broadcast Now
+                </>
+              )}
+            </button>
+          </div>
+        </div>
       </div>
         )}
           </motion.div>

@@ -253,18 +253,37 @@ export default function App() {
     }
   }, [login, showToast]);
 
-  const handleToggleSound = async (targetId?: string, forceVal?: boolean) => {
-    const currentVal = targetId ? (staffStatus.find(s => s.empId === targetId)?.soundAlertsEnabled !== false) : (user?.soundAlertsEnabled !== false);
+  const handleToggleSound = async (forceVal?: boolean, targetId?: string) => {
+    const currentVal = targetId 
+      ? (staffStatus.find(s => s.empId === targetId)?.soundAlertsEnabled !== false) 
+      : (user?.soundAlertsEnabled !== false);
+      
     const newVal = forceVal !== undefined ? forceVal : !currentVal;
     
+    console.log(`[Sound] Toggling sound for ${targetId || 'self'} to ${newVal}`);
     const res = await toggleSound(newVal, targetId);
+    
     if (res.success) {
       if (!targetId) {
         showToast(`Sound Alerts ${newVal ? "Active" : "Muted"}`, "info");
+      } else {
+        showToast(`Remote Buzzer updated for staff`, "success");
       }
       if (res.warning) console.warn(res.warning);
     } else {
-      showToast(res.message || "Action blocked - Please Login with Google", "error");
+      showToast(res.message || "Action failed", "error");
+    }
+  };
+
+  const handleToggleGlobalSound = async (newVal: boolean) => {
+    setSoundAlertsEnabled(newVal);
+    try {
+      const configRef = doc(db, 'system', 'config');
+      await setDoc(configRef, { soundAlertsEnabled: newVal }, { merge: true });
+      showToast(`Global Buzzer ${newVal ? "Enabled" : "Disabled"}`, "info");
+    } catch (e) {
+      console.error("Failed to update global sound", e);
+      showToast("Global sync failed", "error");
     }
   };
 
@@ -393,7 +412,7 @@ export default function App() {
             onSaveConfig={saveSystemConfig}
             isSavingConfig={isSavingConfig}
             systemSoundEnabled={soundAlertsEnabled}
-            setSystemSoundEnabled={setSoundAlertsEnabled}
+            setSystemSoundEnabled={handleToggleGlobalSound}
             setSoundAlertsEnabled={handleToggleSound}
             staffStatus={staffStatus}
             scheduledThreshold={scheduledThreshold}

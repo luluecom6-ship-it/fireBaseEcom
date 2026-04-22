@@ -3,17 +3,22 @@ import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import axios from 'axios';
 
-const FIRESTORE_DB_ID = 'ai-studio-589cf723-ab60-4b6f-a2cd-f84f8c8c1b48';
+const FIRESTORE_DB_ID = process.env.FIREBASE_DATABASE_ID || '(default)';
 
 if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
-    }),
-    databaseURL: `https://${process.env.FIREBASE_PROJECT_ID}.firebaseio.com`
-  });
+  try {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+      }),
+      databaseURL: `https://${process.env.FIREBASE_PROJECT_ID}.firebaseio.com`
+    });
+    console.log("[Vercel Admin] Firebase Admin initialized successfully");
+  } catch (e: any) {
+    console.error("[Vercel Admin] Firebase Init Error:", e.message);
+  }
 }
 
 const db = getFirestore(admin.app(), FIRESTORE_DB_ID);
