@@ -1,5 +1,5 @@
-import { MatrixData, EscalationRule, MatrixItem, AlertLog } from '../types.ts';
-import { AGE_BUCKETS } from '../constants.ts';
+import { MatrixData, EscalationRule, MatrixItem, AlertLog } from '../types.js';
+import { AGE_BUCKETS } from '../constants.js';
 
 export const PREP_STATUSES = [
   "PICKING",
@@ -193,8 +193,6 @@ export function detectAlerts(
     const slotInfo = parseSlot(item.slot);
     if (!slotInfo) return;
 
-    const status = (item.status || "").toUpperCase().trim();
-    
     let shouldTrigger = false;
     let triggerType: 'PAST' | 'RUNNING' | null = null;
 
