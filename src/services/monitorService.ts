@@ -71,7 +71,60 @@ export async function runMonitorTick(db: any, messaging: any) {
     const existingAlertIds = new Set<string>(existingAlertsSnap.docs.map((doc: any) => doc.id.toLowerCase().trim()));
     console.log(`[Monitor DEBUG] Existing alerts found (2h lookback): ${existingAlertIds.size}`);
 
-    // 5. Detect New Alerts
+    // 5. Fetch Tokens Early (to use in both new alerts and escalations)
+    const tokensSnap = await db.collection('fcm_tokens').get();
+    const allTokensData = tokensSnap.docs.map((doc: any) => ({ ...doc.data(), ref: doc.ref }));
+
+    // Helper for sending notifications with role-based filtering
+    const sendFilteredNotification = async (payload: { title: string, body: string, data: any }, alertStoreId: string, alertRegion: string, isEscalation: boolean) => {
+      const validDocs = allTokensData.filter((data: any) => {
+        if (!data.token) return false;
+        const userRole = String(data.role || "").toLowerCase().trim();
+        const userStoreId = String(data.storeId || "").trim();
+        const userRegion = String(data.region || "").trim();
+
+        // Level 2 (Escalation): Manager, Supervisor, Admin
+        if (isEscalation) {
+          if (userRole === 'admin') return true;
+          if (userRole === 'supervisor') return userRegion && alertRegion && userRegion === alertRegion;
+          if (userRole === 'manager') return userStoreId === alertStoreId;
+          return false;
+        } 
+        
+        // Level 1 (Initial): Picker, Store
+        if (['picker', 'store'].includes(userRole)) {
+          return userStoreId === alertStoreId;
+        }
+
+        return false;
+      });
+
+      const tokens = validDocs.map((data: any) => data.token);
+      if (tokens.length > 0) {
+        const message = {
+          notification: payload,
+          data: payload.data,
+          tokens: tokens
+        };
+        const fcmResponse = await messaging.sendEachForMulticast(message);
+        console.log(`[Monitor] FCM Sent (${isEscalation ? 'ESC' : 'INIT'}): ${fcmResponse.successCount} success, ${fcmResponse.failureCount} failure`);
+
+        // Clean up invalid tokens
+        const invalidTokenRefs: any[] = [];
+        fcmResponse.responses.forEach((resp: any, idx: number) => {
+          if (!resp.success && resp.error?.code === 'messaging/registration-token-not-registered') {
+            invalidTokenRefs.push(validDocs[idx].ref);
+          }
+        });
+        if (invalidTokenRefs.length > 0) {
+          const batch = db.batch();
+          invalidTokenRefs.forEach(ref => batch.delete(ref));
+          await batch.commit();
+        }
+      }
+    };
+
+    // 6. Detect New Alerts
     const storeToRegion: Record<string, string> = {};
     regions.forEach((r: any) => {
       const sId = String(r.storeId || r.StoreID || "").trim();
@@ -79,15 +132,39 @@ export async function runMonitorTick(db: any, messaging: any) {
       if (sId) storeToRegion[sId] = reg;
     });
 
-    console.log(`[Monitor DEBUG] Mapped ${Object.keys(storeToRegion).length} stores to regions.`);
-    if (Object.keys(storeToRegion).length === 0 && regions.length > 0) {
-      console.warn("[Monitor DEBUG] WARNING: Regions found but mapping is empty.", regions[0]);
-    }
-
     const newAlerts = detectAlerts(matrixData, escalationRules as any, existingAlertIds, scheduledThreshold, storeToRegion, scheduledConfig);
     console.log(`[Monitor DEBUG] Detection complete. NEW ALERTS: ${newAlerts.length}`);
     
-    // 6. Auto-Escalation Logic (3-minute cooldown) - Always run this
+    for (const alert of newAlerts) {
+      const alertStoreId = String(alert.item.storeID || "").trim();
+      const alertRegion = storeToRegion[alertStoreId] || "";
+      const now = new Date().toISOString();
+
+      await db.collection('alerts').doc(alert.alertKey).set({
+        timestamp: now,
+        orderId: alert.item.orderID || "",
+        eventType: 'trigger',
+        storeId: alertStoreId,
+        region: alertRegion, // Save region for easier escalation lookup
+        userId: "SYSTEM",
+        bucket: alert.bucket || "",
+        notificationTime: now,
+        status: "Pending",
+        escalation: "FALSE",
+        statusTrigger: alert.statusTrigger || "",
+        triggeredAt: now,
+        updatedAt: new Date()
+      });
+
+      // Notify Level 1 (Pickers/Store)
+      await sendFilteredNotification({
+        title: `⚠️ NEW: ${alert.statusTrigger}`,
+        body: `Order ${alert.item.orderID} at Store ${alert.item.storeID} needs attention.`,
+        data: { orderId: alert.item.orderID, type: "alert", alertId: alert.alertKey }
+      }, alertStoreId, alertRegion, false);
+    }
+
+    // 7. Auto-Escalation Logic (3-minute cooldown)
     const nowTime = Date.now();
     for (const doc of existingAlertsSnap.docs) {
       const data = doc.data();
@@ -101,106 +178,13 @@ export async function runMonitorTick(db: any, messaging: any) {
             escalation: "TRUE",
             updatedAt: new Date()
           });
-        }
-      }
-    }
 
-    if (newAlerts.length === 0) {
-      console.log("[Monitor] No new alerts.");
-    } else {
-      // 7. Only fetch tokens if there are actually new alerts to send
-      const tokensSnap = await db.collection('fcm_tokens').get();
-      const allTokensData = tokensSnap.docs.map((doc: any) => ({ ...doc.data(), ref: doc.ref }));
-
-      for (const alert of newAlerts) {
-        console.log(`[Monitor] New Alert Detected: ${alert.alertKey}`);
-        
-        const now = new Date().toISOString();
-        const triggerDate = new Date();
-        triggerDate.setMinutes(triggerDate.getMinutes() + 1);
-        const notificationTime = triggerDate.toISOString();
-
-        const alertStoreId = String(alert.item.storeID || "").trim();
-        const alertRegion = storeToRegion[alertStoreId] || "";
-
-        // Write to Firestore
-        await db.collection('alerts').doc(alert.alertKey).set({
-          timestamp: now,
-          orderId: alert.item.orderID || "",
-          eventType: 'trigger',
-          storeId: alertStoreId,
-          userId: "SYSTEM",
-          bucket: alert.bucket || "",
-          notificationTime,
-          storeStaffName: "",
-          status: "Pending",
-          escalation: "FALSE",
-          managerName: "",
-          managerStatus: "Pending",
-          orderCreatedAt: alert.item.timestamp || now,
-          statusTrigger: alert.statusTrigger || "",
-          triggeredAt: now,
-          updatedAt: new Date()
-        });
-
-        // Send FCM Push Notification with Filtering
-        const validDocs = allTokensData.filter((data: any) => {
-          if (!data.token) return false;
-
-          const userRole = String(data.role || "").toLowerCase().trim();
-          const userStoreId = String(data.storeId || "").trim();
-          const userRegion = String(data.region || "").trim();
-
-          // 1. Admin gets everything
-          if (userRole === 'admin') return true;
-
-          // 2. Supervisor gets alerts for their region
-          if (userRole === 'supervisor') {
-            return userRegion && alertRegion && userRegion === alertRegion;
-          }
-
-          // 3. Picker, Store, Manager get alerts for their specific store
-          if (['picker', 'store', 'manager'].includes(userRole)) {
-            return userStoreId === alertStoreId;
-          }
-
-          return false;
-        });
-
-        const tokens = validDocs.map((data: any) => data.token);
-
-        if (tokens.length > 0) {
-          const message = {
-            notification: {
-              title: `⚠️ ALERT: ${alert.statusTrigger}`,
-              body: `Order ${alert.item.orderID} at Store ${alert.item.storeID} requires attention.`
-            },
-            data: {
-              orderId: alert.item.orderID,
-              type: "alert",
-              alertId: alert.alertKey,
-              click_action: "/" // Hint for the service worker
-            },
-            tokens: tokens
-          };
-
-          const fcmResponse = await messaging.sendEachForMulticast(message);
-          console.log(`[Monitor] FCM Sent: ${fcmResponse.successCount} success, ${fcmResponse.failureCount} failure`);
-
-          // Clean up invalid tokens
-          const invalidTokenRefs: any[] = [];
-          fcmResponse.responses.forEach((resp: any, idx: number) => {
-            if (!resp.success && resp.error?.code === 'messaging/registration-token-not-registered') {
-              invalidTokenRefs.push(validDocs[idx].ref);
-            }
-          });
-
-          if (invalidTokenRefs.length > 0) {
-            const batch = db.batch();
-            invalidTokenRefs.forEach(ref => batch.delete(ref));
-            await batch.commit();
-            console.log(`[Monitor] Cleaned up ${invalidTokenRefs.length} invalid FCM tokens.`);
-          }
+          // Notify Level 2 (Manager/Supervisor/Admin)
+          await sendFilteredNotification({
+            title: `🔥 ESCALATED: ${data.statusTrigger}`,
+            body: `CRITICAL: Order ${data.orderId} at Store ${data.storeId} is still pending after 3 mins!`,
+            data: { orderId: data.orderId, type: "alert", alertId: doc.id }
+          }, data.storeId, data.region, true);
         }
       }
     }

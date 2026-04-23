@@ -106,7 +106,7 @@ export function useAuth() {
   const login = useCallback(async (username: string, password: string) => {
     setLoading(true);
     try {
-      const email = `${username.toLowerCase().trim()}@lulu-ecom.local`;
+      const email = `${username.toLowerCase().trim()}@lulu.com`;
       
       console.log(`[useAuth] Attempting Firebase login for: ${username}`);
       

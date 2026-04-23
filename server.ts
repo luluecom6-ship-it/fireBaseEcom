@@ -212,7 +212,7 @@ async function startServer() {
 
   // --- ADMIN USER MANAGEMENT ---
 
-  const mapUsernameToEmail = (username: string) => `${username.toLowerCase().trim()}@lulu-ecom.local`;
+  const mapUsernameToEmail = (username: string) => `${username.toLowerCase().trim()}@lulu.com`;
 
   // Helper for one-way sync to GAS
   const syncUserToGas = async (user: any, action: 'upsert' | 'delete') => {
