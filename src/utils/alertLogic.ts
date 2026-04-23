@@ -121,25 +121,31 @@ export function detectAlerts(
 
   // 1. Quick Commerce Alerts
   if (activeRules.length > 0) {
-    (matrixData.quick || []).forEach(item => {
+    (matrixData.quick || []).forEach((item, idx) => {
       const status = normalize(item.status);
       const bucket = normalize(item.bucket);
       const itemBucketIndex = getBucketIndex(item.bucket);
       const itemStoreId = String(item.storeID || "").trim();
       const itemRegion = normalize(storeToRegion[itemStoreId] || "");
       
-      const matchingRules = activeRules.filter(rule => {
+      if (idx < 5) {
+        console.log(`[AlertLogic DEBUG] Checking Quick Order ${item.orderID}: Status=${status}, Bucket=${bucket} (Idx ${itemBucketIndex}), Region=${itemRegion}`);
+      }
+
+      const matchingRules = activeRules.filter((rule, rIdx) => {
         const ruleStatus = normalize(rule.status);
         const ruleBucketIndex = getBucketIndex(rule.bucket);
         const ruleRegion = normalize(rule.region || "All");
         
-        // Match Status and Bucket
-        const basicMatch = ruleStatus === status && itemBucketIndex >= ruleBucketIndex && ruleBucketIndex !== -1;
-        if (!basicMatch) return false;
+        const statusMatch = ruleStatus === status;
+        const bucketMatch = itemBucketIndex >= ruleBucketIndex && ruleBucketIndex !== -1;
+        const regionMatch = (ruleRegion === "ALL" || ruleRegion === itemRegion);
 
-        // Match Region
-        if (ruleRegion === "ALL") return true;
-        return ruleRegion === itemRegion;
+        if (idx < 5 && statusMatch) {
+          console.log(`  - Rule ${rIdx}: Status=${ruleStatus}, BucketIdx=${ruleBucketIndex}, Region=${ruleRegion} -> Match: Status=${statusMatch}, Bucket=${bucketMatch}, Region=${regionMatch}`);
+        }
+
+        return statusMatch && bucketMatch && regionMatch;
       });
 
       if (matchingRules.length > 0) {
@@ -158,10 +164,15 @@ export function detectAlerts(
   }
 
   // 2. Scheduled Commerce Alerts
-  (matrixData.schedule || []).forEach(item => {
+  (matrixData.schedule || []).forEach((item, idx) => {
     const itemStoreId = String(item.storeID || "").trim();
     const itemRegion = normalize(storeToRegion[itemStoreId] || "");
     const nowMins = getLocalMins(itemRegion);
+    const status = (item.status || "").toUpperCase().trim();
+
+    if (idx < 5) {
+      console.log(`[AlertLogic DEBUG] Checking Sched Order ${item.orderID}: Status=${status}, Slot=${item.slot}, NowMins=${nowMins}, Region=${itemRegion}`);
+    }
 
     // Check if slot contains a date and if it's today
     if (item.slot) {

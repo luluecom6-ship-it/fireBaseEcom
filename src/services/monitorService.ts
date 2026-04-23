@@ -6,6 +6,7 @@ export async function runMonitorTick(db: any, messaging: any) {
     console.log(`[Monitor] Tick started...`);
     
     // 1. Fetch System Config
+    console.log(`[Monitor DEBUG] Using Database ID: ${db.id || 'Unknown'}`);
     const configDoc = await db.collection('system').doc('config').get();
     const config = configDoc.exists ? configDoc.data() : {};
     
@@ -16,15 +17,16 @@ export async function runMonitorTick(db: any, messaging: any) {
       runningSlot: config.scheduledRunningSlot
     };
 
-    console.log(`[Monitor] Found ${escalationRules.length} active escalation rules.`);
+    console.log(`[Monitor DEBUG] Config exists: ${configDoc.exists}, Rules count: ${escalationRules.length}`);
 
     // 2. Fetch Matrix Data & Admin Data from GAS via common service
     const baseUrl = (process.env.GAS_API_URL || "").trim();
     if (!baseUrl) {
+      console.error("[Monitor DEBUG] FATAL: GAS_API_URL is missing!");
       throw new Error("[Monitor] GAS_API_URL environment variable is missing.");
     }
     
-    console.log("[Monitor] Fetching data via gasService...");
+    console.log("[Monitor DEBUG] Fetching data via gasService...");
 
     // Using executeGasRequest ensures these requests are queued and cached
     const [matrixRes, adminRes] = await Promise.all([
@@ -36,7 +38,7 @@ export async function runMonitorTick(db: any, messaging: any) {
     const adminRaw = adminRes.data.status === "success" ? adminRes.data.data : (adminRes.data.data || adminRes.data);
     
     if (!matrixRaw || !adminRaw) {
-      console.log("[Monitor] Essential data missing from GAS.");
+      console.error("[Monitor DEBUG] GAS data missing or invalid.", { matrix: !!matrixRaw, admin: !!adminRaw });
       return;
     }
 
@@ -45,6 +47,7 @@ export async function runMonitorTick(db: any, messaging: any) {
       schedule: matrixRaw.schedule || []
     };
     const regions = adminRaw.regions || [];
+    console.log(`[Monitor DEBUG] Orders: Quick=${matrixData.quick.length}, Sched=${matrixData.schedule.length}, Regions Raw=${regions.length}`);
 
     // 4. Fetch Existing Alerts (to avoid duplicates) - Only last 1 hour
     const oneHourAgo = new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString();
@@ -52,6 +55,7 @@ export async function runMonitorTick(db: any, messaging: any) {
       .where('timestamp', '>=', oneHourAgo)
       .get();
     const existingAlertIds = new Set<string>(existingAlertsSnap.docs.map((doc: any) => doc.id.toLowerCase().trim()));
+    console.log(`[Monitor DEBUG] Existing alerts found: ${existingAlertIds.size}`);
 
     // 5. Detect New Alerts
     const storeToRegion: Record<string, string> = {};
@@ -61,12 +65,13 @@ export async function runMonitorTick(db: any, messaging: any) {
       if (sId) storeToRegion[sId] = reg;
     });
 
-    console.log(`[Monitor] Mapped ${Object.keys(storeToRegion).length} stores to regions.`);
+    console.log(`[Monitor DEBUG] Mapped ${Object.keys(storeToRegion).length} stores to regions.`);
     if (Object.keys(storeToRegion).length === 0 && regions.length > 0) {
-      console.warn("[Monitor] WARNING: Regions found but storeToRegion mapping is empty. Check property names (storeId/region).", regions[0]);
+      console.warn("[Monitor DEBUG] WARNING: Regions found but mapping is empty.", regions[0]);
     }
 
     const newAlerts = detectAlerts(matrixData, escalationRules as any, existingAlertIds, scheduledThreshold, storeToRegion, scheduledConfig);
+    console.log(`[Monitor DEBUG] Detection complete. NEW ALERTS: ${newAlerts.length}`);
     
     // 6. Auto-Escalation Logic (3-minute cooldown) - Always run this
     const nowTime = Date.now();

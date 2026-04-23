@@ -6,7 +6,8 @@ import { readFileSync } from 'fs';
 import path from 'path';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  console.log('[API Monitor] Request received');
+  console.log('[API Monitor] Request received at:', new Date().toISOString());
+  console.log('[API Monitor] Headers:', JSON.stringify(req.headers));
 
   // 0. Authentication Check
   const monitorKey = req.headers['x-monitor-key'];
