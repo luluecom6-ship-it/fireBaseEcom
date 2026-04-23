@@ -20,8 +20,35 @@ export const DELIVERY_STATUSES = [
 ];
 
 export const getBucketIndex = (bucket: string) => {
-  const normalized = (bucket || "").toString().toUpperCase().replace(/\s+/g, '').trim();
-  return AGE_BUCKETS.findIndex(b => b.toUpperCase().replace(/\s+/g, '').trim() === normalized);
+  if (!bucket) return -1;
+  const normalized = bucket.toString().toUpperCase().replace(/\s+/g, '').trim();
+  
+  // 1. Try exact match
+  const exactIndex = AGE_BUCKETS.findIndex(b => b.toUpperCase().replace(/\s+/g, '').trim() === normalized);
+  if (exactIndex !== -1) return exactIndex;
+
+  // 2. Try partial match or numeric extraction (e.g. "25MIN" -> 25)
+  const numericMatch = normalized.match(/(\d+)/);
+  if (numericMatch) {
+    const mins = parseInt(numericMatch[1], 10);
+    // Find the bucket where the end value matches or is close
+    // AGE_BUCKETS: 0-5, 5-10, 10-15, 15-20, 20-25, 25-30...
+    return AGE_BUCKETS.findIndex(b => {
+      const bNorm = b.toUpperCase().replace(/\s+/g, '');
+      if (bNorm.includes('+')) {
+        const plusVal = parseInt(bNorm.replace('MIN+', ''), 10);
+        return mins >= plusVal;
+      }
+      const parts = bNorm.replace('MIN', '').split('-');
+      if (parts.length === 2) {
+        const end = parseInt(parts[1], 10);
+        return mins <= end && mins > parseInt(parts[0], 10);
+      }
+      return false;
+    });
+  }
+
+  return -1;
 };
 
 export const parseTime = (t: string) => {
@@ -125,7 +152,7 @@ export function detectAlerts(
       const status = normalize(item.status);
       const bucket = normalize(item.bucket);
       const itemBucketIndex = getBucketIndex(item.bucket);
-      const itemStoreId = String(item.storeID || "").trim();
+      const itemStoreId = String(item.storeID || item.storeId || item.StoreID || "").trim();
       const itemRegion = normalize(storeToRegion[itemStoreId] || "");
       
       if (idx < 5) {
@@ -165,7 +192,7 @@ export function detectAlerts(
 
   // 2. Scheduled Commerce Alerts
   (matrixData.schedule || []).forEach((item, idx) => {
-    const itemStoreId = String(item.storeID || "").trim();
+    const itemStoreId = String(item.storeID || item.storeId || item.StoreID || "").trim();
     const itemRegion = normalize(storeToRegion[itemStoreId] || "");
     const nowMins = getLocalMins(itemRegion);
     const status = (item.status || "").toUpperCase().trim();
@@ -192,6 +219,7 @@ export function detectAlerts(
 
     const slotInfo = parseSlot(item.slot);
     if (!slotInfo) return;
+
 
     let shouldTrigger = false;
     let triggerType: 'PAST' | 'RUNNING' | null = null;

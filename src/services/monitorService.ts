@@ -49,13 +49,27 @@ export async function runMonitorTick(db: any, messaging: any) {
     const regions = adminRaw.regions || [];
     console.log(`[Monitor DEBUG] Orders: Quick=${matrixData.quick.length}, Sched=${matrixData.schedule.length}, Regions Raw=${regions.length}`);
 
-    // 4. Fetch Existing Alerts (to avoid duplicates) - Only last 1 hour
-    const oneHourAgo = new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString();
+    // 4. Fetch Existing Alerts (to avoid duplicates) - Only last 2 hours
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const twoHoursAgoISO = twoHoursAgo.toISOString();
+    
+    // Cleanup: Delete alerts older than 2 hours
+    const oldAlertsSnap = await db.collection('alerts')
+      .where('timestamp', '<', twoHoursAgoISO)
+      .get();
+    
+    if (!oldAlertsSnap.empty) {
+      console.log(`[Monitor DEBUG] Cleaning up ${oldAlertsSnap.size} old alerts...`);
+      const batch = db.batch();
+      oldAlertsSnap.docs.forEach((doc: any) => batch.delete(doc.ref));
+      await batch.commit();
+    }
+
     const existingAlertsSnap = await db.collection('alerts')
-      .where('timestamp', '>=', oneHourAgo)
+      .where('timestamp', '>=', twoHoursAgoISO)
       .get();
     const existingAlertIds = new Set<string>(existingAlertsSnap.docs.map((doc: any) => doc.id.toLowerCase().trim()));
-    console.log(`[Monitor DEBUG] Existing alerts found: ${existingAlertIds.size}`);
+    console.log(`[Monitor DEBUG] Existing alerts found (2h lookback): ${existingAlertIds.size}`);
 
     // 5. Detect New Alerts
     const storeToRegion: Record<string, string> = {};
