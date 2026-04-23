@@ -52,8 +52,8 @@ export function useSystemConfig(
       } else {
         // Default rules if nothing in Firestore yet
         const defaultRules = [
-          { id: '1', status: 'Created', bucket: '15-20Min', escalationUser: 'Supervisor A', isActive: true },
-          { id: '2', status: 'Picking', bucket: '15-20Min', escalationUser: 'Supervisor B', isActive: true }
+          { id: '1', status: 'CREATED', bucket: '15-20MIN', escalationUser: 'Supervisor A', isActive: true },
+          { id: '2', status: 'PICKING', bucket: '15-20MIN', escalationUser: 'Supervisor B', isActive: true }
         ];
         setEscalationRules(defaultRules);
         setMaxImages(1);
@@ -70,7 +70,7 @@ export function useSystemConfig(
     });
 
     return () => unsubscribe();
-  }, [showToast]);
+  }, [showToast, isFirebaseAuthenticated]);
 
   const saveSystemConfig = useCallback(async () => {
     if (!user || user.role !== 'admin') {

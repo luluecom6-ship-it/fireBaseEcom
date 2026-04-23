@@ -178,9 +178,17 @@ export function useAuth() {
           });
           
           // Re-attempt Firebase login after migration
-          await signInWithEmailAndPassword(auth, email, password);
-          setUser(normalizedUser);
-          return { success: true, user: normalizedUser };
+          try {
+            await signInWithEmailAndPassword(auth, email, password);
+            setUser(normalizedUser);
+            return { success: true, user: normalizedUser };
+          } catch (reAuthErr) {
+            console.error("[useAuth] Migration succeeded but initial sign-in failed:", reAuthErr);
+            return { 
+              success: false, 
+              message: "Account migrated! Please try logging in one more time with your username and password." 
+            };
+          }
         }
         
         return { success: false, message: "Invalid credentials" };

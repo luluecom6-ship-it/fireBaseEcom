@@ -13,7 +13,7 @@ import fs from "fs";
 import { executeGasRequest } from "./src/services/gasService.ts";
 import { runMonitorTick } from "./src/services/monitorService.ts";
 
-const FIRESTORE_DB_ID = 'ai-studio-589cf723-ab60-4b6f-a2cd-f84f8c8c1b48';
+const FIRESTORE_DB_ID = process.env.FIREBASE_DATABASE_ID || 'ai-studio-589cf723-ab60-4b6f-a2cd-f84f8c8c1b48';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -109,7 +109,7 @@ async function startServer() {
     
     // Consistent fallback across all environments
     if (!rawUrl || rawUrl === "undefined" || !rawUrl.startsWith("http")) {
-      rawUrl = "https://script.google.com/macros/s/AKfycbyj8wQ6A7bGSn28_NG-PEOqb2hCH8bZ3Cav6kYOvLgoTsq6aroyNCKi1Bf70S43x3DQ/exec";
+      rawUrl = "https://script.google.com/macros/s/AKfycbynf6n_5CXYyb4xXqwR-EoO_50BFgsiT98_JkRdftZDsDN7UQvgZoJCcuEN0Yr0vuIR/exec";
     }
 
     let urlObj: URL;

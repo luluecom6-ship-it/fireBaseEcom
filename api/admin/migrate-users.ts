@@ -3,7 +3,7 @@ import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import axios from 'axios';
 
-const FIRESTORE_DB_ID = process.env.FIREBASE_DATABASE_ID || '(default)';
+const FIRESTORE_DB_ID = process.env.FIREBASE_DATABASE_ID || 'ai-studio-589cf723-ab60-4b6f-a2cd-f84f8c8c1b48';
 
 if (!admin.apps.length) {
   try {

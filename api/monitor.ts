@@ -36,49 +36,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 2. Initialize Firebase Admin (Lazy Init)
     if (!admin.apps.length) {
       console.log('[API Monitor] Initializing Firebase Admin...');
-      const saEnv = process.env.FIREBASE_SERVICE_ACCOUNT;
-      let serviceAccount: any = null;
+      const projectId = process.env.FIREBASE_PROJECT_ID;
+      const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+      let privateKey = process.env.FIREBASE_PRIVATE_KEY || '';
 
-      if (saEnv) {
-        try {
-          let raw = saEnv.trim();
-          if (raw.startsWith('"') && raw.endsWith('"')) {
-            raw = JSON.parse(raw);
-          }
-          serviceAccount = typeof raw === 'string' ? JSON.parse(raw) : raw;
-          console.log('[API Monitor] Service Account parsed from env string');
-        } catch (parseErr: any) {
-          console.error('[API Monitor] Failed to parse FIREBASE_SERVICE_ACCOUNT:', parseErr);
-        }
-      } 
-      
-      if (!serviceAccount && process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL) {
-        console.log('[API Monitor] Reconstructing Service Account from components');
-        serviceAccount = {
-          projectId: process.env.FIREBASE_PROJECT_ID,
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
-        };
+      // Clean private key
+      privateKey = privateKey.trim();
+      if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+        privateKey = privateKey.substring(1, privateKey.length - 1);
       }
+      privateKey = privateKey.replace(/\\n/g, '\n');
 
-      if (!serviceAccount) {
-        throw new Error('No Firebase configuration found (FIREBASE_SERVICE_ACCOUNT or components missing)');
+      if (!projectId || !clientEmail || !privateKey) {
+        throw new Error('No Firebase configuration found (PROJECT_ID, CLIENT_EMAIL, or PRIVATE_KEY missing)');
       }
 
       admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-        databaseURL: `https://${serviceAccount.projectId || serviceAccount.project_id}.firebaseio.com`
+        credential: admin.credential.cert({
+          projectId,
+          clientEmail,
+          privateKey,
+        }),
+        databaseURL: `https://${projectId}.firebaseio.com`
       });
       console.log('[API Monitor] Firebase Admin initialized');
     }
 
-    const FIRESTORE_DB_ID = 'ai-studio-589cf723-ab60-4b6f-a2cd-f84f8c8c1b48';
+    const FIRESTORE_DB_ID = process.env.FIREBASE_DATABASE_ID || 'ai-studio-589cf723-ab60-4b6f-a2cd-f84f8c8c1b48';
     const db = getFirestore(admin.app(), FIRESTORE_DB_ID);
     const messaging = admin.messaging();
 
     // 3. Run the Monitor Logic
-    console.log('[API Monitor] Running monitor tick...');
-    console.log('[API Monitor] GAS_API_URL:', process.env.GAS_API_URL ? 'SET' : 'NOT SET (Using fallback)');
+    console.log('[API Monitor] Running monitor tick on DB:', FIRESTORE_DB_ID);
+    console.log('[API Monitor] GAS_API_URL:', process.env.GAS_API_URL ? 'SET' : 'NOT SET (Check Vercel env)');
     
     await runMonitorTick(db, messaging);
     console.log('[API Monitor] Monitor tick completed successfully');

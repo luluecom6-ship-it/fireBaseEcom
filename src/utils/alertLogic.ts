@@ -76,8 +76,8 @@ export function detectAlerts(
   const getLocalMins = (region: string) => {
     const r = (region || "").toUpperCase().trim();
     
-    // Default to IST (+5:30) as per previous requirement, but allow overrides
-    let offsetMinutes = 330; 
+    // Default to KSA (+3:00) as per primary operating region
+    let offsetMinutes = 180; 
     
     // Mapping of common regions to their UTC offsets in minutes
     const OFFSETS: Record<string, number> = {
@@ -126,19 +126,19 @@ export function detectAlerts(
       const bucket = normalize(item.bucket);
       const itemBucketIndex = getBucketIndex(item.bucket);
       const itemStoreId = String(item.storeID || "").trim();
-      const itemRegion = storeToRegion[itemStoreId] || "";
+      const itemRegion = normalize(storeToRegion[itemStoreId] || "");
       
       const matchingRules = activeRules.filter(rule => {
         const ruleStatus = normalize(rule.status);
         const ruleBucketIndex = getBucketIndex(rule.bucket);
-        const ruleRegion = (rule.region || "All").trim();
+        const ruleRegion = normalize(rule.region || "All");
         
         // Match Status and Bucket
         const basicMatch = ruleStatus === status && itemBucketIndex >= ruleBucketIndex && ruleBucketIndex !== -1;
         if (!basicMatch) return false;
 
         // Match Region
-        if (ruleRegion === "All") return true;
+        if (ruleRegion === "ALL") return true;
         return ruleRegion === itemRegion;
       });
 
@@ -160,7 +160,7 @@ export function detectAlerts(
   // 2. Scheduled Commerce Alerts
   (matrixData.schedule || []).forEach(item => {
     const itemStoreId = String(item.storeID || "").trim();
-    const itemRegion = storeToRegion[itemStoreId] || "";
+    const itemRegion = normalize(storeToRegion[itemStoreId] || "");
     const nowMins = getLocalMins(itemRegion);
 
     // Check if slot contains a date and if it's today
@@ -209,7 +209,8 @@ export function detectAlerts(
         
         // Condition 2: Check Region
         if (shouldTrigger && config.regions && config.regions.length > 0) {
-          const matchesRegion = config.regions.includes('All') || config.regions.includes(itemRegion);
+          const normalizedTargetRegions = config.regions.map((r: string) => normalize(r));
+          const matchesRegion = normalizedTargetRegions.includes('ALL') || normalizedTargetRegions.includes(itemRegion);
           if (!matchesRegion) shouldTrigger = false;
         }
       }

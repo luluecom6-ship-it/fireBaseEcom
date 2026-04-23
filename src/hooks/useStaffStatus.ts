@@ -88,7 +88,6 @@ export function useStaffStatus(
         };
       });
 
-      // Sort by status: Active > Inactive > Offline
       combined.sort((a, b) => {
         const statusOrder = { 'Active': 0, 'Inactive': 1, 'Offline': 2 };
         return statusOrder[a.presenceStatus] - statusOrder[b.presenceStatus];
@@ -97,25 +96,44 @@ export function useStaffStatus(
       setStaffStatus(combined);
     };
 
+    let unsubPresence: (() => void) | null = null;
+
     const unsubUsers = onSnapshot(qUsers, (snapshot) => {
+      const uids: string[] = [];
       snapshot.forEach(doc => {
         users[doc.id] = doc.data() as User;
+        uids.push(doc.id);
       });
+      
       updateCombinedStatus();
       setLoading(false);
-    });
 
-    const unsubPresence = onSnapshot(qPresence, (snapshot) => {
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        if (data.uid) presence[data.uid] = data;
-      });
-      updateCombinedStatus();
+      // Start presence listener only for these specific UIDs to save bandwidth
+      if (uids.length > 0) {
+        if (unsubPresence) unsubPresence();
+        
+        // Firestore 'in' query limit is 30, so we chunk if needed
+        // For simplicity here, we'll listen to the collection but filter locally
+        // or if bandwidth is CRITICAL, we'd use multiple chunked listeners.
+        // Given the prompt, we'll use a more targeted collection query if possible.
+        const qPresence = query(
+          collection(db, 'presence'), 
+          where('uid', 'in', uids.slice(0, 30)) 
+        );
+
+        unsubPresence = onSnapshot(qPresence, (pSnap) => {
+          pSnap.forEach(pDoc => {
+            const data = pDoc.data();
+            if (data.uid) presence[data.uid] = data;
+          });
+          updateCombinedStatus();
+        });
+      }
     });
 
     return () => {
       unsubUsers();
-      unsubPresence();
+      if (unsubPresence) unsubPresence();
     };
   }, [user, isFirebaseAuthenticated, selectedStoreId]);
 

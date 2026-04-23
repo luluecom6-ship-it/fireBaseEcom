@@ -19,7 +19,10 @@ export async function runMonitorTick(db: any, messaging: any) {
     console.log(`[Monitor] Found ${escalationRules.length} active escalation rules.`);
 
     // 2. Fetch Matrix Data & Admin Data from GAS via common service
-    const baseUrl = (process.env.GAS_API_URL || "https://script.google.com/macros/s/AKfycbyj8wQ6A7bGSn28_NG-PEOqb2hCH8bZ3Cav6kYOvLgoTsq6aroyNCKi1Bf70S43x3DQ/exec");
+    const baseUrl = (process.env.GAS_API_URL || "").trim();
+    if (!baseUrl) {
+      throw new Error("[Monitor] GAS_API_URL environment variable is missing.");
+    }
     
     console.log("[Monitor] Fetching data via gasService...");
 
@@ -53,8 +56,15 @@ export async function runMonitorTick(db: any, messaging: any) {
     // 5. Detect New Alerts
     const storeToRegion: Record<string, string> = {};
     regions.forEach((r: any) => {
-      storeToRegion[String(r.storeId).trim()] = String(r.region).trim();
+      const sId = String(r.storeId || r.StoreID || "").trim();
+      const reg = String(r.region || r.Region || "").trim();
+      if (sId) storeToRegion[sId] = reg;
     });
+
+    console.log(`[Monitor] Mapped ${Object.keys(storeToRegion).length} stores to regions.`);
+    if (Object.keys(storeToRegion).length === 0 && regions.length > 0) {
+      console.warn("[Monitor] WARNING: Regions found but storeToRegion mapping is empty. Check property names (storeId/region).", regions[0]);
+    }
 
     const newAlerts = detectAlerts(matrixData, escalationRules as any, existingAlertIds, scheduledThreshold, storeToRegion, scheduledConfig);
     
