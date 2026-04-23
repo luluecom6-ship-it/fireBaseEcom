@@ -1,5 +1,5 @@
-import { detectAlerts } from "../utils/alertLogic";
-import { executeGasRequest } from "./gasService";
+import { detectAlerts } from "../utils/alertLogic.js";
+import { executeGasRequest } from "./gasService.js";
 
 export async function runMonitorTick(db: any, messaging: any) {
   try {
