@@ -152,7 +152,7 @@ export function detectAlerts(
       const status = normalize(item.status);
       const bucket = normalize(item.bucket);
       const itemBucketIndex = getBucketIndex(item.bucket);
-      const itemStoreId = String(item.storeID || item.storeId || item.StoreID || "").trim();
+      const itemStoreId = String(item.storeID || "").trim();
       const itemRegion = normalize(storeToRegion[itemStoreId] || "");
       
       if (idx < 5) {
@@ -192,7 +192,7 @@ export function detectAlerts(
 
   // 2. Scheduled Commerce Alerts
   (matrixData.schedule || []).forEach((item, idx) => {
-    const itemStoreId = String(item.storeID || item.storeId || item.StoreID || "").trim();
+    const itemStoreId = String(item.storeID || "").trim();
     const itemRegion = normalize(storeToRegion[itemStoreId] || "");
     const nowMins = getLocalMins(itemRegion);
     const status = (item.status || "").toUpperCase().trim();

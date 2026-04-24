@@ -421,6 +421,7 @@ export function useAlerts(
       // Legacy logging
       const params = new URLSearchParams();
       params.append('action', 'logalertv2');
+      params.append('id', alertId); // Ensure ID is sent for correct column mapping
       params.append('timestamp', alert.timestamp || now);
       params.append('orderId', alert.orderId || "");
       params.append('eventType', action);

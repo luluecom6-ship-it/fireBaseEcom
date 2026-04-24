@@ -120,8 +120,28 @@ export const Admin: React.FC<AdminProps> = ({
     role: 'picker',
     storeId: '',
     region: '',
-    password: ''
+    password: '',
+    shiftStart: 6,
+    shiftHours: 8,
+    weekOffDay: '',
+    status: 'Active',
+    profileImage: '',
   });
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        showToast("Image too large (max 2MB)", "error");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setUserForm(prev => ({ ...prev, profileImage: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleDeleteUser = async (u: any) => {
     console.log("[Admin] Delete initiated for:", u.empId);
@@ -307,8 +327,10 @@ export const Admin: React.FC<AdminProps> = ({
           <div className="flex items-center gap-6 sm:gap-8">
             {[
               { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-              { id: 'users', label: 'Users', icon: Users },
-              { id: 'settings', label: 'Settings', icon: Settings },
+              ...(String(user.role || "").toLowerCase().trim() === 'admin' ? [
+                { id: 'users', label: 'Users', icon: Users },
+                { id: 'settings', label: 'Settings', icon: Settings },
+              ] : [])
             ].map(tab => (
               <button
                 key={tab.id}
@@ -326,10 +348,18 @@ export const Admin: React.FC<AdminProps> = ({
             ))}
           </div>
 
-          {activeTab === 'users' && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigateTo('staff-dashboard')}
+              className="bg-purple-600 text-white p-2 rounded-xl shadow-lg shadow-purple-200 hover:bg-purple-700 transition-all flex items-center gap-2"
+            >
+              <Users size={16} />
+              <span className="hidden sm:inline text-[10px] font-black uppercase tracking-widest px-1">Staff Coverage</span>
+            </button>
+            {activeTab === 'users' && (
             <button 
               onClick={() => {
-                setUserForm({ username: '', name: '', empId: '', role: 'picker', storeId: '', region: '', password: '' });
+                setUserForm({ username: '', name: '', empId: '', role: 'picker', storeId: '', region: '', password: '', shiftStart: 6, shiftHours: 8, weekOffDay: '' });
                 setShowAddUserModal(true);
               }}
               className="bg-blue-600 text-white p-2 rounded-xl shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all flex items-center gap-2"
@@ -337,7 +367,8 @@ export const Admin: React.FC<AdminProps> = ({
               <UserPlus size={16} />
               <span className="hidden sm:inline text-[10px] font-black uppercase tracking-widest px-1">Add User</span>
             </button>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
@@ -507,8 +538,96 @@ export const Admin: React.FC<AdminProps> = ({
             </div>
           </motion.div>
         )}
-          </motion.div>
-        )}
+
+        {/* Operational Staff Table (Moved here from outside/settings) */}
+        <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+          <div className="p-4 sm:p-6 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between">
+            <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
+              <Users size={18} className="text-blue-600 sm:hidden" />
+              <Users size={20} className="text-blue-600 hidden sm:block" />
+              Operational Staff
+            </h4>
+            <div className="flex items-center gap-2">
+              <span className="hidden sm:inline text-[8px] font-black text-slate-400 uppercase tracking-widest">{operationalStaffList.length} Total</span>
+              <span className="px-2 py-0.5 sm:px-3 sm:py-1 bg-blue-100 text-blue-700 rounded-full text-[8px] sm:text-[10px] font-black uppercase tracking-widest">Live Status</span>
+            </div>
+          </div>
+          <div className="divide-y divide-slate-50">
+            {operationalStaffList.map((u, i) => {
+              const uId = String(u.empId).trim();
+              const inRecord = [...adminData.attendance].reverse().find(a => String(a.empId).trim() === uId && a.type === "In" && matchesFilterDate(a.timestamp));
+              const outRecord = adminData.attendance.find(a => String(a.empId).trim() === uId && a.type === "Out" && matchesFilterDate(a.timestamp));
+              const isToday = filterDate === new Date().toISOString().split("T")[0];
+              let duration = "--";
+              if (inRecord) {
+                const start = new Date(inRecord.timestamp).getTime();
+                let end = outRecord ? new Date(outRecord.timestamp).getTime() : (isToday ? new Date().getTime() : null);
+                if (end) {
+                  const diffMs = end - start;
+                  if (diffMs > 0) {
+                    const hrs = Math.floor(diffMs / (1000 * 60 * 60));
+                    const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                    duration = `${hrs}h ${mins}m`;
+                  } else { duration = "0h 0m"; }
+                }
+              }
+              const formatTime = (ts: string) => {
+                try { return new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }
+                catch (e) { return "--:--"; }
+              };
+              return (
+                <motion.div 
+                  key={`${u.empId}-${i}`} 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: i * 0.05 }}
+                  onClick={() => setSelectedUser(u as any)} 
+                  className="p-4 sm:p-6 flex items-center justify-between hover:bg-slate-50 cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-3 sm:gap-4">
+                    <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 font-black text-sm sm:text-base overflow-hidden border border-slate-50">
+                      {u.profileImage ? (
+                        <img src={u.profileImage} className="w-full h-full object-cover" alt={u.name} />
+                      ) : (
+                        u.name.charAt(0)
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-black text-slate-800 tracking-tight text-sm sm:text-base">{u.name}</p>
+                      <p className="text-[9px] sm:text-xs text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+                        {u.storeId} • {u.empId} {u.region && `• ${u.region}`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 sm:gap-8">
+                    <div className="hidden sm:flex items-center gap-4">
+                      <div className="text-right">
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Login</p>
+                        <p className="text-[10px] font-bold text-slate-700 leading-none mt-1">{inRecord ? formatTime(inRecord.timestamp) : "--:--"}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Logout</p>
+                        <p className="text-[10px] font-bold text-slate-700 leading-none mt-1">{outRecord ? formatTime(outRecord.timestamp) : "--:--"}</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end min-w-[50px] sm:min-w-[60px] sm:border-l border-slate-100 sm:pl-4">
+                      <p className="text-[7px] sm:text-[8px] font-black text-slate-400 uppercase tracking-widest">Duration</p>
+                      <p className={cn(
+                        "text-[10px] sm:text-xs font-black tracking-tight mt-1 leading-none",
+                        outRecord ? "text-blue-600" : (inRecord ? "text-emerald-600" : "text-slate-300")
+                      )}>{duration}</p>
+                      {inRecord && !outRecord && isToday && (
+                        <span className="text-[6px] sm:text-[7px] font-black text-emerald-500 uppercase tracking-widest animate-pulse mt-1">Active</span>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        </div>
+      </motion.div>
+    )}
 
         {/* --- USERS TAB --- */}
         {activeTab === 'users' && (
@@ -561,12 +680,30 @@ export const Admin: React.FC<AdminProps> = ({
                       <tr key={u.empId} className="hover:bg-slate-50/50 transition-all group">
                         <td className="p-4">
                           <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-sm">
-                              {u.name.charAt(0)}
+                            <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-sm overflow-hidden border border-slate-100">
+                              {u.profileImage ? (
+                                <img src={u.profileImage} className="w-full h-full object-cover" alt={u.name} />
+                              ) : (
+                                u.name.charAt(0)
+                              )}
                             </div>
                             <div>
-                              <p className="font-black text-slate-800 text-sm leading-none">{u.name}</p>
-                              <p className="text-[10px] font-bold text-slate-400 mt-1.5">{u.username || "no-username"}</p>
+                              <p className="font-black text-slate-800 text-sm leading-none flex items-center gap-2">
+                                {u.name}
+                                <span className={cn(
+                                  "w-1.5 h-1.5 rounded-full",
+                                  u.status === 'Active' ? "bg-emerald-500" : u.status === 'Non-Active' ? "bg-amber-500" : "bg-red-500"
+                                )} />
+                              </p>
+                              <div className="flex items-center gap-2 mt-1.5">
+                                <p className="text-[10px] font-bold text-slate-400">{u.username || "no-username"}</p>
+                                <span className={cn(
+                                  "text-[8px] font-black uppercase tracking-tighter px-1 rounded",
+                                  u.status === 'Active' ? "text-emerald-600 bg-emerald-50" : u.status === 'Non-Active' ? "text-amber-600 bg-amber-50" : "text-red-600 bg-red-50"
+                                )}>
+                                  {u.status || 'Active'}
+                                </span>
+                              </div>
                             </div>
                           </div>
                         </td>
@@ -596,7 +733,12 @@ export const Admin: React.FC<AdminProps> = ({
                                   role: u.role || 'picker',
                                   storeId: u.storeId || '',
                                   region: u.region || '',
-                                  password: ''
+                                  password: '',
+                                  shiftStart:  Number(u.shiftStart) || 6,
+                                  shiftHours:  Number(u.shiftHours) || 8,
+                                  weekOffDay:  u.weekOffDay || '',
+                                  status: u.status || 'Active',
+                                  profileImage: u.profileImage || '',
                                 });
                                 setShowEditUserModal(true);
                               }}
@@ -1085,103 +1227,6 @@ export const Admin: React.FC<AdminProps> = ({
         )}
           </motion.div>
         )}
-
-        {/* Staff Table */}
-        <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
-          <div className="p-4 sm:p-6 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between">
-            <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
-              <Users size={18} className="text-blue-600 sm:hidden" />
-              <Users size={20} className="text-blue-600 hidden sm:block" />
-              Operational Staff
-            </h4>
-            <div className="flex items-center gap-2">
-              <span className="hidden sm:inline text-[8px] font-black text-slate-400 uppercase tracking-widest">{operationalStaffList.length} Total</span>
-              <span className="px-2 py-0.5 sm:px-3 sm:py-1 bg-blue-100 text-blue-700 rounded-full text-[8px] sm:text-[10px] font-black uppercase tracking-widest">Live Status</span>
-            </div>
-          </div>
-          <div className="divide-y divide-slate-50">
-            {operationalStaffList.map((u, i) => {
-              const uId = String(u.empId).trim();
-              // Backend is New to Old, so reverse it to find the FIRST In
-              const inRecord = [...adminData.attendance].reverse().find(a => String(a.empId).trim() === uId && a.type === "In" && matchesFilterDate(a.timestamp));
-              // Backend is New to Old, so first match is LATEST Out
-              const outRecord = adminData.attendance.find(a => String(a.empId).trim() === uId && a.type === "Out" && matchesFilterDate(a.timestamp));
-              
-              const isToday = filterDate === new Date().toISOString().split("T")[0];
-              let duration = "--";
-              if (inRecord) {
-                const start = new Date(inRecord.timestamp).getTime();
-                let end = outRecord ? new Date(outRecord.timestamp).getTime() : (isToday ? new Date().getTime() : null);
-                
-                if (end) {
-                  const diffMs = end - start;
-                  if (diffMs > 0) {
-                    const hrs = Math.floor(diffMs / (1000 * 60 * 60));
-                    const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-                    duration = `${hrs}h ${mins}m`;
-                  } else {
-                    duration = "0h 0m";
-                  }
-                }
-              }
-
-              const formatTime = (ts: string) => {
-                try {
-                  return new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-                } catch (e) {
-                  return "--:--";
-                }
-              };
-
-              return (
-                <motion.div 
-                  key={`${u.empId}-${i}`} 
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: i * 0.05 }}
-                  onClick={() => setSelectedUser(u as any)} 
-                  className="p-4 sm:p-6 flex items-center justify-between hover:bg-slate-50 cursor-pointer transition-colors"
-                >
-                  <div className="flex items-center gap-3 sm:gap-4">
-                    <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 font-black text-sm sm:text-base">
-                      {u.name.charAt(0)}
-                    </div>
-                    <div>
-                      <p className="font-black text-slate-800 tracking-tight text-sm sm:text-base">{u.name}</p>
-                      <p className="text-[9px] sm:text-xs text-slate-400 font-bold uppercase tracking-widest mt-0.5">
-                        {u.storeId} • {u.empId} {u.region && `• ${u.region}`}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-4 sm:gap-8">
-                    <div className="hidden sm:flex items-center gap-4">
-                      <div className="text-right">
-                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Login</p>
-                        <p className="text-[10px] font-bold text-slate-700 leading-none mt-1">{inRecord ? formatTime(inRecord.timestamp) : "--:--"}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Logout</p>
-                        <p className="text-[10px] font-bold text-slate-700 leading-none mt-1">{outRecord ? formatTime(outRecord.timestamp) : "--:--"}</p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex flex-col items-end min-w-[50px] sm:min-w-[60px] sm:border-l border-slate-100 sm:pl-4">
-                      <p className="text-[7px] sm:text-[8px] font-black text-slate-400 uppercase tracking-widest">Duration</p>
-                      <p className={cn(
-                        "text-[10px] sm:text-xs font-black tracking-tight mt-1 leading-none",
-                        outRecord ? "text-blue-600" : (inRecord ? "text-emerald-600" : "text-slate-300")
-                      )}>{duration}</p>
-                      {inRecord && !outRecord && isToday && (
-                        <span className="text-[6px] sm:text-[7px] font-black text-emerald-500 uppercase tracking-widest animate-pulse mt-1">Active</span>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
-        </div>
       </div>
 
       {/* Modals */}
@@ -1195,112 +1240,233 @@ export const Admin: React.FC<AdminProps> = ({
           >
             <motion.div 
               initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
-              className="w-full max-w-lg bg-white rounded-[2rem] p-6 sm:p-8 shadow-2xl space-y-6"
+              className="w-full max-w-md bg-white rounded-[2.5rem] p-5 sm:p-8 shadow-2xl flex flex-col max-h-[92vh] overflow-y-auto"
             >
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-black tracking-tight">{showAddUserModal ? "Add New User" : "Edit User Profile"}</h3>
-                <button onClick={() => { setShowAddUserModal(false); setShowEditUserModal(false); }} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
-                  <X size={20} />
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-xl font-black tracking-tight text-slate-800">{showAddUserModal ? "Add New User" : "Edit Profile"}</h3>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Account configuration</p>
+                </div>
+                <button 
+                  onClick={() => { setShowAddUserModal(false); setShowEditUserModal(false); }} 
+                  className="p-2 hover:bg-slate-100 rounded-full transition-colors group"
+                >
+                  <X size={20} className="text-slate-400 group-hover:text-slate-900" />
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Username (Login ID)</label>
-                  <input 
-                    type="text" value={userForm.username}
-                    onChange={e => setUserForm({...userForm, username: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold"
-                  />
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Username</label>
+                    <input 
+                      type="text" value={userForm.username}
+                      onChange={e => setUserForm({...userForm, username: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold focus:bg-white transition-all shadow-sm"
+                      placeholder="Login ID"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Emp ID</label>
+                    <input 
+                      type="text" value={userForm.empId} disabled={showEditUserModal}
+                      onChange={e => setUserForm({...userForm, empId: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold disabled:opacity-50 shadow-sm"
+                      placeholder="UID"
+                    />
+                  </div>
                 </div>
+
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Employee ID (UID)</label>
-                  <input 
-                    type="text" value={userForm.empId} disabled={showEditUserModal}
-                    onChange={e => setUserForm({...userForm, empId: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold disabled:opacity-50"
-                  />
-                </div>
-                <div className="col-span-2 space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Full Name</label>
+                  <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Full Name</label>
                   <input 
                     type="text" value={userForm.name}
                     onChange={e => setUserForm({...userForm, name: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold focus:bg-white shadow-sm"
+                    placeholder="Enter full name"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Role</label>
-                  <select 
-                    value={userForm.role}
-                    onChange={e => setUserForm({...userForm, role: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold"
-                  >
-                    <option value="picker">Picker</option>
-                    <option value="supervisor">Supervisor</option>
-                    <option value="manager">Manager</option>
-                    <option value="store">Store Admin</option>
-                  </select>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Role</label>
+                    <select 
+                      value={userForm.role}
+                      onChange={e => setUserForm({...userForm, role: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold appearance-none shadow-sm"
+                    >
+                      <option value="driver">Driver</option>
+                      <option value="picker">Picker</option>
+                      <option value="supervisor">Supervisor</option>
+                      <option value="manager">Manager</option>
+                      <option value="store">Store Admin</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Status</label>
+                    <select 
+                      value={userForm.status}
+                      onChange={e => setUserForm({...userForm, status: e.target.value})}
+                      className={cn(
+                        "w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold appearance-none shadow-sm",
+                        userForm.status === 'Active' ? "text-emerald-600" : userForm.status === 'Non-Active' ? "text-amber-600" : "text-red-600"
+                      )}
+                    >
+                      <option value="Active">Active</option>
+                      <option value="Non-Active">Non-Active</option>
+                      <option value="Left">Left</option>
+                    </select>
+                  </div>
                 </div>
+
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Store ID</label>
-                  <input 
-                    type="text" value={userForm.storeId}
-                    onChange={e => setUserForm({...userForm, storeId: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold"
-                  />
+                  <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Profile Image</label>
+                  <div className="flex items-center gap-3">
+                    <div className="h-12 w-12 rounded-2xl bg-slate-100 flex items-center justify-center overflow-hidden border border-slate-200">
+                      {userForm.profileImage ? (
+                        <img src={userForm.profileImage} className="w-full h-full object-cover" alt="Profile" />
+                      ) : (
+                        <Users size={20} className="text-slate-300" />
+                      )}
+                    </div>
+                    <label className="flex-1">
+                      <div className="w-full py-3 px-4 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-100 transition-all cursor-pointer text-center">
+                        {userForm.profileImage ? "Change Image" : "Upload Image"}
+                      </div>
+                      <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                    </label>
+                    {userForm.profileImage && (
+                      <button 
+                        onClick={() => setUserForm({...userForm, profileImage: ''})}
+                        className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-all"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Store ID</label>
+                    <input 
+                      type="text" value={userForm.storeId}
+                      onChange={e => setUserForm({...userForm, storeId: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold shadow-sm"
+                      placeholder="Store#"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Region</label>
+                    <select 
+                      value={userForm.region}
+                      onChange={e => setUserForm({...userForm, region: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold shadow-sm"
+                    >
+                      <option value="">Global</option>
+                      {availableRegions.map(reg => (
+                        <option key={reg} value={reg}>{reg}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+                  <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-3">Shift Schedule</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Start</label>
+                      <select
+                        value={userForm.shiftStart}
+                        onChange={e => setUserForm({ ...userForm, shiftStart: Number(e.target.value) })}
+                        className="w-full bg-white border border-slate-100 rounded-xl p-2.5 text-xs font-bold shadow-sm"
+                      >
+                        {Array.from({ length: 18 }, (_, i) => i + 5).map(h => {
+                          const suffix = h < 12 ? 'AM' : 'PM';
+                          const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+                          return <option key={h} value={h}>{h12}:00 {suffix}</option>;
+                        })}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Hours</label>
+                      <input
+                        type="number"
+                        min={7}
+                        max={12}
+                        value={userForm.shiftHours}
+                        onChange={e => {
+                          const val = Math.min(12, Math.max(7, Number(e.target.value)));
+                          setUserForm({ ...userForm, shiftHours: val });
+                        }}
+                        className="w-full bg-white border border-slate-100 rounded-xl p-2.5 text-xs font-bold shadow-sm"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <select
+                        value={userForm.weekOffDay}
+                        onChange={e => setUserForm({ ...userForm, weekOffDay: e.target.value })}
+                        className="w-full bg-blue-50 border border-blue-100 text-blue-800 rounded-xl p-2.5 text-[9px] font-black uppercase tracking-widest shadow-sm"
+                      >
+                        <option value="">No Day Off</option>
+                        {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(d => (
+                          <option key={d} value={d}>Off on {d}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Region</label>
-                  <select 
-                    value={userForm.region}
-                    onChange={e => setUserForm({...userForm, region: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold"
-                  >
-                    <option value="">No Region</option>
-                    {availableRegions.map(reg => (
-                      <option key={reg} value={reg}>{reg}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="col-span-2 space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Password {showEditUserModal && "(Leave blank to keep current)"}</label>
+                  <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Password {showEditUserModal && "(Optional)"}</label>
                   <div className="relative">
                     <input 
                       type="password" value={userForm.password}
                       onChange={e => setUserForm({...userForm, password: e.target.value})}
-                      className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold pl-10"
+                      className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold pl-10 shadow-sm"
                       placeholder="••••••••"
                     />
-                    <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                    <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
                   </div>
                 </div>
-              </div>
 
-              <button 
-                onClick={async () => {
-                  setIsProcessingUser(true);
-                  try {
-                    await axios.post('/api/admin/users/upsert', { 
-                      user: userForm, 
-                      password: userForm.password,
-                      requesterId: user.empId
-                    });
-                    showToast("User updated successfully", "success");
-                    setShowAddUserModal(false);
-                    setShowEditUserModal(false);
-                    onRefetch(true);
-                  } catch (e: any) {
-                    showToast(e.response?.data?.error || "User update failed", "error");
-                  } finally {
-                    setIsProcessingUser(false);
-                  }
-                }}
-                disabled={isProcessingUser || !userForm.username || !userForm.empId}
-                className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-blue-200 disabled:opacity-50"
-              >
-                {isProcessingUser ? "Processing..." : (showAddUserModal ? "Create User Account" : "Save Changes")}
-              </button>
+                <div className="flex gap-2 pt-4">
+                  <button 
+                    onClick={() => { setShowAddUserModal(false); setShowEditUserModal(false); }}
+                    className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-500 font-black uppercase tracking-widest text-[10px] hover:bg-slate-200 transition-all"
+                  >
+                    Go Back
+                  </button>
+                  <button 
+                    disabled={isProcessingUser || (showAddUserModal && !userForm.password) || !userForm.username || !userForm.empId}
+                    onClick={async () => {
+                      setIsProcessingUser(true);
+                      try {
+                        const payload = {
+                          user: userForm,
+                          password: userForm.password,
+                          requesterId: user?.empId
+                        };
+                        await axios.post('/api/admin/users/upsert', payload);
+                        showToast(showAddUserModal ? "User created!" : "Profile updated!", "success");
+                        setShowAddUserModal(false);
+                        setShowEditUserModal(false);
+                        onRefetch(true);
+                      } catch (e: any) {
+                        showToast(e.response?.data?.error || "Action failed", "error");
+                      } finally {
+                        setIsProcessingUser(false);
+                      }
+                    }}
+                    className={cn(
+                      "flex-[2] py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-blue-200 transition-all",
+                      isProcessingUser ? "bg-slate-100 text-slate-400" : "bg-blue-600 text-white hover:bg-blue-700"
+                    )}
+                  >
+                    {isProcessingUser ? "Processing..." : (showAddUserModal ? "Create User" : "Save Changes")}
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </motion.div>
         )}
@@ -1318,51 +1484,50 @@ export const Admin: React.FC<AdminProps> = ({
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
-              className="w-full max-w-md rounded-[2rem] sm:rounded-[3rem] bg-white p-6 sm:p-8 shadow-2xl relative"
+              className="w-full max-w-sm sm:max-w-md rounded-[2.5rem] bg-white p-5 sm:p-8 shadow-2xl relative flex flex-col max-h-[92vh] overflow-y-auto"
             >
-              <button onClick={() => setSelectedUser(null)} className="absolute top-4 right-4 sm:top-6 sm:right-6 p-2 hover:bg-slate-100 rounded-full transition-colors">
-                <X size={20} sm:size={24} />
-              </button>
-              
-              <div className="mb-6 sm:mb-8">
-                <h3 className="text-xl sm:text-2xl font-black tracking-tight">{selectedUser.name}</h3>
-                <div className="flex items-center gap-2 mt-1">
-                  <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] sm:text-xs">Staff Profile Details</p>
-                  {selectedUser.region && (
-                    <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-md text-[8px] font-black uppercase tracking-widest border border-indigo-100">
-                      {selectedUser.region}
-                    </span>
-                  )}
+              <div className="flex items-start justify-between mb-6">
+                <div>
+                  <h3 className="text-xl sm:text-2xl font-black tracking-tight text-slate-800">{selectedUser.name}</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-slate-400 font-bold uppercase tracking-widest text-[9px] sm:text-xs">Staff Profile</p>
+                    {selectedUser.region && (
+                      <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-md text-[8px] font-black uppercase tracking-widest border border-indigo-100">
+                        {selectedUser.region}
+                      </span>
+                    )}
+                  </div>
                 </div>
+                <button onClick={() => setSelectedUser(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors group">
+                  <X size={20} className="text-slate-400 group-hover:text-slate-900" />
+                </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
+              <div className="grid grid-cols-2 gap-3 sm:gap-6 mb-6">
                 {["In", "Out"].map(type => {
                   const uId = String(selectedUser.empId).trim();
-                  // For "In", we want the first one of the day (Oldest) -> Reverse the New-to-Old list
-                  // For "Out", we want the latest one of the day (Newest) -> Standard search on New-to-Old list
                   const record = type === "In" 
                     ? [...adminData.attendance].reverse().find(a => String(a.empId).trim() === uId && a.type === type && matchesFilterDate(a.timestamp))
                     : adminData.attendance.find(a => String(a.empId).trim() === uId && a.type === type && matchesFilterDate(a.timestamp));
                   
                   return (
-                    <div key={type} className="space-y-2 sm:space-y-3">
-                      <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">{type} Verification</p>
+                    <div key={type} className="space-y-2">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">{type} Verification</p>
                       {record ? (
                         <motion.div 
-                          whileHover={{ scale: 1.05 }}
+                          whileHover={{ scale: 1.02 }}
                           onClick={() => onViewImage(fixImageUrl(record.imageUrl))}
-                          className="relative aspect-square overflow-hidden rounded-2xl sm:rounded-3xl border-4 border-slate-50 shadow-lg cursor-zoom-in"
+                          className="relative aspect-square overflow-hidden rounded-2xl sm:rounded-3xl border-4 border-slate-50 shadow-lg cursor-zoom-in group"
                         >
-                          <SmartImage src={fixImageUrl(record.imageUrl)} className="w-full h-full" alt={type} />
-                          <div className="absolute bottom-0 inset-x-0 bg-black/50 p-1.5 sm:p-2 text-[8px] sm:text-[10px] text-white font-black text-center backdrop-blur-sm">
+                          <SmartImage src={fixImageUrl(record.imageUrl)} className="w-full h-full transition-transform duration-500 group-hover:scale-110" alt={type} />
+                          <div className="absolute bottom-0 inset-x-0 bg-black/60 p-2 text-[8px] sm:text-[10px] text-white font-black text-center backdrop-blur-md">
                             {new Date(record.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
                           </div>
                         </motion.div>
                       ) : (
                         <div className="aspect-square flex flex-col items-center justify-center bg-slate-50 rounded-2xl sm:rounded-3xl border-2 border-dashed border-slate-100 text-slate-300">
-                          <AlertCircle size={20} sm:size={24} className="mb-1 sm:mb-2" />
-                          <span className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest">No Log</span>
+                          <AlertCircle size={24} className="mb-2 opacity-50" />
+                          <span className="text-[8px] font-black uppercase tracking-widest">No Log</span>
                         </div>
                       )}
                     </div>
@@ -1370,7 +1535,7 @@ export const Admin: React.FC<AdminProps> = ({
                 })}
               </div>
 
-              <div className="space-y-3 sm:space-y-4">
+              <div className="space-y-3">
                 {(() => {
                   const uId = String(selectedUser.empId).trim();
                   const inRec = [...adminData.attendance].reverse().find(a => String(a.empId).trim() === uId && a.type === "In" && matchesFilterDate(a.timestamp));
@@ -1386,36 +1551,51 @@ export const Admin: React.FC<AdminProps> = ({
                         const hrs = Math.floor(diff / (1000 * 60 * 60));
                         const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
                         dur = `${hrs}h ${mins}m`;
-                      } else {
-                        dur = "0h 0m";
-                      }
+                      } else { dur = "0h 0m"; }
                     }
                   }
                   return (
-                    <div className="p-3 sm:p-4 bg-blue-50 rounded-xl sm:rounded-2xl flex items-center justify-between border border-blue-100">
-                      <div className="flex items-center gap-2 sm:gap-3">
-                        <Clock className="text-blue-600" size={16} sm:size={18} />
-                        <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-blue-900">Work Duration</span>
+                    <div className="p-4 bg-blue-50/50 rounded-2xl flex items-center justify-between border border-blue-100 shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
+                          <Clock size={16} />
+                        </div>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-blue-900">Today's Duration</span>
                       </div>
                       <span className="font-black text-blue-700 text-sm sm:text-base">{dur}</span>
                     </div>
                   );
                 })()}
 
-                <div className="p-3 sm:p-4 bg-slate-50 rounded-xl sm:rounded-2xl flex items-center justify-between">
-                  <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">Orders Today</span>
-                  <span className="font-black text-blue-600 text-sm sm:text-base">{adminData.orders.filter(o => (o.pickerName === selectedUser.name || (o as any).uploadedBy === selectedUser.empId) && matchesFilterDate(o.timestamp)).length}</span>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-center">
+                    <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Total Orders</p>
+                    <p className="font-black text-slate-800 text-lg mt-1">
+                      {adminData.orders.filter(o => (o.pickerName === selectedUser.name || (o as any).uploadedBy === selectedUser.empId) && matchesFilterDate(o.timestamp)).length}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-center">
+                    <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Store ID</p>
+                    <p className="font-black text-slate-800 text-lg mt-1">{selectedUser.storeId}</p>
+                  </div>
                 </div>
 
-                {adminData.attendance.some(a => String(a.empId).trim() === String(selectedUser.empId).trim() && matchesFilterDate(a.timestamp)) && (
-                  <motion.button
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => onResetAttendance(selectedUser.empId, filterDate)}
-                    className="w-full flex items-center justify-center gap-2 p-3 sm:p-4 bg-red-50 text-red-600 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all border border-red-100"
+                <div className="flex gap-2 pt-2">
+                  {adminData.attendance.some(a => String(a.empId).trim() === String(selectedUser.empId).trim() && matchesFilterDate(a.timestamp)) && (
+                    <button
+                      onClick={() => onResetAttendance(selectedUser.empId, filterDate)}
+                      className="flex-1 flex items-center justify-center gap-2 py-3.5 bg-red-50 text-red-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all border border-red-100 shadow-sm"
+                    >
+                      <RefreshCw size={14} /> Reset
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setSelectedUser(null)}
+                    className="flex-2 py-3.5 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all shadow-lg shadow-slate-200"
                   >
-                    <RefreshCw size={14} sm:size={16} /> Reset Attendance
-                  </motion.button>
-                )}
+                    Go Back
+                  </button>
+                </div>
               </div>
             </motion.div>
           </motion.div>
@@ -1433,20 +1613,20 @@ export const Admin: React.FC<AdminProps> = ({
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
-              className="w-full max-w-2xl h-[80vh] rounded-[2rem] sm:rounded-[3rem] bg-white flex flex-col shadow-2xl relative overflow-hidden"
+              className="w-full max-w-xl h-[85vh] rounded-[2.5rem] bg-white flex flex-col shadow-2xl relative overflow-hidden"
             >
-              <div className="p-6 sm:p-8 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10">
+              <div className="p-5 sm:p-8 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10">
                 <div>
-                  <h3 className="text-xl sm:text-2xl font-black tracking-tight">Daily Orders</h3>
-                  <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] sm:text-xs mt-1">
+                  <h3 className="text-xl sm:text-2xl font-black tracking-tight text-slate-800">Daily Orders</h3>
+                  <p className="text-slate-400 font-bold uppercase tracking-widest text-[9px] sm:text-xs mt-1">
                     {new Date(filterDate).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}
                   </p>
                 </div>
-                <div className="flex items-center gap-2 sm:gap-4">
+                <div className="flex items-center gap-2">
                   <select 
                     value={adminStoreFilter}
                     onChange={(e) => setAdminStoreFilter(e.target.value)}
-                    className="bg-slate-50 border-none rounded-lg sm:rounded-xl px-3 py-1.5 sm:px-4 sm:py-2 font-black text-[9px] sm:text-xs uppercase tracking-widest text-slate-600 outline-none"
+                    className="bg-slate-50 border-none rounded-xl px-3 py-2 font-black text-[9px] sm:text-xs uppercase tracking-widest text-slate-600 outline-none appearance-none shadow-sm"
                   >
                     <option value="All">All Stores</option>
                     {Array.from(new Set(adminData.orders
@@ -1455,13 +1635,13 @@ export const Admin: React.FC<AdminProps> = ({
                       <option key={store} value={store}>{store}</option>
                     ))}
                   </select>
-                  <button onClick={() => setShowDailyOrdersModal(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
-                    <X size={20} sm:size={24} />
+                  <button onClick={() => setShowDailyOrdersModal(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors group">
+                    <X size={20} className="text-slate-400 group-hover:text-slate-900" />
                   </button>
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-3 sm:space-y-4">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
                 {filteredOrders
                   .filter(o => adminStoreFilter === "All" || String(o.storeId) === adminStoreFilter)
                   .length > 0 ? (

@@ -35,10 +35,157 @@ function handleRequest(e) {
     if (action === "getregions")        return getRegions(ss);
     if (action === "resetattendance")   return resetAttendance(ss, payload);
     if (action === "syncuser")          return syncUser(ss, payload); // ✅ NEW: One-way sync from PWA
+    if (action === "getstaffdashboard") return getStaffDashboard(ss, payload);
     return jsonResponse({ status: "error", message: "Invalid action: " + action });
   } catch (err) {
     return jsonResponse({ status: "error", message: err.toString() });
   }
+}
+
+/**
+ * GET STAFF DASHBOARD — Aggregated view of coverage across stores
+ */
+function getStaffDashboard(ss, params) {
+  const usersSheet = ss.getSheetByName("Users");
+  const attendanceSheet = ss.getSheetByName("Attendance");
+  
+  if (!usersSheet) return jsonResponse({ status: "error", message: "Users sheet missing" });
+  
+  const userData = usersSheet.getDataRange().getValues();
+  const usersH = userData.shift().map(h => String(h).toLowerCase().trim());
+  const ui=usersH.indexOf("username"), ri=usersH.indexOf("role"), sti=usersH.indexOf("storeid"),
+        ni=usersH.indexOf("name"), ei=usersH.indexOf("empid"), ssi=usersH.indexOf("shiftstart"),
+        shi=usersH.indexOf("shifthours"), woi=usersH.indexOf("weekoffday"), si=usersH.indexOf("status");
+
+  // Today's attendance (last 2000 rows for performance)
+  let attRecords = [];
+  if (attendanceSheet) {
+    const lastRow = attendanceSheet.getLastRow();
+    if (lastRow > 1) {
+      const rowCount = Math.min(2000, lastRow - 1);
+      attRecords = attendanceSheet.getRange(lastRow - rowCount + 1, 1, rowCount, 6).getValues();
+    }
+  }
+
+  const todayStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+  const currentHour = new Date().getHours();
+  const currentDay = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "EEEE"); // e.g. "Friday"
+
+  // Process users into timeline
+  const staffList = userData.map(row => {
+    const empId = String(row[ei]).trim();
+    const storeId = String(row[sti]).trim();
+    const role = String(row[ri]).toLowerCase().trim();
+    const status = String(row[si] || "Active").toLowerCase().trim();
+    
+    if (!empId || status !== "active") return null;
+    if (role !== "picker" && role !== "driver") return null;
+
+    // Filter by attendance
+    const userAtt = attRecords.filter(r => String(r[0]).trim() === empId);
+    let punchedIn = false;
+    let punchedOut = false;
+    userAtt.forEach(r => {
+      try {
+        const d = Utilities.formatDate(new Date(r[4]), Session.getScriptTimeZone(), "yyyy-MM-dd");
+        if (d === todayStr) {
+          if (r[3] === "In") punchedIn = true;
+          if (r[3] === "Out") punchedOut = true;
+        }
+      } catch(e) {}
+    });
+
+    const shiftStart = Number(row[ssi] || 6);
+    const shiftHours = Number(row[shi] || 8);
+    const weekOffDay = String(row[woi] || "").trim();
+    const isWeekOff = weekOffDay.toLowerCase() === currentDay.toLowerCase();
+    
+    const shiftEnd = shiftStart + shiftHours;
+    const isActive = punchedIn && !punchedOut;
+
+    return {
+      empId,
+      name: row[ni] || row[ui],
+      role,
+      storeId,
+      shiftStart,
+      shiftHours,
+      isActive,
+      isWeekOff,
+      punchedIn
+    };
+  }).filter(x => x !== null);
+
+  // Group by store
+  const storeMap = {};
+  staffList.forEach(s => {
+    if (!storeMap[s.storeId]) {
+      storeMap[s.storeId] = {
+        storeId: s.storeId,
+        totalStaff: 0,
+        activeNow: 0,
+        weekOff: 0,
+        notStarted: 0,
+        staffTimeline: []
+      };
+    }
+    const sm = storeMap[s.storeId];
+    sm.totalStaff++;
+    if (s.isActive) sm.activeNow++;
+    else if (s.isWeekOff) sm.weekOff++;
+    else if (!s.punchedIn) sm.notStarted++;
+    sm.staffTimeline.push(s);
+  });
+
+  const storeBreakdown = Object.values(storeMap);
+
+  // Hourly breakdown
+  const hourlyBreakdown = [];
+  for (let h = 0; h <= 23; h++) {
+    const label = h === 0 ? "12 AM" : h < 12 ? (h + " AM") : (h === 12 ? "12 PM" : (h - 12) + " PM");
+    let active = 0, weekOff = 0, notStarted = 0;
+    
+    staffList.forEach(s => {
+      let shiftStart = s.shiftStart;
+      let shiftHours = s.shiftHours;
+      let shiftEnd = shiftStart + shiftHours;
+      
+      // Handle shifts that cross midnight
+      let isInShift = false;
+      if (shiftEnd > 24) {
+        // e.g. 22 to 6 AM (shiftEnd = 30)
+        isInShift = (h >= shiftStart) || (h < (shiftEnd - 24));
+      } else {
+        isInShift = (h >= shiftStart && h < shiftEnd);
+      }
+
+      if (isInShift) {
+        if (s.isActive) active++;
+        else if (s.isWeekOff) weekOff++;
+        else if (!s.punchedIn) notStarted++;
+      }
+    });
+
+    hourlyBreakdown.push({ hour: h, label, active, weekOff, notStarted });
+  }
+
+  const summary = {
+    totalStores: storeBreakdown.length,
+    totalStaff: staffList.length,
+    activeNow: staffList.filter(s => s.isActive).length,
+    weekOff: staffList.filter(s => s.isWeekOff).length,
+    notLoggedIn: staffList.filter(s => !s.punchedIn && !s.isWeekOff).length
+  };
+
+  return jsonResponse({
+    status: "success",
+    data: {
+      summary,
+      hourlyBreakdown,
+      storeBreakdown,
+      lastUpdated: new Date().toISOString()
+    }
+  });
 }
 
 /**
@@ -49,7 +196,7 @@ function syncUser(ss, params) {
   const data = sheet.getDataRange().getValues();
   
   if (data.length === 0) {
-    const defaultHeaders = ["username", "password", "role", "storeId", "name", "status", "empId", "ProfileImage", "region"];
+    const defaultHeaders = ["username", "password", "role", "storeId", "name", "status", "empId", "ProfileImage", "region", "shiftStart", "shiftHours", "weekOffDay"];
     sheet.appendRow(defaultHeaders);
     data.push(defaultHeaders);
   }
@@ -79,9 +226,17 @@ function syncUser(ss, params) {
 
   // Upsert logic
   const rowData = headers.map(h => {
-    // Exact mapping for params from PWA
-    if (h === "status") return params.status || "Active";
-    return params[h] !== undefined ? params[h] : "";
+    const key = h.toLowerCase().trim();
+    if (key === "status") return params.status || params.Status || "Active";
+    if (key === "profileimage") return params.profileImage || params.profileimage || params.ProfileImage || "";
+    if (key === "storeid") return params.storeId || params.storeid || params.StoreID || "";
+    if (key === "empid") return params.empId || params.empid || params.EmpId || "";
+    
+    // Fallback search
+    for (let pKey in params) {
+      if (pKey.toLowerCase() === key) return params[pKey];
+    }
+    return "";
   });
 
   if (foundRow !== -1) {
@@ -104,15 +259,27 @@ function loginUser(ss, params) {
   const h = data[0].map(x => String(x).toLowerCase().trim());
   const ui=h.indexOf("username"),pi=h.indexOf("password"),si=h.indexOf("status"),
         ri=h.indexOf("role"),sti=h.indexOf("storeid"),ni=h.indexOf("name"),
-        ei=h.indexOf("empid"),regi=h.indexOf("region");
+        ei=h.indexOf("empid"),regi=h.indexOf("region"), pri=h.indexOf("profileimage"),
+        ssi=h.indexOf("shiftstart"), shi=h.indexOf("shifthours"), woi=h.indexOf("weekoffday");
   const username=(params.username||"").trim(), password=(params.password||"").trim();
   for (let i=1;i<data.length;i++) {
     if (String(data[i][ui]).trim()===username && String(data[i][pi]).trim()===password) {
-      if (String(data[i][si]).toLowerCase().trim()!=="active")
-        return jsonResponse({ status:"error", message:"Account inactive" });
+      const userStatus = String(data[i][si] || "Active").toLowerCase().trim();
+      if (userStatus !== "active")
+        return jsonResponse({ status:"error", message:"Account status is " + userStatus });
+        
       return jsonResponse({ status:"success", user:{
-        username, role:data[i][ri]||"user", storeId:String(data[i][sti]||""),
-        name:data[i][ni]||username, empId:String(data[i][ei]||""), region:data[i][regi]||""
+        username: String(data[i][ui]), 
+        role: data[i][ri]||"user", 
+        storeId: String(data[i][sti]||""),
+        name: data[i][ni]||username, 
+        empId: String(data[i][ei]||""), 
+        region: data[i][regi]||"",
+        status: data[i][si] || "Active",
+        profileImage: pri !== -1 ? data[i][pri] : "",
+        shiftStart: ssi !== -1 ? Number(data[i][ssi] || 6) : 6,
+        shiftHours: shi !== -1 ? Number(data[i][shi] || 8) : 8,
+        weekOffDay: woi !== -1 ? String(data[i][woi] || "") : ""
       }});
     }
   }
@@ -120,7 +287,7 @@ function loginUser(ss, params) {
 }
 
 // ─────────────────────────────────────────────
-// GET ADMIN DATA — ✅ FIXED BUG 4 (7 columns for orders)
+// GET ADMIN DATA
 // ─────────────────────────────────────────────
 function getAdminData(ss, params) {
   const role = String(params.role || "").toLowerCase().trim();
@@ -135,10 +302,21 @@ function getAdminData(ss, params) {
 
   if (usersSheet) {
     const data = usersSheet.getDataRange().getValues();
-    const headers = data.shift().map(h => String(h).toLowerCase().trim());
+    const rawHeaders = data.shift();
+    const headers = rawHeaders.map(h => {
+      const s = String(h).toLowerCase().trim();
+      if (s === "empid") return "empId";
+      if (s === "storeid") return "storeId";
+      if (s === "profileimage") return "profileImage";
+      if (s === "shiftstart") return "shiftStart";
+      if (s === "shifthours") return "shiftHours";
+      if (s === "weekoffday") return "weekOffDay";
+      return s;
+    });
+
     result.users = data.map(r => {
       let obj = {};
-      headers.forEach((h, i) => { if (h !== "password") obj[h] = r[i]; });
+      headers.forEach((h, i) => { if (h.toLowerCase() !== "password") obj[h] = r[i]; });
       return obj;
     });
   }
@@ -341,7 +519,7 @@ function logAlertV2(ss, params) {
   const sheet = getOrCreateSheet(ss, "AlertLogs");
   const headers = ["id","timestamp","orderId","eventType","storeId","userId",
     "notificationTime","storeStaffName","status","escalation","managerName",
-    "statusTrigger","managerStatus","orderCreatedAt"];
+    "statusTrigger","managerStatus","orderCreatedAt", "bucket"];
   if (sheet.getLastRow() === 0) sheet.appendRow(headers);
   const row = headers.map(h => params[h] !== undefined ? params[h] : "");
   sheet.appendRow(row);
@@ -350,10 +528,18 @@ function logAlertV2(ss, params) {
 
 function getAlertLogs(ss) {
   const sheet = ss.getSheetByName("AlertLogs");
-  if (!sheet || sheet.getLastRow() < 2) return jsonResponse({ status:"success", data:[] });
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0].map(h => String(h).toLowerCase().trim());
-  const rows = data.slice(1).map(r => {
+  if (!sheet) return jsonResponse({ status:"success", data:[] });
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return jsonResponse({ status:"success", data:[] });
+  
+  const MAX_ROWS = 1500;
+  const startRow = Math.max(2, lastRow - MAX_ROWS + 1);
+  const numRows = lastRow - startRow + 1;
+  const lastCol = sheet.getLastColumn();
+  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).toLowerCase().trim());
+  const data = sheet.getRange(startRow, 1, numRows, lastCol).getValues();
+  
+  const rows = data.map(r => {
     let obj = {};
     headers.forEach((h,i) => { obj[h] = r[i]; });
     return obj;
@@ -432,7 +618,7 @@ function uploadImageToDrive(base64, fileName, rootFolderId, pathSegments) {
 // ─────────────────────────────────────────────
 function triggerVercelMonitor() {
   const url = "https://fire-base-ecom.vercel.app/api/monitor";
-  const key = "https://script.google.com/macros/s/AKfycbyPS7j9nxob6HmqNEfN-2eIXBLGoprMZ4SqFf1WpfffTGWPiGveJzlh9zIVkPb9VD0E/exec";
+  const key = "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec";
   try {
     const res = UrlFetchApp.fetch(url, {
       "method": "get",

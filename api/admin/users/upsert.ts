@@ -40,7 +40,10 @@ const db = getFirestore(admin.app(), FIRESTORE_DB_ID);
 
 async function syncUserToGas(user: any, action: 'upsert' | 'delete') {
   try {
-    const gasUrl = (process.env.GAS_API_URL || "https://script.google.com/macros/s/AKfycbynf6n_5CXYyb4xXqwR-EoO_50BFgsiT98_JkRdftZDsDN7UQvgZoJCcuEN0Yr0vuIR/exec").trim();
+    let gasUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
+    if (!gasUrl || gasUrl === "undefined" || !gasUrl.startsWith("http")) {
+      gasUrl = "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec";
+    }
     const params = new URLSearchParams();
     params.append('action', 'syncUser');
     params.append('syncAction', action);
@@ -51,6 +54,20 @@ async function syncUserToGas(user: any, action: 'upsert' | 'delete') {
     params.append('role', user.role || "");
     params.append('region', user.region || "");
     params.append('status', user.status || "Active");
+    params.append('updatedAt', user.updatedAt || new Date().toISOString());
+    params.append('shiftStart', user.shiftStart !== undefined ? String(user.shiftStart) : "6");
+    params.append('shiftHours', user.shiftHours !== undefined ? String(user.shiftHours) : "8");
+    params.append('weekOffDay', user.weekOffDay || "");
+    
+    // Only sync image if it's "small" (under 50KB length for safety in Sheets)
+    if (user.profileImage) {
+      if (user.profileImage.length < 50000) {
+        params.append('profileImage', user.profileImage);
+      } else {
+        console.log(`[Vercel Sync] Skipping large image for ${user.username}`);
+        params.append('profileImage', "IMAGE_TOO_LARGE_IN_SHEET");
+      }
+    }
     if (user.password) params.append('password', user.password);
 
     console.log(`[Vercel Admin] Syncing ${user.username} to GAS...`);

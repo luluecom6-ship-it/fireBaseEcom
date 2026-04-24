@@ -1,5 +1,6 @@
 import { detectAlerts } from "../utils/alertLogic.js";
 import { executeGasRequest } from "./gasService.js";
+import axios from "axios";
 
 export async function runMonitorTick(db: any, messaging: any) {
   try {
@@ -20,11 +21,14 @@ export async function runMonitorTick(db: any, messaging: any) {
     console.log(`[Monitor DEBUG] Config exists: ${configDoc.exists}, Rules count: ${escalationRules.length}`);
 
     // 2. Fetch Matrix Data & Admin Data from GAS via common service
-    const baseUrl = (process.env.GAS_API_URL || "").trim();
-    if (!baseUrl) {
-      console.error("[Monitor DEBUG] FATAL: GAS_API_URL is missing!");
-      throw new Error("[Monitor] GAS_API_URL environment variable is missing.");
+    let baseUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
+    
+    // Consistent fallback across all environments
+    if (!baseUrl || baseUrl === "undefined" || !baseUrl.startsWith("http")) {
+      baseUrl = "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec";
     }
+    
+    console.log(`[Monitor DEBUG] Using GAS URL: ${baseUrl.substring(0, 50)}...`);
     
     console.log("[Monitor DEBUG] Fetching data via gasService...");
 
@@ -139,13 +143,14 @@ export async function runMonitorTick(db: any, messaging: any) {
       const alertStoreId = String(alert.item.storeID || "").trim();
       const alertRegion = storeToRegion[alertStoreId] || "";
       const now = new Date().toISOString();
+      const alertId = alert.alertKey;
 
-      await db.collection('alerts').doc(alert.alertKey).set({
+      await db.collection('alerts').doc(alertId).set({
         timestamp: now,
         orderId: alert.item.orderID || "",
         eventType: 'trigger',
         storeId: alertStoreId,
-        region: alertRegion, // Save region for easier escalation lookup
+        region: alertRegion,
         userId: "SYSTEM",
         bucket: alert.bucket || "",
         notificationTime: now,
@@ -155,6 +160,35 @@ export async function runMonitorTick(db: any, messaging: any) {
         triggeredAt: now,
         updatedAt: new Date()
       });
+
+      // Sync to GAS Legacy Logs
+      try {
+        const syncParams = new URLSearchParams();
+        syncParams.append('action', 'logalertv2');
+        syncParams.append('id', alertId); // Added missing ID
+        syncParams.append('timestamp', now);
+        syncParams.append('orderId', alert.item.orderID || "");
+        syncParams.append('eventType', 'trigger');
+        syncParams.append('storeId', alertStoreId);
+        syncParams.append('userId', "SYSTEM");
+        syncParams.append('bucket', alert.bucket || "");
+        syncParams.append('notificationTime', now);
+        syncParams.append('storeStaffName', "");
+        syncParams.append('status', "Pending");
+        syncParams.append('escalation', "FALSE");
+        syncParams.append('managerName', "");
+        syncParams.append('managerStatus', "Pending");
+        syncParams.append('orderCreatedAt', alert.item.timestamp || "");
+        syncParams.append('statusTrigger', alert.statusTrigger || "");
+
+        console.log(`[Monitor] Syncing new alert to GAS: ${alertId}`);
+        await axios.post(baseUrl, syncParams.toString(), {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          timeout: 10000
+        });
+      } catch (syncErr: any) {
+        console.error(`[Monitor] GAS alert sync failed for ${alertId}:`, syncErr.message);
+      }
 
       // Notify Level 1 (Pickers/Store)
       await sendFilteredNotification({
@@ -178,6 +212,35 @@ export async function runMonitorTick(db: any, messaging: any) {
             escalation: "TRUE",
             updatedAt: new Date()
           });
+          
+          // Sync escalation to GAS Legacy Logs
+          try {
+            const syncParams = new URLSearchParams();
+            syncParams.append('action', 'logalertv2');
+            syncParams.append('id', doc.id);
+            syncParams.append('timestamp', new Date().toISOString());
+            syncParams.append('orderId', data.orderId || "");
+            syncParams.append('eventType', 'escalate');
+            syncParams.append('storeId', data.storeId || "");
+            syncParams.append('userId', "SYSTEM_AUTO");
+            syncParams.append('bucket', data.bucket || "");
+            syncParams.append('notificationTime', data.notificationTime || "");
+            syncParams.append('storeStaffName', data.storeStaffName || "");
+            syncParams.append('status', data.status || "Pending");
+            syncParams.append('escalation', "TRUE");
+            syncParams.append('managerName', data.managerName || "");
+            syncParams.append('managerStatus', data.managerStatus || "Pending");
+            syncParams.append('orderCreatedAt', data.orderCreatedAt || "");
+            syncParams.append('statusTrigger', data.statusTrigger || "");
+
+            console.log(`[Monitor] Syncing escalation to GAS: ${doc.id}`);
+            await axios.post(baseUrl, syncParams.toString(), {
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              timeout: 10000
+            });
+          } catch (syncErr: any) {
+            console.error(`[Monitor] GAS escalation sync failed for ${doc.id}:`, syncErr.message);
+          }
 
           // Notify Level 2 (Manager/Supervisor/Admin)
           await sendFilteredNotification({

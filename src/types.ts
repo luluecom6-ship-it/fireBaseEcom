@@ -4,10 +4,57 @@ export interface User {
   role: 'picker' | 'supervisor' | 'driver' | 'admin' | 'user' | 'store' | 'manager';
   storeId: string;
   status: string;
+  profileImage?: string;
   email?: string;
   region?: string;
   lastSeen?: any;
   soundAlertsEnabled?: boolean;
+  shiftStart?: number;   // e.g. 6 = 6 AM
+  shiftHours?: number;   // e.g. 8 | 10 | 12 (duration)
+  weekOffDay?: string;   // e.g. "Friday"
+}
+
+// ─── Staff Dashboard Types ───────────────────────────────────────────────────
+
+export interface StaffDashboardData {
+  summary: {
+    totalStores: number;
+    totalStaff: number;
+    activeNow: number;
+    weekOff: number;
+    notLoggedIn: number;
+  };
+  hourlyBreakdown: HourlySlot[];
+  storeBreakdown: StoreSummary[];
+  lastUpdated: string;
+}
+
+export interface HourlySlot {
+  hour: number;
+  label: string;
+  active: number;
+  weekOff: number;
+  notStarted: number;
+}
+
+export interface StoreSummary {
+  storeId: string;
+  totalStaff: number;
+  activeNow: number;
+  weekOff: number;
+  notStarted: number;
+  staffTimeline: StaffTimeline[];
+}
+
+export interface StaffTimeline {
+  empId: string;
+  name: string;
+  role: string;
+  shiftStart: number;
+  shiftHours: number;
+  isActive: boolean;
+  isWeekOff: boolean;
+  punchedIn: boolean;
 }
 
 export interface AlertLog {

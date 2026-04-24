@@ -1,5 +1,5 @@
 {
-  "name": "Jee E-Commerce",
+  "name": "Jee V2 E-Commerce",
   "description": "A modern, mobile-first warehouse management system with PWA support, Firebase-enabled real-time alerts, and biometric attendance.",
   "requestFramePermissions": [
     "camera"

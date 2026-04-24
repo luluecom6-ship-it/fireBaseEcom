@@ -25,13 +25,16 @@ import { useToast } from "./hooks/useToast";
 import { usePWA } from "./hooks/usePWA";
 
 // --- FIREBASE / FCM ---
-import { auth, requestForToken, onForegroundMessage } from "./firebase";
+import { auth, db, requestForToken, onForegroundMessage } from "./firebase";
+import { doc, setDoc } from "firebase/firestore";
 
 // --- COMPONENTS ---
 import { Loader } from "./components/common/Loader";
 import { Header } from "./components/layout/Header";
 import { AlertOverlay } from "./components/layout/AlertOverlay";
 import { GlobalModals } from "./components/common/GlobalModals";
+
+import { useStaffDashboard } from "./hooks/useStaffDashboard";
 
 // --- PAGES ---
 import { Login } from "./pages/Login";
@@ -44,10 +47,11 @@ import { Matrix } from "./pages/Matrix";
 import { Analytics } from "./pages/Analytics";
 import { Alerts } from "./pages/Alerts";
 import { AttendanceHistory } from "./pages/AttendanceHistory";
+import { StaffDashboard } from "./pages/StaffDashboard";
 
 export default function App() {
   // Navigation
-  const [page, setPage] = useState<"login" | "dashboard" | "upload" | "attendance" | "admin" | "search" | "matrix" | "analytics" | "alerts" | "attendance-history">("login");
+  const [page, setPage] = useState<"login" | "dashboard" | "upload" | "attendance" | "admin" | "search" | "matrix" | "analytics" | "alerts" | "attendance-history" | "staff-dashboard">("login");
   
   // Auth Hook
   const { 
@@ -117,6 +121,17 @@ export default function App() {
   } = useSystemConfig(user, showToast, isFirebaseAuthenticated);
 
   const { staffStatus } = useStaffStatus(user, isFirebaseAuthenticated);
+
+  const isStaffDashEnabled = !!user && [
+    'admin', 'supervisor', 'manager', 'store'
+  ].includes(String(user.role).toLowerCase());
+  const {
+    data:        staffDashData,
+    loading:     staffDashLoading,
+    error:       staffDashError,
+    lastFetched: staffDashFetched,
+    refetch:     refetchStaffDash,
+  } = useStaffDashboard(user, isStaffDashEnabled);
 
   const { 
     attendanceStatus, hoursWorked, isShiftComplete, 
@@ -237,11 +252,16 @@ export default function App() {
       showToast("Access Denied: Admin or Supervisor Only", "error");
       return;
     }
+    if (target === "staff-dashboard" && role !== "admin" && role !== "supervisor") {
+      showToast("Access Denied: Admin or Supervisor Only", "error");
+      return;
+    }
     setPage(target);
     if (target === "admin") fetchAdminData();
+    if (target === "staff-dashboard") refetchStaffDash();
     if (target === "matrix" || target === "dashboard") fetchMatrixData();
     window.scrollTo(0, 0);
-  }, [user, showToast, fetchAdminData, fetchMatrixData]);
+  }, [user, showToast, fetchAdminData, fetchMatrixData, refetchStaffDash]);
 
   // Sync user state from useAuth to other hooks if needed
   // (Most hooks take user as a parameter and handle internal effects)
@@ -434,6 +454,18 @@ export default function App() {
             onViewImage={setFullImage}
           />
         );
+      case "staff-dashboard":
+        return (
+          <StaffDashboard
+            user={user}
+            data={staffDashData}
+            loading={staffDashLoading}
+            error={staffDashError}
+            lastFetched={staffDashFetched}
+            onRefetch={refetchStaffDash}
+            navigateTo={navigateTo}
+          />
+        );
       default:
         return (
           <Dashboard 
@@ -476,6 +508,7 @@ export default function App() {
             case 'admin': return 'Admin Control';
             case 'attendance': return 'Shift Attendance';
             case 'attendance-history': return 'Attendance History';
+            case 'staff-dashboard':    return 'Staff Coverage';
             default: return page.charAt(0).toUpperCase() + page.slice(1).replace("-", " ");
           }
         })()} 

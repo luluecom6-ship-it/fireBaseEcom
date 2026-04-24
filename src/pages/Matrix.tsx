@@ -203,7 +203,7 @@ export const Matrix: React.FC<MatrixProps> = ({
                 <div className="bg-indigo-500 p-2 rounded-xl text-white">
                   <Globe size={16} />
                 </div>
-                <div className="px-2 min-w-[100px]">
+                <div className={cn("px-2 min-w-[100px]", (user?.role !== 'admin' && user?.role !== 'supervisor') && "opacity-50 pointer-events-none")}>
                   <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Filter by Region</p>
                   <div className="flex items-center gap-2">
                     <span className="text-[11px] font-black text-slate-900 whitespace-nowrap">
@@ -297,8 +297,9 @@ export const Matrix: React.FC<MatrixProps> = ({
                       list="store-ids"
                       value={storeFilter}
                       onChange={(e) => setStoreFilter(e.target.value)}
+                      readOnly={user?.role !== 'admin' && user?.role !== 'supervisor'}
                       placeholder="Type or select..."
-                      className="text-[11px] font-bold text-slate-600 outline-none bg-transparent w-24 pr-6"
+                      className="text-[11px] font-bold text-slate-600 outline-none bg-transparent w-24 pr-6 disabled:opacity-50"
                     />
                     {storeFilter ? (
                       <button 

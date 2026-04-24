@@ -72,13 +72,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (snap.exists) {
       const userData = snap.data();
       try {
-        const gasUrl = (process.env.GAS_API_URL || "https://script.google.com/macros/s/AKfycbynf6n_5CXYyb4xXqwR-EoO_50BFgsiT98_JkRdftZDsDN7UQvgZoJCcuEN0Yr0vuIR/exec").trim();
+        const gasUrl = (process.env.GAS_API_URL || "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec").trim();
         const params = new URLSearchParams();
         params.append('action', 'syncUser');
         params.append('syncAction', 'upsert');
         params.append('username', userData?.username || "");
         params.append('empId', String(empId));
+        params.append('name', userData?.name || "");
+        params.append('role', userData?.role || "");
+        params.append('storeId', userData?.storeId || "");
+        params.append('region', userData?.region || "");
+        params.append('status', userData?.status || "Active");
+        params.append('updatedAt', userData?.updatedAt || new Date().toISOString());
+        params.append('shiftStart', userData?.shiftStart !== undefined ? String(userData.shiftStart) : "6");
+        params.append('shiftHours', userData?.shiftHours !== undefined ? String(userData.shiftHours) : "8");
+        params.append('weekOffDay', userData?.weekOffDay || "");
+        
+        if (userData?.profileImage) {
+          if (userData.profileImage.length < 50000) {
+             params.append('profileImage', userData.profileImage);
+          } else {
+             params.append('profileImage', "IMAGE_TOO_LARGE_IN_SHEET");
+          }
+        }
         params.append('password', newPassword);
+        
         await axios.post(gasUrl, params.toString(), {
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           timeout: 10000 

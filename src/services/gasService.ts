@@ -8,9 +8,9 @@ const REGIONS_TTL = 3600000; // 1 Hour for regions
 
 // Request Queue for GAS Proxy with Limited Concurrency
 let activeRequests = 0;
-const MAX_CONCURRENT = 2; // Strictly limited to 2 to avoid concurrent execution limits in GAS
+const MAX_CONCURRENT = 5; // Increased to 5 for better throughput
 let backoffMultiplier = 1;
-const gasQueue: { config: any, resolve: any, reject: any, skipCache?: boolean }[] = [];
+const gasQueue: { config: any, resolve: any, reject: any, skipCache?: boolean, startTime: number }[] = [];
 
 async function processGasQueue() {
   if (gasQueue.length === 0 || activeRequests >= MAX_CONCURRENT) return;
@@ -18,16 +18,29 @@ async function processGasQueue() {
   const item = gasQueue.shift();
   if (!item) return;
 
+  // Check if item has been in queue too long (e.g. 2 minutes)
+  if (Date.now() - item.startTime > 120000) {
+    item.reject(new Error("Request timed out in queue"));
+    processGasQueue();
+    return;
+  }
+
   activeRequests++;
   const { config, resolve, reject } = item;
 
   try {
-    console.log(`[GAS Queue] Executing [${config.method}] ${new URL(config.url).searchParams.get('action')} (${activeRequests}/${MAX_CONCURRENT})`);
+    let action = "unknown";
+    try {
+      const urlObj = new URL(config.url);
+      action = urlObj.searchParams.get('action') || "no-action";
+    } catch (e) {}
+
+    console.log(`[GAS Queue] Executing [${config.method}] ${action} (${activeRequests}/${MAX_CONCURRENT}) QSize: ${gasQueue.length}`);
     
     // Enforce a strict timeout at the axios level
     const response = await axiosLib({
       ...config,
-      timeout: 45000 // 45s timeout for individual GAS requests
+      timeout: 60000 // 60s timeout for individual GAS requests
     });
     
     const dataStr = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
@@ -40,7 +53,7 @@ async function processGasQueue() {
 
     resolve(response);
   } catch (err: any) {
-    console.error(`[GAS Queue] Request failed: ${err.message}`);
+    console.error(`[GAS Queue] Request failed: ${err.message} [URL: ${config.url.substring(0, 70)}...]`);
     reject(err);
   } finally {
     activeRequests--;
@@ -68,7 +81,7 @@ export async function executeGasRequest(config: any, options: { skipCache?: bool
   }
 
   return new Promise((resolve, reject) => {
-    gasQueue.push({ config, resolve, reject, skipCache });
+    gasQueue.push({ config, resolve, reject, skipCache, startTime: Date.now() });
     processGasQueue();
   }).then((response: any) => {
     // Populate Cache

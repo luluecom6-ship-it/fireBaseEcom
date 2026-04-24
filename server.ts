@@ -109,7 +109,7 @@ async function startServer() {
     
     // Consistent fallback across all environments
     if (!rawUrl || rawUrl === "undefined" || !rawUrl.startsWith("http")) {
-      rawUrl = "https://script.google.com/macros/s/AKfycbynf6n_5CXYyb4xXqwR-EoO_50BFgsiT98_JkRdftZDsDN7UQvgZoJCcuEN0Yr0vuIR/exec";
+      rawUrl = "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec";
     }
 
     let urlObj: URL;
@@ -217,17 +217,34 @@ async function startServer() {
   // Helper for one-way sync to GAS
   const syncUserToGas = async (user: any, action: 'upsert' | 'delete') => {
     try {
-      const baseUrl = (process.env.GAS_API_URL || "https://script.google.com/macros/s/AKfycbynf6n_5CXYyb4xXqwR-EoO_50BFgsiT98_JkRdftZDsDN7UQvgZoJCcuEN0Yr0vuIR/exec").trim();
-      const params = new URLSearchParams();
-      params.append('action', 'syncUser');
-      params.append('syncAction', action);
-      params.append('username', user.username || "");
-      params.append('empId', user.empId || "");
-      params.append('name', user.name || "");
-      params.append('role', user.role || "");
-      params.append('storeId', user.storeId || "");
-      params.append('region', user.region || "");
-      params.append('status', user.status || "Active");
+      let baseUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
+      if (!baseUrl || baseUrl === "undefined" || !baseUrl.startsWith("http")) {
+        baseUrl = "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec";
+      }
+    const params = new URLSearchParams();
+    params.append('action', 'syncUser');
+    params.append('syncAction', action);
+    params.append('username', user.username || "");
+    params.append('empId', user.empId || "");
+    params.append('name', user.name || "");
+    params.append('role', user.role || "");
+    params.append('storeId', user.storeId || "");
+    params.append('region', user.region || "");
+    params.append('status', user.status || "Active");
+    params.append('updatedAt', user.updatedAt || new Date().toISOString());
+    params.append('shiftStart', user.shiftStart !== undefined ? String(user.shiftStart) : "6");
+    params.append('shiftHours', user.shiftHours !== undefined ? String(user.shiftHours) : "8");
+    params.append('weekOffDay', user.weekOffDay || "");
+    
+    // Only sync image if it's "small" (under 50KB length for safety in Sheets)
+    if (user.profileImage) {
+      if (user.profileImage.length < 50000) {
+        params.append('profileImage', user.profileImage);
+      } else {
+        console.log(`[Sync] Skipping large image sync for ${user.username} (${user.profileImage.length} chars)`);
+        params.append('profileImage', "IMAGE_TOO_LARGE_IN_SHEET");
+      }
+    }
       if (user.password) params.append('password', user.password);
 
       console.log(`[Sync] Triggering GAS sync for ${user.username} (${action})...`);
@@ -424,7 +441,10 @@ async function startServer() {
   app.get("/api/admin/migrate-users", async (req, res) => {
     try {
       // 1. Fetch users from GAS
-      const baseUrl = (process.env.GAS_API_URL || "https://script.google.com/macros/s/AKfycbynf6n_5CXYyb4xXqwR-EoO_50BFgsiT98_JkRdftZDsDN7UQvgZoJCcuEN0Yr0vuIR/exec").trim();
+      let baseUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
+      if (!baseUrl || baseUrl === "undefined" || !baseUrl.startsWith("http")) {
+        baseUrl = "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec";
+      }
       const gasRes = await axios.get(`${baseUrl}?action=getAdminData&role=admin`);
       const users = gasRes.data.data?.users || gasRes.data.users || [];
 

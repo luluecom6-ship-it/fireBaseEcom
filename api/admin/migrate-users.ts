@@ -47,7 +47,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   
   try {
     // 1. Fetch users from GAS
-    const baseUrl = (process.env.GAS_API_URL || "https://script.google.com/macros/s/AKfycbynf6n_5CXYyb4xXqwR-EoO_50BFgsiT98_JkRdftZDsDN7UQvgZoJCcuEN0Yr0vuIR/exec").trim();
+    const baseUrl = (process.env.GAS_API_URL || "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec").trim();
     const gasRes = await axios.get(`${baseUrl}?action=getAdminData&role=admin`);
     const users = gasRes.data.data?.users || gasRes.data.users || [];
 

@@ -1,27 +1,25 @@
-# Project Context: Version 4.2 (Optimized Performance & Architecture)
+# Project Context: Version 5.0 (Full Day Operations & Legacy Sync)
 
-Whenever the user refers to **Version 4.2**, it refers to the application state as of April 19, 2026, with the following enhancements:
+Whenever the user refers to **Version 5.0**, it refers to the application state as of April 24, 2026, with the following enhancements:
 
-## Core Enhancements (v4.2)
-1. **Architectural Optimizations**:
-   - **Unified Service Worker**: Consolidated `sw.js` and `firebase-messaging-sw.js` into a single background thread to eliminate registration conflicts and skipWaiting bugs.
-   - **Event-Driven Permissions**: Replaced inefficient 2-second polling for notification permissions with modern Permissions API `onchange` listeners.
-   - **Stable Data Refresh**: Fixed stale-closure bugs in `useMatrixData` to ensure the background interval stays active across all configuration changes.
+## Core Enhancements (v5.0)
+1. **24-Hour Operations & Midnight Shifts**:
+   - **Full Day Timeline**: Expanded the Staff Dashboard timeline from 18 hours to a complete 24-hour display (12 AM – 12 AM).
+   - **Cross-Midnight Logic**: Implemented support for shifts that start on one day and end the next (e.g., 10 PM to 6 AM). The UI now correctly renders split bars, and the backend `hourlyBreakdown` accurately counts active staff across the midnight boundary.
+   - **Current-Time Glow**: Added a high-visibility, glowing blue marker to the timeline for immediate orientation.
 
-2. **Performance Fixes**:
-   - **Smart Jitter**: Correctly implemented "Stampeding Herd" protection by applying a 0-30s jitter to the actual data fetch intervals.
-   - **Backend Data Capping**: Restricted `getAlertLogs` to fetch only the last 1500 rows, preventing performance degradation as the log sheet grows.
-   - **Case-Insensitive Caching**: Normalized GAS action checking to ensure 1-hour "Region" caching works regardless of URL parameter casing.
+2. **Legacy Log Integrity**:
+   - **Historical Audit Fix**: Remedied a bug preventing logs from previous days from displaying by implementing proper ISO-to-Date object comparison in the frontend filtering.
+   - **Schema Alignment**: Added the `bucket` field to the legacy GAS AlertLogs and ensured unique IDs are passed for all sync events to prevent data collision.
+   - **Deeper Fetching**: Optimized `getAlertLogs` to handle larger datasets while maintaining a 1500-row performance cap.
 
-3. **Reliability & Logic**:
-   - **Alert Deduplication**: Standardized alert merge keys to `orderId|statusTrigger` to eliminate duplicate entries between Firestore and Legacy logs.
-   - **Proactive FCM Onboarding**: `requestForToken` now proactively triggers the browser permission prompt if in "default" state.
-   - **Stable Firestore Sync**: Optimized the Firestore real-time listener by removing unnecessary dependencies that caused frequent reconnections.
+3. **Production URL Synchronization**:
+   - Unified all project references (Frontend hooks, Express monitor, and Server-side proxies) to the latest production Google Apps Script deployment URL.
 
-4. **Updated Backend Integration**:
-   - Switched to the latest production Google Apps Script Web App for improved stability and fixed LogAlertV2 logic.
+4. **Personnel Categorization**:
+   - Formally integrated the **Driver** role into the "Add New User" workflow and throughout the dashboard analytics.
 
-[ ... rest of 4.1 features preserved ...]
+[ ... rest of 4.2 features preserved ...]
 
 ## Core Features
 1. **Matrix Intelligence Dashboard**:
@@ -60,4 +58,4 @@ Whenever the user refers to **Version 4.2**, it refers to the application state 
 - **Deployment**: Configured for Vercel (Project: `fire-base-ecom`, ID: `prj_tz4mVBUk0Lbrz0KxK190eWmOqIKQ`).
 
 ## Persistence Instruction
-This file serves as the definitive reference for Version 4.1. All future modifications should build upon this baseline unless otherwise specified.
+This file serves as the definitive reference for Version 5.0. All future modifications should build upon this baseline unless otherwise specified.

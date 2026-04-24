@@ -39,6 +39,10 @@
         "region": { "type": "string" },
         "email": { "type": "string", "format": "email" },
         "status": { "type": "string" },
+        "profileImage": { "type": "string", "description": "Base64 or URL of user profile image" },
+        "shiftStart": { "type": "number", "description": "Shift start hour (0-23)" },
+        "shiftHours": { "type": "number", "description": "Shift duration in hours" },
+        "weekOffDay": { "type": "string", "description": "Weekly day off" },
         "lastSeen": { "type": "object", "description": "Firestore server timestamp" },
         "soundAlertsEnabled": { "type": "boolean" },
         "updatedAt": { "type": "string", "format": "date-time" }

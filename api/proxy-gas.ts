@@ -16,16 +16,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  let gasUrl = (process.env.GAS_API_URL || "").trim();
+  let gasUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
   
-  // ✅ BUG 6 FIX: Return structured error instead of silently using a hardcoded URL
+  // Consistent fallback
   if (!gasUrl || gasUrl === "undefined" || !gasUrl.startsWith("https://script.google.com")) {
-    console.error("[proxy-gas] FATAL: GAS_API_URL env var is missing or invalid.");
-    return res.status(503).json({
-      status: "error",
-      message: "Backend proxy is misconfigured. Contact system administrator.",
-      code: "GAS_URL_MISSING"
-    });
+    gasUrl = "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec";
   }
 
   try {
@@ -39,7 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const config: any = {
       method: req.method,
       url: target.toString(),
-      timeout: 30000,
+      timeout: 60000,
       maxRedirects: 15,
       validateStatus: () => true,
       headers: {
