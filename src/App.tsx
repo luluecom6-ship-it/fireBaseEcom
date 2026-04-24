@@ -240,9 +240,27 @@ export default function App() {
       }
     };
 
+    // Pulse every minute
+    const interval = setInterval(updatePresence, 60000);
+    
+    // Also pulse on focus/visibility change for better responsiveness
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible') {
+        updatePresence();
+      }
+    };
+    
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('visibilitychange', handleFocus);
+
+    // Initial pulse
     updatePresence();
-    const interval = setInterval(updatePresence, 60000); // Pulse every minute
-    return () => clearInterval(interval);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('visibilitychange', handleFocus);
+    };
   }, [user, isFirebaseAuthenticated]);
 
   // Navigation Helper

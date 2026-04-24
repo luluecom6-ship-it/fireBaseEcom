@@ -520,8 +520,30 @@ function logAlertV2(ss, params) {
   const headers = ["id","timestamp","orderId","eventType","storeId","userId",
     "notificationTime","storeStaffName","status","escalation","managerName",
     "statusTrigger","managerStatus","orderCreatedAt", "bucket"];
-  if (sheet.getLastRow() === 0) sheet.appendRow(headers);
-  const row = headers.map(h => params[h] !== undefined ? params[h] : "");
+  
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(headers);
+  } else {
+    // Check if we need to add the 'id' column or 'bucket' column if they are missing
+    const existingHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h).toLowerCase().trim());
+    if (!existingHeaders.includes("id")) {
+      sheet.insertColumnBefore(1);
+      sheet.getRange(1, 1).setValue("id");
+    }
+    if (!existingHeaders.includes("bucket")) {
+      sheet.insertColumnAfter(sheet.getLastColumn());
+      sheet.getRange(1, sheet.getLastColumn()).setValue("bucket");
+    }
+  }
+
+  // Reload headers to be sure about positions
+  const finalHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h).toLowerCase().trim());
+  const row = finalHeaders.map(h => {
+    // Match param names (case-insensitive) to headers
+    const key = Object.keys(params).find(k => k.toLowerCase() === h);
+    return key ? params[key] : "";
+  });
+  
   sheet.appendRow(row);
   return jsonResponse({ status:"success" });
 }

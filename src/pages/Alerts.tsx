@@ -38,14 +38,19 @@ export const Alerts: React.FC<AlertsProps> = ({
 
   const filteredLogs = alertLogs.filter(log => {
     if (!log.timestamp) return false;
+    
     const tsStr = String(log.timestamp);
-    let matchesDate = tsStr.includes(filterDate);
+    // Robust date matching: either string include or Date parity
+    let matchesDate = tsStr.startsWith(filterDate) || tsStr.includes(filterDate);
     
     if (!matchesDate) {
       try {
         const d = new Date(log.timestamp);
         if (!isNaN(d.getTime())) {
-          matchesDate = d.toISOString().split('T')[0] === filterDate;
+          const dStr = d.getFullYear() + '-' + 
+                       String(d.getMonth() + 1).padStart(2, '0') + '-' + 
+                       String(d.getDate()).padStart(2, '0');
+          matchesDate = dStr === filterDate;
         }
       } catch (e) {}
     }

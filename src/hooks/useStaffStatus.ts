@@ -46,8 +46,6 @@ export function useStaffStatus(
     }
 
     const qUsers = query(collection(db, 'users'), ...constraints);
-    const qPresence = query(collection(db, 'presence'));
-
     const users: Record<string, User> = {};
     const presence: Record<string, any> = {};
 
@@ -61,8 +59,11 @@ export function useStaffStatus(
         const now = Date.now();
         
         if (lastSeen) {
-          if (lastSeen instanceof Timestamp) {
+          if (lastSeen && typeof lastSeen === 'object' && 'toMillis' in lastSeen) {
             lastSeenMs = lastSeen.toMillis();
+          } else if (lastSeen && typeof lastSeen === 'object' && 'seconds' in lastSeen) {
+            // Fallback for plain objects that look like Timestamps
+            lastSeenMs = lastSeen.seconds * 1000;
           } else if (typeof lastSeen === 'string') {
             lastSeenMs = new Date(lastSeen).getTime();
           } else if (typeof lastSeen === 'number') {
@@ -70,20 +71,28 @@ export function useStaffStatus(
           }
         }
 
-        const diffMins = lastSeenMs ? (now - lastSeenMs) / (1000 * 60) : Infinity;
+        // Self-correction: if this is the CURRENT user and we have no lastSeen or it's old, 
+        // but they are obviously online because they are running this code, mark as Active.
+        const isSelf = user && (userData.empId === user.empId || uid === user.empId);
+        let effectiveLastSeenMs = lastSeenMs;
+        if (isSelf && (!lastSeenMs || (now - lastSeenMs) > 60000)) {
+           effectiveLastSeenMs = now;
+        }
+
+        const diffMins = effectiveLastSeenMs ? (now - effectiveLastSeenMs) / (1000 * 60) : Infinity;
         
         let presenceStatus: 'Active' | 'Inactive' | 'Offline' = 'Offline';
-        if (diffMins < 5) {
+        if (effectiveLastSeenMs && diffMins < 5) {
           presenceStatus = 'Active';
-        } else if (diffMins < 30) {
+        } else if (effectiveLastSeenMs && diffMins < 30) {
           presenceStatus = 'Inactive';
         }
 
         return {
           ...userData,
           empId: String(userData.empId || uid).trim(),
-          isOnline: diffMins < 5,
-          lastSeen: lastSeenMs ? new Date(lastSeenMs).toISOString() : undefined,
+          isOnline: effectiveLastSeenMs !== 0 && diffMins < 5,
+          lastSeen: effectiveLastSeenMs ? new Date(effectiveLastSeenMs).toISOString() : undefined,
           presenceStatus
         };
       });
@@ -96,44 +105,29 @@ export function useStaffStatus(
       setStaffStatus(combined);
     };
 
-    let unsubPresence: (() => void) | null = null;
-
+    // Listen to users
     const unsubUsers = onSnapshot(qUsers, (snapshot) => {
-      const uids: string[] = [];
       snapshot.forEach(doc => {
         users[doc.id] = doc.data() as User;
-        uids.push(doc.id);
       });
-      
       updateCombinedStatus();
       setLoading(false);
+    });
 
-      // Start presence listener only for these specific UIDs to save bandwidth
-      if (uids.length > 0) {
-        if (unsubPresence) unsubPresence();
-        
-        // Firestore 'in' query limit is 30, so we chunk if needed
-        // For simplicity here, we'll listen to the collection but filter locally
-        // or if bandwidth is CRITICAL, we'd use multiple chunked listeners.
-        // Given the prompt, we'll use a more targeted collection query if possible.
-        const qPresence = query(
-          collection(db, 'presence'), 
-          where('uid', 'in', uids.slice(0, 30)) 
-        );
-
-        unsubPresence = onSnapshot(qPresence, (pSnap) => {
-          pSnap.forEach(pDoc => {
-            const data = pDoc.data();
-            if (data.uid) presence[data.uid] = data;
-          });
-          updateCombinedStatus();
-        });
-      }
+    // Listen to all presence updates (filtered by who we actually care about in updateCombinedStatus)
+    // This avoids the 30-limit which was breaking presence for stores with many staff members
+    const unsubPresence = onSnapshot(collection(db, 'presence'), (pSnap) => {
+      pSnap.docs.forEach(pDoc => {
+        const data = pDoc.data();
+        const uid = data.uid || pDoc.id;
+        if (uid) presence[uid] = data;
+      });
+      updateCombinedStatus();
     });
 
     return () => {
       unsubUsers();
-      if (unsubPresence) unsubPresence();
+      unsubPresence();
     };
   }, [user, isFirebaseAuthenticated, selectedStoreId]);
 

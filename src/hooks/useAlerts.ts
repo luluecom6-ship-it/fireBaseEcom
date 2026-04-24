@@ -34,18 +34,20 @@ export function useAlerts(
 
     const mergedMap = new Map<string, AlertLog>();
     
-    // Merge logic: Use orderId + statusTrigger as the unique key for an alert event
-    // This correctly deduplicates alerts received from both Firestore and Legacy GAS logs.
+    // Merge logic: Use orderId + statusTrigger + timestamp_date as the unique key for an alert event
+    // This allows historical logs for the same order/trigger on DIFFERENT DAYS to coexist.
     
     // Add legacy logs first
     lLogs.forEach(log => {
-      const key = `${log.orderId}|${log.statusTrigger}`.toLowerCase().trim();
+      const tsDate = log.timestamp && typeof log.timestamp === 'string' ? log.timestamp.split('T')[0] : 'nodate';
+      const key = `${log.orderId}|${log.statusTrigger}|${tsDate}`.toLowerCase().trim();
       mergedMap.set(key, log);
     });
     
     // Overwrite with Firestore logs (real-time truth)
     fLogs.forEach(log => {
-      const key = `${log.orderId}|${log.statusTrigger}`.toLowerCase().trim();
+      const tsDate = log.timestamp && typeof log.timestamp === 'string' ? log.timestamp.split('T')[0] : 'nodate';
+      const key = `${log.orderId}|${log.statusTrigger}|${tsDate}`.toLowerCase().trim();
       mergedMap.set(key, log);
     });
 
@@ -107,7 +109,21 @@ export function useAlerts(
         const mapped: AlertLog[] = data.map((item: any) => {
           // Robust property mapping for different naming conventions
           const orderId = item.orderId || item.OrderID || item.order_id || "";
-          const timestamp = item.timestamp || item.Timestamp || item.time || "";
+          const timestampRaw = item.timestamp || item.Timestamp || item.time || "";
+          let timestamp = "";
+          if (timestampRaw) {
+            try {
+               const d = new Date(timestampRaw);
+               if (!isNaN(d.getTime())) {
+                 timestamp = d.toISOString();
+               } else {
+                 timestamp = String(timestampRaw);
+               }
+            } catch(e) {
+               timestamp = String(timestampRaw);
+            }
+          }
+          
           const storeId = String(item.storeId || item.StoreID || item.store_id || "");
           const eventType = item.eventType || item.EventType || item.event_type || "";
           const status = item.status || item.Status || "Pending";
