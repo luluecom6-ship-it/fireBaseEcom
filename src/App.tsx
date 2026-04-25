@@ -48,10 +48,11 @@ import { Analytics } from "./pages/Analytics";
 import { Alerts } from "./pages/Alerts";
 import { AttendanceHistory } from "./pages/AttendanceHistory";
 import { StaffDashboard } from "./pages/StaffDashboard";
+import { RosterDashboard } from "./pages/RosterDashboard";
 
 export default function App() {
   // Navigation
-  const [page, setPage] = useState<"login" | "dashboard" | "upload" | "attendance" | "admin" | "search" | "matrix" | "analytics" | "alerts" | "attendance-history" | "staff-dashboard">("login");
+  const [page, setPage] = useState<"login" | "dashboard" | "upload" | "attendance" | "admin" | "search" | "matrix" | "analytics" | "alerts" | "attendance-history" | "staff-dashboard" | "roster">("login");
   
   // Auth Hook
   const { 
@@ -274,6 +275,10 @@ export default function App() {
       showToast("Access Denied: Admin or Supervisor Only", "error");
       return;
     }
+    if (target === "roster" && role !== "admin" && role !== "supervisor" && role !== "manager") {
+      showToast("Access Denied: Admin, Supervisor or Manager only", "error");
+      return;
+    }
     setPage(target);
     if (target === "admin") fetchAdminData();
     if (target === "staff-dashboard") refetchStaffDash();
@@ -484,6 +489,13 @@ export default function App() {
             navigateTo={navigateTo}
           />
         );
+      case "roster":
+        return (
+          <RosterDashboard
+            user={user}
+            navigateTo={navigateTo}
+          />
+        );
       default:
         return (
           <Dashboard 
@@ -527,6 +539,7 @@ export default function App() {
             case 'attendance': return 'Shift Attendance';
             case 'attendance-history': return 'Attendance History';
             case 'staff-dashboard':    return 'Staff Coverage';
+            case 'roster':            return 'Roster & Availability';
             default: return page.charAt(0).toUpperCase() + page.slice(1).replace("-", " ");
           }
         })()} 

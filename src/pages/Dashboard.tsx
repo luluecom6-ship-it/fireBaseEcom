@@ -4,7 +4,7 @@ import {
   LogOut, Clock, Package, Search, ShieldCheck, 
   History, LayoutDashboard, BarChart3, ArrowRight,
   AlertCircle, Zap, X, Download, RefreshCw,
-  Volume2, VolumeX
+  Volume2, VolumeX, CalendarDays
 } from 'lucide-react';
 import { User, AttendanceStatus, MatrixData } from '../types';
 import { RealTimeClock } from '../components/layout/common/RealTimeClock';
@@ -490,6 +490,32 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <p className="text-slate-500 text-[8px] sm:text-sm font-bold mt-0.5">Staff Metrics</p>
             </div>
             <div className="hidden sm:flex h-10 w-10 rounded-full bg-slate-50 items-center justify-center text-slate-300 group-hover:bg-purple-50 group-hover:text-purple-600 transition-all">
+              <ArrowRight size={20} />
+            </div>
+          </motion.div>
+        )}
+
+        {(["admin", "supervisor", "manager"].includes(String(user.role || "").toLowerCase().trim())) && (
+          <motion.div 
+            whileHover={{ y: -5 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => navigateTo("roster")}
+            className="bg-white p-3 sm:p-8 rounded-xl sm:rounded-[2.5rem] shadow-xl border border-teal-100 flex flex-col sm:flex-row items-center gap-2 sm:gap-6 cursor-pointer group relative overflow-hidden"
+          >
+            {/* Live pulse dot */}
+            <span className="absolute top-2.5 right-2.5 flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-teal-500" />
+            </span>
+            <div className="h-10 w-10 sm:h-20 sm:w-20 rounded-xl sm:rounded-3xl bg-teal-50 text-teal-600 flex items-center justify-center group-hover:bg-teal-600 group-hover:text-white transition-all duration-300">
+              <CalendarDays size={20} className="sm:hidden" />
+              <CalendarDays size={36} className="hidden sm:block" />
+            </div>
+            <div className="flex-1 text-center sm:text-left">
+              <h4 className="font-black text-slate-800 text-[11px] sm:text-xl tracking-tight">Roster Planner</h4>
+              <p className="text-slate-500 text-[8px] sm:text-sm font-bold mt-0.5">Live Availability</p>
+            </div>
+            <div className="hidden sm:flex h-10 w-10 rounded-full bg-slate-50 items-center justify-center text-slate-300 group-hover:bg-teal-50 group-hover:text-teal-600 transition-all">
               <ArrowRight size={20} />
             </div>
           </motion.div>

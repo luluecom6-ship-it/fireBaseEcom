@@ -1,25 +1,30 @@
-# Project Context: Version 5.0 (Full Day Operations & Legacy Sync)
+# Project Context: Version 5.1 (Roster Intelligence & Availability)
 
-Whenever the user refers to **Version 5.0**, it refers to the application state as of April 24, 2026, with the following enhancements:
+Whenever the user refers to **Version 5.1**, it refers to the application state as of April 25, 2026, with the following enhancements:
 
-## Core Enhancements (v5.0)
+## Core Enhancements (v5.1)
+1. **Roster & Availability Planner**:
+   - **Real-time Availability**: Integrated a new Roster Dashboard with live synchronization from Firebase Firestore.
+   - **Hourly Coverage View**: Interactive timeline showing staff availability across the 6 AM – 11 PM operational window.
+   - **Gap Intelligence**: Automatic detection of "Zero-Coverage" hours, missing supervisors, and understaffed shifts.
+   - **Weekly Schedule Matrix**: A bird's-eye view of staff week-off patterns and shift assignments across the entire store network.
+   - **Role-Based Access**: Restricted Roster planning and visibility to Admin, Supervisor, and Manager roles.
+
+2. **UX & Accessibility Improvements**:
+   - **Mobile-Optimized Capture**: Relocated the camera capture button to the bottom of the screen for one-handed operation during shift attendance.
+   - **Optimistic Attendance Updates**: Enhanced the punch-in workflow to reflect status changes immediately in the UI while backend synchronization completes.
+
+## Baseline Features (v5.0 preserved)
 1. **24-Hour Operations & Midnight Shifts**:
-   - **Full Day Timeline**: Expanded the Staff Dashboard timeline from 18 hours to a complete 24-hour display (12 AM – 12 AM).
-   - **Cross-Midnight Logic**: Implemented support for shifts that start on one day and end the next (e.g., 10 PM to 6 AM). The UI now correctly renders split bars, and the backend `hourlyBreakdown` accurately counts active staff across the midnight boundary.
-   - **Current-Time Glow**: Added a high-visibility, glowing blue marker to the timeline for immediate orientation.
+   - **Full Day Timeline**: 24-hour Staff Dashboard display (12 AM – 12 AM).
+   - **Cross-Midnight Logic**: Support for shifts that span across calendar days.
+   - **Current-Time Glow**: High-visibility blue marker on timelines.
 
 2. **Legacy Log Integrity**:
-   - **Historical Audit Fix**: Remedied a bug preventing logs from previous days from displaying by implementing proper ISO-to-Date object comparison in the frontend filtering.
-   - **Schema Alignment**: Added the `bucket` field to the legacy GAS AlertLogs and ensured unique IDs are passed for all sync events to prevent data collision.
-   - **Deeper Fetching**: Optimized `getAlertLogs` to handle larger datasets while maintaining a 1500-row performance cap.
+   - **Historical Audit Fix**: Proper ISO-to-Date object comparison for historical log filtering.
+   - **Schema Alignment**: Bucket field integration for legacy GAS AlertLogs.
 
-3. **Production URL Synchronization**:
-   - Unified all project references (Frontend hooks, Express monitor, and Server-side proxies) to the latest production Google Apps Script deployment URL.
-
-4. **Personnel Categorization**:
-   - Formally integrated the **Driver** role into the "Add New User" workflow and throughout the dashboard analytics.
-
-[ ... rest of 4.2 features preserved ...]
+[ ... rest of technical architecture and core features preserved ...]
 
 ## Core Features
 1. **Matrix Intelligence Dashboard**:
