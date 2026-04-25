@@ -144,15 +144,9 @@ export const Attendance: React.FC<AttendanceProps> = ({
                             className="w-full h-full object-cover scale-x-[-1] bg-slate-900"
                           />
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <div className="w-32 h-32 sm:w-48 sm:h-48 border-2 border-white/50 rounded-full border-dashed animate-pulse" />
+                            <div className="w-40 h-40 sm:w-56 sm:h-56 border-2 border-white/40 rounded-full border-dashed animate-pulse ring-8 ring-white/5" />
                           </div>
-                          <button 
-                            onClick={handleCapture}
-                            className="absolute bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 h-12 w-12 sm:h-16 sm:w-16 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all ring-4 ring-white/30"
-                          >
-                            <Camera size={24} className="sm:hidden" />
-                            <Camera size={32} className="hidden sm:block" />
-                          </button>
+                          
                           <div className="absolute top-3 left-3 sm:top-4 sm:left-4 px-2 py-0.5 sm:px-3 sm:py-1 bg-black/50 backdrop-blur-sm rounded-full text-[8px] sm:text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-2">
                             <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-red-500 rounded-full animate-pulse" />
                             Live
@@ -206,7 +200,7 @@ export const Attendance: React.FC<AttendanceProps> = ({
             disabled={loading || imagePreviews.length === 0}
             onClick={handleSubmit}
             className={cn(
-              "w-full rounded-[1.25rem] sm:rounded-[1.5rem] p-5 sm:p-6 font-black text-white shadow-2xl transition-all text-lg sm:text-xl flex items-center justify-center gap-3",
+              "w-full rounded-[1.25rem] sm:rounded-[1.5rem] p-5 sm:p-6 font-black text-white shadow-2xl transition-all text-lg sm:text-xl flex items-center justify-center gap-3 relative overflow-hidden",
               (imagePreviews.length === 0) 
                 ? "bg-slate-200 text-slate-400 shadow-none cursor-not-allowed" 
                 : "bg-blue-600 shadow-blue-200 hover:bg-blue-700 active:bg-blue-800 ring-4 ring-blue-500/10"
@@ -226,8 +220,38 @@ export const Attendance: React.FC<AttendanceProps> = ({
               </>
             )}
           </motion.button>
+
+          {/* Desktop Capture Button Version (visible inside card below video) */}
+          <div className="hidden sm:flex justify-center pt-2">
+            {imagePreviews.length === 0 && isSupported && !useFallback && !error && !loading && (
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleCapture}
+                className="flex items-center gap-3 px-8 py-4 bg-blue-600 text-white rounded-full font-black uppercase tracking-widest shadow-xl ring-4 ring-blue-50"
+              >
+                <Camera size={24} />
+                Capture Selfie
+              </motion.button>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Floating Capture Button at the Bottom (Mobile Only) */}
+      {imagePreviews.length === 0 && isSupported && !useFallback && !error && !loading && (
+        <div className="fixed bottom-0 left-0 right-0 p-8 pb-10 bg-gradient-to-t from-white via-white/90 to-transparent flex justify-center z-50 pointer-events-none sm:hidden">
+          <motion.button
+            initial={{ y: 50, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={handleCapture}
+            className="h-20 w-20 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-[0_20px_40px_rgba(37,99,235,0.4)] pointer-events-auto ring-[12px] ring-blue-50/80 active:bg-blue-700 transition-all"
+          >
+            <Camera size={36} />
+          </motion.button>
+        </div>
+      )}
     </motion.div>
   );
 };

@@ -37,7 +37,9 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
   const [roleFilter, setRoleFilter]     = useState<RoleFilter>('All');
   const [expandedStore, setExpandedStore] = useState<string | null>(null);
 
-  const currentHour = new Date().getHours();
+  const now = new Date();
+  const currentHour = now.getHours();
+  const preciseHour = currentHour + (now.getMinutes() / 60);
 
   // ── Filter data by role ──────────────────────────────────────────────────
   const filteredData = useMemo(() => {
@@ -262,7 +264,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
                 }
                 fmtHour={fmtHour}
                 getBarStyle={getBarStyle}
-                currentHour={currentHour}
+                preciseHour={preciseHour}
                 totalStaff={filteredData.summary.totalStaff}
               />
             ))}
@@ -308,10 +310,10 @@ const StoreRow: React.FC<{
   onToggle: () => void;
   fmtHour: (h: number) => string;
   getBarStyle: (s: StaffTimeline) => { left: string; width: string };
-  currentHour: number;
+  preciseHour: number;
   totalStaff: number;
-}> = ({ store, isExpanded, onToggle, fmtHour, getBarStyle, currentHour }) => {
-  const nowPct = `${Math.round((currentHour / 24) * 100)}%`;
+}> = ({ store, isExpanded, onToggle, fmtHour, getBarStyle, preciseHour }) => {
+  const nowPct = `${(preciseHour / 24 * 100).toFixed(2)}%`;
 
   return (
     <div>
@@ -353,9 +355,9 @@ const StoreRow: React.FC<{
               <div className="flex items-center gap-2 mt-3 mb-1">
                 <div className="w-24 flex-shrink-0" /> {/* Spacer for name + gap matching row layout */}
                 <div className="flex-1 flex text-[9px] text-slate-400 font-mono">
-                  {[0, 3, 6, 9, 12, 15, 18, 21].map(h => (
+                  {[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22].map(h => (
                     <span key={h} className="flex-1">
-                      {fmtHour(h)}
+                      {h === 0 ? '12A' : h === 12 ? '12P' : h < 12 ? h+'A' : (h-12)+'P'}
                     </span>
                   ))}
                 </div>
@@ -391,6 +393,15 @@ const StoreRow: React.FC<{
 
                       {/* Track */}
                       <div className="flex-1 h-5 bg-slate-200 rounded relative overflow-hidden">
+                        {/* Hourly grid lines */}
+                        {Array.from({ length: 24 }).map((_, i) => (
+                          <div
+                            key={i}
+                            className="absolute top-0 bottom-0 w-px bg-slate-300/30"
+                            style={{ left: `${(i / 24) * 100}%` }}
+                          />
+                        ))}
+                        
                         {/* Current-time marker */}
                         <div
                           className="absolute top-0 bottom-0 w-px bg-blue-500 z-10 shadow-[0_0_8px_rgba(59,130,246,0.5)]"

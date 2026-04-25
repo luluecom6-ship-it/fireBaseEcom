@@ -200,6 +200,23 @@ export function useAttendance(
         body: params
       });
       
+      // Optimistic Update: Set the local status immediately to prevent "You haven't started" message
+      // while the backend catches up.
+      const now = new Date().toISOString();
+      if (type === "In") {
+        setAttendanceStatus(prev => ({
+          ...prev,
+          inTime: now,
+          outTime: null,
+          missingPunchOut: false
+        }));
+      } else {
+        setAttendanceStatus(prev => ({
+          ...prev,
+          outTime: now
+        }));
+      }
+      
       await fetchStatus(user.empId);
       showToast(`Punch ${type} Successful`, "success");
       return true;

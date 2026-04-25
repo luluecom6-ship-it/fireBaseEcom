@@ -7,7 +7,7 @@ import {
   Volume2, VolumeX
 } from 'lucide-react';
 import { User, AttendanceStatus, MatrixData } from '../types';
-import { RealTimeClock } from '../components/common/RealTimeClock';
+import { RealTimeClock } from '../components/layout/common/RealTimeClock';
 import { parseServerDate } from '../utils/api';
 import { cn } from '../lib/utils';
 

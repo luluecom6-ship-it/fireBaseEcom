@@ -3,10 +3,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, RefreshCw, AlertCircle, Search, Package, CheckCircle2, AlertTriangle 
 } from 'lucide-react';
-import { OrderRecord, MatrixDetail, Toast } from '../../types';
-import { fixImageUrl, getImages } from '../../utils/formatters';
-import { SmartImage } from '../common/SmartImage';
-import { cn } from '../../lib/utils';
+import { OrderRecord, MatrixDetail, Toast } from '../../../types';
+import { fixImageUrl, getImages } from '../../../utils/formatters';
+import { SmartImage } from './SmartImage';
+import { cn } from '../../../lib/utils';
 
 interface GlobalModalsProps {
   fullImage: string | null;

@@ -46,9 +46,23 @@ export async function runMonitorTick(db: any, messaging: any) {
       return;
     }
 
+    const processItems = (items: any[]): any[] => {
+      if (!Array.isArray(items)) return [];
+      return items.map(item => {
+        return {
+          status: item.status || item.Status || "",
+          storeID: item.storeID || item.storeId || item.StoreID || "",
+          orderID: item.orderID || item.orderId || item.OrderID || "",
+          slot: item.slot || item.Slot || "",
+          bucket: item.bucket || item.Bucket || "",
+          timestamp: item.timestamp || item.Timestamp || ""
+        };
+      });
+    };
+
     const matrixData = {
-      quick: matrixRaw.quick || [],
-      schedule: matrixRaw.schedule || []
+      quick: processItems(matrixRaw.quick || []),
+      schedule: processItems(matrixRaw.schedule || [])
     };
     const regions = adminRaw.regions || [];
     console.log(`[Monitor DEBUG] Orders: Quick=${matrixData.quick.length}, Sched=${matrixData.schedule.length}, Regions Raw=${regions.length}`);
@@ -72,7 +86,8 @@ export async function runMonitorTick(db: any, messaging: any) {
     const existingAlertsSnap = await db.collection('alerts')
       .where('timestamp', '>=', twoHoursAgoISO)
       .get();
-    const existingAlertIds = new Set<string>(existingAlertsSnap.docs.map((doc: any) => doc.id.toLowerCase().trim()));
+    const existingAlertsMap = new Map<string, any>(existingAlertsSnap.docs.map((doc: any) => [doc.id.toLowerCase().trim(), doc.data()]));
+    const existingAlertIds = new Set<string>(existingAlertsMap.keys());
     console.log(`[Monitor DEBUG] Existing alerts found (2h lookback): ${existingAlertIds.size}`);
 
     // 5. Fetch Tokens Early (to use in both new alerts and escalations)
@@ -136,66 +151,83 @@ export async function runMonitorTick(db: any, messaging: any) {
       if (sId) storeToRegion[sId] = reg;
     });
 
-    const newAlerts = detectAlerts(matrixData, escalationRules as any, existingAlertIds, scheduledThreshold, storeToRegion, scheduledConfig);
-    console.log(`[Monitor DEBUG] Detection complete. NEW ALERTS: ${newAlerts.length}`);
+    const activeAlertsDetected = detectAlerts(matrixData, escalationRules as any, existingAlertIds, scheduledThreshold, storeToRegion, scheduledConfig);
+    console.log(`[Monitor DEBUG] Detection complete. Potential alerts: ${activeAlertsDetected.length}`);
     
-    for (const alert of newAlerts) {
+    for (const alert of activeAlertsDetected) {
+      const alertId = alert.alertKey;
+      const existing = existingAlertsMap.get(alertId);
+      
       const alertStoreId = String(alert.item.storeID || "").trim();
       const alertRegion = storeToRegion[alertStoreId] || "";
       const now = new Date().toISOString();
-      const alertId = alert.alertKey;
 
-      await db.collection('alerts').doc(alertId).set({
-        timestamp: now,
-        orderId: alert.item.orderID || "",
-        eventType: 'trigger',
-        storeId: alertStoreId,
-        region: alertRegion,
-        userId: "SYSTEM",
-        bucket: alert.bucket || "",
-        notificationTime: now,
-        status: "Pending",
-        escalation: "FALSE",
-        statusTrigger: alert.statusTrigger || "",
-        triggeredAt: now,
-        updatedAt: new Date()
-      });
+      let shouldWrite = false;
+      let isReTrigger = false;
 
-      // Sync to GAS Legacy Logs
-      try {
-        const syncParams = new URLSearchParams();
-        syncParams.append('action', 'logalertv2');
-        syncParams.append('id', alertId); // Added missing ID
-        syncParams.append('timestamp', now);
-        syncParams.append('orderId', alert.item.orderID || "");
-        syncParams.append('eventType', 'trigger');
-        syncParams.append('storeId', alertStoreId);
-        syncParams.append('userId', "SYSTEM");
-        syncParams.append('bucket', alert.bucket || "");
-        syncParams.append('notificationTime', now);
-        syncParams.append('storeStaffName', "");
-        syncParams.append('status', "Pending");
-        syncParams.append('escalation', "FALSE");
-        syncParams.append('managerName', "");
-        syncParams.append('managerStatus', "Pending");
-        syncParams.append('orderCreatedAt', alert.item.timestamp || "");
-        syncParams.append('statusTrigger', alert.statusTrigger || "");
-
-        console.log(`[Monitor] Syncing new alert to GAS: ${alertId}`);
-        await axios.post(baseUrl, syncParams.toString(), {
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          timeout: 10000
-        });
-      } catch (syncErr: any) {
-        console.error(`[Monitor] GAS alert sync failed for ${alertId}:`, syncErr.message);
+      if (!existing) {
+        shouldWrite = true;
+      } else {
+        // If it exists, only update (re-trigger) if bucket changed
+        if (existing.bucket !== alert.bucket) {
+          shouldWrite = true;
+          isReTrigger = true;
+          console.log(`[Monitor] Bucket changed for ${alertId}: ${existing.bucket} -> ${alert.bucket}. Re-triggering...`);
+        }
       }
 
-      // Notify Level 1 (Pickers/Store)
-      await sendFilteredNotification({
-        title: `⚠️ NEW: ${alert.statusTrigger}`,
-        body: `Order ${alert.item.orderID} at Store ${alert.item.storeID} needs attention.`,
-        data: { orderId: alert.item.orderID, type: "alert", alertId: alert.alertKey }
-      }, alertStoreId, alertRegion, false);
+      if (shouldWrite) {
+        await db.collection('alerts').doc(alertId).set({
+          timestamp: now,
+          orderId: alert.item.orderID || "",
+          eventType: 'trigger',
+          storeId: alertStoreId,
+          region: alertRegion,
+          userId: "SYSTEM",
+          bucket: alert.bucket || "",
+          notificationTime: now,
+          status: "Pending", // Reset to Pending to re-buzz
+          escalation: "FALSE",
+          statusTrigger: alert.statusTrigger || "",
+          triggeredAt: now,
+          updatedAt: new Date()
+        }, { merge: true });
+
+        // Sync to GAS Legacy Logs
+        try {
+          const syncParams = new URLSearchParams();
+          syncParams.append('action', 'logalertv2');
+          syncParams.append('id', alertId); 
+          syncParams.append('timestamp', now);
+          syncParams.append('orderId', alert.item.orderID || "");
+          syncParams.append('eventType', 'trigger');
+          syncParams.append('storeId', alertStoreId);
+          syncParams.append('userId', "SYSTEM");
+          syncParams.append('bucket', alert.bucket || "");
+          syncParams.append('notificationTime', now);
+          syncParams.append('storeStaffName', "");
+          syncParams.append('status', "Pending");
+          syncParams.append('escalation', "FALSE");
+          syncParams.append('managerName', "");
+          syncParams.append('managerStatus', "Pending");
+          syncParams.append('orderCreatedAt', alert.item.timestamp || "");
+          syncParams.append('statusTrigger', alert.statusTrigger || "");
+
+          await axios.post(baseUrl, syncParams.toString(), {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            timeout: 10000
+          });
+        } catch (syncErr: any) {
+          console.error(`[Monitor] GAS alert sync failed for ${alertId}:`, syncErr.message);
+        }
+
+        // Notify Level 1 (Pickers/Store)
+        await sendFilteredNotification({
+          title: `${isReTrigger ? '🔄 UPDATED' : '⚠️ NEW'}: ${alert.statusTrigger}`,
+          body: `Order ${alert.item.orderID} at Store ${alert.item.storeID} is in ${alert.bucket} stage.`,
+          data: { orderId: alert.item.orderID, type: "alert", alertId: alert.alertKey }
+        }, alertStoreId, alertRegion, false);
+      }
     }
 
     // 7. Auto-Escalation Logic (3-minute cooldown)

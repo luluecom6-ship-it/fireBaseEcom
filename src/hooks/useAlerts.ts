@@ -34,24 +34,32 @@ export function useAlerts(
 
     const mergedMap = new Map<string, AlertLog>();
     
-    // Merge logic: Use orderId + statusTrigger + timestamp_date as the unique key for an alert event
+    // Merge logic: Use orderId + normalized statusTrigger + timestamp_date as the unique key for an alert event
     // This allows historical logs for the same order/trigger on DIFFERENT DAYS to coexist.
     
     // Add legacy logs first
     lLogs.forEach(log => {
       const tsDate = log.timestamp && typeof log.timestamp === 'string' ? log.timestamp.split('T')[0] : 'nodate';
-      const key = `${log.orderId}|${log.statusTrigger}|${tsDate}`.toLowerCase().trim();
+      const normTrigger = String(log.statusTrigger || "").toLowerCase().replace(/\s+/g, '').trim();
+      const key = `${log.orderId}|${normTrigger}|${tsDate}`.toLowerCase().trim();
       mergedMap.set(key, log);
     });
     
     // Overwrite with Firestore logs (real-time truth)
     fLogs.forEach(log => {
       const tsDate = log.timestamp && typeof log.timestamp === 'string' ? log.timestamp.split('T')[0] : 'nodate';
-      const key = `${log.orderId}|${log.statusTrigger}|${tsDate}`.toLowerCase().trim();
+      const normTrigger = String(log.statusTrigger || "").toLowerCase().replace(/\s+/g, '').trim();
+      const key = `${log.orderId}|${normTrigger}|${tsDate}`.toLowerCase().trim();
       mergedMap.set(key, log);
     });
 
-    const allLogs = Array.from(mergedMap.values());
+    // Final dedup by ID to prevent React key conflicts
+    const idMap = new Map<string, AlertLog>();
+    Array.from(mergedMap.values()).forEach(log => {
+      if (log.id) idMap.set(log.id, log);
+    });
+    
+    const allLogs = Array.from(idMap.values());
 
     return allLogs.filter((log: AlertLog) => {
       const role = String(user.role || "").toLowerCase().trim();
@@ -474,21 +482,21 @@ export function useAlerts(
         const data = doc.data();
         firestoreLogs.push({
           id: doc.id,
-          timestamp: data.timestamp || "",
-          orderId: data.orderId || "",
-          eventType: data.eventType || "",
-          storeId: String(data.storeId || ""),
-          userId: data.userId || "",
-          notificationTime: data.notificationTime || "",
-          storeStaffName: data.storeStaffName || "",
-          status: data.status || "Pending",
-          escalation: data.escalation || "FALSE",
-          managerName: data.managerName || "",
-          statusTrigger: data.statusTrigger || "",
-          managerStatus: data.managerStatus || "Pending",
-          orderCreatedAt: data.orderCreatedAt || "",
-          triggeredAt: data.triggeredAt || "",
-          bucket: data.bucket || ""
+          timestamp: data.timestamp || data.Timestamp || "",
+          orderId: data.orderId || data.orderID || data.OrderID || "",
+          eventType: data.eventType || data.EventType || "",
+          storeId: String(data.storeId || data.storeID || data.StoreID || ""),
+          userId: data.userId || data.UserID || "",
+          notificationTime: data.notificationTime || data.NotificationTime || "",
+          storeStaffName: data.storeStaffName || data.StoreStaffName || "",
+          status: data.status || data.Status || "Pending",
+          escalation: data.escalation || data.Escalation || "FALSE",
+          managerName: data.managerName || data.ManagerName || "",
+          statusTrigger: data.statusTrigger || data.StatusTrigger || "",
+          managerStatus: data.managerStatus || data.ManagerStatus || "Pending",
+          orderCreatedAt: data.orderCreatedAt || data.OrderCreatedAt || "",
+          triggeredAt: data.triggeredAt || data.TriggeredAt || "",
+          bucket: data.bucket || data.Bucket || ""
         });
       });
 

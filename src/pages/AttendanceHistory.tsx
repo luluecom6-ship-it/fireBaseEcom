@@ -4,7 +4,7 @@ import { Clock, RefreshCw, Calendar, X, AlertCircle } from 'lucide-react';
 import { User, AttendanceRecord } from '../types';
 import { Header } from '../components/layout/Header';
 import { fixImageUrl } from '../utils/formatters';
-import { SmartImage } from '../components/common/SmartImage';
+import { SmartImage } from '../components/layout/common/SmartImage';
 import { cn } from '../lib/utils';
 import { robustFetch, parseServerDate } from '../utils/api';
 import { API_URL } from '../constants';

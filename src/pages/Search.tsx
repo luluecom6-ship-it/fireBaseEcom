@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { Search as SearchIcon, X, RefreshCw } from 'lucide-react';
 import { OrderRecord, User } from '../types';
 import { Header } from '../components/layout/Header';
-import { SmartImage } from '../components/common/SmartImage';
+import { SmartImage } from '../components/layout/common/SmartImage';
 import { fixImageUrl, getImages } from '../utils/formatters';
 import { cn } from '../lib/utils';
 

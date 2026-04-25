@@ -176,16 +176,14 @@ export function detectAlerts(
       });
 
       if (matchingRules.length > 0) {
-        const alertKey = `QUICK|${item.orderID}|${status}|${bucket}`.toLowerCase().trim();
-        if (!existingAlertIds.has(alertKey)) {
-          results.push({
-            alertKey,
-            item,
-            statusTrigger: `${item.status} (${item.bucket})`,
-            bucket: item.bucket,
-            type: 'QUICK'
-          });
-        }
+        const alertKey = `QUICK|${item.orderID}|${status}`.toLowerCase().trim();
+        results.push({
+          alertKey,
+          item,
+          statusTrigger: `${item.status} (${item.bucket})`,
+          bucket: item.bucket,
+          type: 'QUICK'
+        });
       }
     });
   }
@@ -254,16 +252,14 @@ export function detectAlerts(
     }
 
     if (shouldTrigger) {
-      const alertKey = `SCHED|${item.orderID}|${status}|${item.slot}`.toLowerCase().trim();
-      if (!existingAlertIds.has(alertKey)) {
-        results.push({
-          alertKey,
-          item,
-          statusTrigger: `Still in '${item.status}' Stage - ${item.slot}`,
-          bucket: item.slot,
-          type: 'SCHED'
-        });
-      }
+      const alertKey = `SCHED|${item.orderID}|${status}`.toLowerCase().trim();
+      results.push({
+        alertKey,
+        item,
+        statusTrigger: `Still in '${item.status}' Stage - ${item.slot}`,
+        bucket: item.slot,
+        type: 'SCHED'
+      });
     }
   });
 

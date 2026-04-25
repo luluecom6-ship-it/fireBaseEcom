@@ -14,7 +14,7 @@ import {
 import { Header } from '../components/layout/Header';
 import { STATUSES, AGE_BUCKETS } from '../constants';
 import { fixImageUrl, getImages } from '../utils/formatters';
-import { SmartImage } from '../components/common/SmartImage';
+import { SmartImage } from '../components/layout/common/SmartImage';
 import { cn } from '../lib/utils';
 import { useSystemConfig } from '../hooks/useSystemConfig';
 import { db } from '../firebase';

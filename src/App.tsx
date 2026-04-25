@@ -29,10 +29,10 @@ import { auth, db, requestForToken, onForegroundMessage } from "./firebase";
 import { doc, setDoc } from "firebase/firestore";
 
 // --- COMPONENTS ---
-import { Loader } from "./components/common/Loader";
+import { Loader } from "./components/layout/common/Loader";
 import { Header } from "./components/layout/Header";
 import { AlertOverlay } from "./components/layout/AlertOverlay";
-import { GlobalModals } from "./components/common/GlobalModals";
+import { GlobalModals } from "./components/layout/common/GlobalModals";
 
 import { useStaffDashboard } from "./hooks/useStaffDashboard";
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { RefreshCw, ImageOff } from 'lucide-react';
-import { cn } from '../../lib/utils';
-import { getAltImageUrl } from '../../utils/formatters';
+import { cn } from '../../../lib/utils';
+import { getAltImageUrl } from '../../../utils/formatters';
 
 interface SmartImageProps {
   src: string;
