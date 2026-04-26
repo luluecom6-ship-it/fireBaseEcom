@@ -263,9 +263,9 @@ export function useRosterDashboard(currentUser: User | null) {
 
     const day = todayName();
 
-    // Filter to roster-relevant, active staff only
+    // Filter to roster-relevant, active staff only (Exclude store 3800)
     const allStaff: RosterUser[] = rawStaff
-      .filter(s => ROSTER_ROLES.has(s.role) && s.status === 'Active')
+      .filter(s => ROSTER_ROLES.has(s.role) && s.status === 'Active' && String(s.storeId).trim() !== '3800')
       .map(s => ({
         ...s,
         hasSchedule: s.shiftStart != null && !!s.shiftHours,

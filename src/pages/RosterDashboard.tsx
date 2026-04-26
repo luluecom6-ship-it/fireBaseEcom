@@ -74,14 +74,23 @@ const StatCard: React.FC<{
   value: number | string;
   border: string;
   valColor: string;
-}> = ({ icon: Icon, label, value, border, valColor }) => (
-  <div className={cn('bg-white rounded-2xl border p-4 flex flex-col gap-1 shadow-sm', border)}>
+  onClick?: () => void;
+}> = ({ icon: Icon, label, value, border, valColor, onClick }) => (
+  <motion.button
+    whileTap={onClick ? { scale: 0.95 } : undefined}
+    onClick={onClick}
+    className={cn(
+      'bg-white rounded-2xl border p-4 flex flex-col gap-1 shadow-sm text-left', 
+      border,
+      onClick ? 'cursor-pointer hover:shadow-md transition-shadow' : 'cursor-default'
+    )}
+  >
     <div className="flex items-center gap-1.5 text-slate-400 mb-1">
       <Icon size={13} />
       <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
     </div>
     <span className={cn('text-2xl font-black', valColor)}>{value}</span>
-  </div>
+  </motion.button>
 );
 
 // ─── SECTION: Overview Tab ────────────────────────────────────────────────────
@@ -530,10 +539,17 @@ const GapsTab: React.FC<{
   alerts: GapAlert[];
   allStaff: RosterUser[];
 }> = ({ alerts, allStaff }) => {
+  const [filterLevel, setFilterLevel] = useState<GapAlert['level'] | 'all'>('all');
+  
   const critical = alerts.filter(a => a.level === 'critical');
   const warnings = alerts.filter(a => a.level === 'warning');
   const info     = alerts.filter(a => a.level === 'info');
   const noSched  = allStaff.filter(s => !s.hasSchedule);
+
+  const filteredAlerts = useMemo(() => {
+    if (filterLevel === 'all') return alerts;
+    return alerts.filter(a => a.level === filterLevel);
+  }, [alerts, filterLevel]);
 
   const alertIcon = (level: GapAlert['level']) =>
     level === 'critical' ? <AlertCircle size={14} className="text-red-500 flex-shrink-0 mt-0.5" />
@@ -548,29 +564,61 @@ const GapsTab: React.FC<{
       {/* Summary metrics */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {[
-          { label: 'Critical', val: critical.length, color: 'text-red-600',   border: 'border-red-100' },
-          { label: 'Warnings', val: warnings.length, color: 'text-amber-600', border: 'border-amber-100' },
-          { label: 'Info',     val: info.length,     color: 'text-blue-600',  border: 'border-blue-100' },
-          { label: 'No schedule', val: noSched.length, color: 'text-slate-500', border: 'border-slate-100' },
-        ].map(({ label, val, color, border }) => (
-          <div key={label} className={cn('bg-white border rounded-xl p-3 text-center shadow-sm', border)}>
+          { id: 'critical' as const, label: 'Critical', val: critical.length, color: 'text-red-600',   border: 'border-red-100', active: filterLevel === 'critical' },
+          { id: 'warning' as const, label: 'Warnings', val: warnings.length, color: 'text-amber-600', border: 'border-amber-100', active: filterLevel === 'warning' },
+          { id: 'info' as const, label: 'Info',     val: info.length,     color: 'text-blue-600',  border: 'border-blue-100', active: filterLevel === 'info' },
+          { id: 'no-schedule' as const, label: 'No schedule', val: noSched.length, color: 'text-slate-500', border: 'border-slate-100', active: false },
+        ].map(({ id, label, val, color, border, active }) => (
+          <motion.button 
+            key={label} 
+            whileTap={{ scale: 0.96 }}
+            onClick={() => {
+              if (id === 'no-schedule') {
+                document.getElementById('no-schedule-section')?.scrollIntoView({ behavior: 'smooth' });
+              } else {
+                setFilterLevel(prev => prev === id ? 'all' : id);
+              }
+            }}
+            className={cn(
+              'bg-white border rounded-xl p-3 text-center shadow-sm hover:shadow-md transition-all cursor-pointer relative overflow-hidden', 
+              border,
+              active && 'ring-2 ring-slate-900 ring-offset-2'
+            )}
+          >
+            {active && (
+              <div className="absolute top-0 right-0 p-1">
+                <CheckCircle size={10} className="text-slate-900" />
+              </div>
+            )}
             <div className={cn('text-2xl font-black', color)}>{val}</div>
             <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">{label}</div>
-          </div>
+          </motion.button>
         ))}
       </div>
 
       {/* Alert list */}
       <div className="space-y-2">
-        {alerts.length === 0 && (
-          <div className="bg-white rounded-2xl border border-slate-100 p-8 text-center text-slate-400 text-sm">
-            <CheckCircle className="mx-auto mb-2 text-emerald-400" size={24} />
-            No alerts — all stores look good!
+        {filterLevel !== 'all' && (
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+              Showing {filterLevel} alerts only
+            </span>
+            <button onClick={() => setFilterLevel('all')} className="text-[10px] text-blue-500 font-bold hover:underline">
+              Clear filter
+            </button>
           </div>
         )}
-        {[...critical, ...warnings, ...info].map((a, idx) => (
-          <div
+        {filteredAlerts.length === 0 && (
+          <div className="bg-white rounded-2xl border border-slate-100 p-8 text-center text-slate-400 text-sm">
+            <CheckCircle className="mx-auto mb-2 text-emerald-400" size={24} />
+            No {filterLevel !== 'all' ? filterLevel : ''} alerts — all stores look good!
+          </div>
+        )}
+        {filteredAlerts.map((a, idx) => (
+          <motion.div
             key={idx}
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
             className={cn(
               'bg-white border-l-4 rounded-r-xl border border-slate-100 px-4 py-3 shadow-sm',
               alertBorder(a.level)
@@ -588,13 +636,13 @@ const GapsTab: React.FC<{
                 </span>
               )}
             </div>
-          </div>
+          </motion.div>
         ))}
       </div>
 
       {/* Staff without schedule */}
       {noSched.length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <div id="no-schedule-section" className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden scroll-mt-20">
           <div className="px-4 py-3 border-b border-slate-50">
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
               Staff missing shift data ({noSched.length})
@@ -708,13 +756,14 @@ export const RosterDashboard: React.FC<RosterDashboardProps> = ({ user, navigate
         </div>
 
         {/* ── Summary Metrics ────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
           {[
             { icon: Store,        label: 'Stores',       value: stores.length,         border: 'border-slate-100',   valColor: 'text-slate-700' },
             { icon: Users,        label: 'Active staff',  value: allStaff.length,       border: 'border-blue-100',    valColor: 'text-blue-700'  },
             { icon: CheckCircle,  label: 'Working today', value: today.totalWorking,    border: 'border-emerald-100', valColor: 'text-emerald-600' },
-            { icon: Moon,         label: 'On week-off',   value: today.totalOff,        border: 'border-amber-100',   valColor: 'text-amber-600' },
-            { icon: AlertTriangle,label: 'Alerts',        value: alerts.filter(a => a.level !== 'info').length, border: alerts.filter(a => a.level === 'critical').length > 0 ? 'border-red-200' : 'border-amber-100', valColor: alerts.filter(a => a.level === 'critical').length > 0 ? 'text-red-600' : 'text-amber-600' },
+            { icon: Clock,        label: 'No Schedule',   padding: 'p-4', value: today.totalNoSchedule, border: today.totalNoSchedule > 0 ? 'border-amber-200 bg-amber-50/10' : 'border-slate-100', valColor: 'text-amber-600', onClick: () => { setActiveTab('gaps'); setTimeout(() => document.getElementById('no-schedule-section')?.scrollIntoView({ behavior: 'smooth' }), 100); } },
+            { icon: Moon,         label: 'On week-off',   value: today.totalOff,        border: 'border-slate-100',   valColor: 'text-slate-400' },
+            { icon: AlertTriangle,label: 'Alerts',        value: alerts.filter(a => a.level !== 'info').length, border: alerts.filter(a => a.level === 'critical').length > 0 ? 'border-red-200' : 'border-amber-100', valColor: alerts.filter(a => a.level === 'critical').length > 0 ? 'text-red-600' : 'text-amber-600', onClick: () => setActiveTab('gaps') },
           ].map(p => <StatCard key={p.label} {...p} />)}
         </div>
 
