@@ -34,8 +34,6 @@ import { Header } from "./components/layout/Header";
 import { AlertOverlay } from "./components/layout/AlertOverlay";
 import { GlobalModals } from "./components/layout/common/GlobalModals";
 
-import { useStaffDashboard } from "./hooks/useStaffDashboard";
-
 // --- PAGES ---
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
@@ -47,12 +45,12 @@ import { Matrix } from "./pages/Matrix";
 import { Analytics } from "./pages/Analytics";
 import { Alerts } from "./pages/Alerts";
 import { AttendanceHistory } from "./pages/AttendanceHistory";
-import { StaffDashboard } from "./pages/StaffDashboard";
 import { RosterDashboard } from "./pages/RosterDashboard";
+import { AttendanceIntelligence } from "./pages/AttendanceDashboard2";
 
 export default function App() {
   // Navigation
-  const [page, setPage] = useState<"login" | "dashboard" | "upload" | "attendance" | "admin" | "search" | "matrix" | "analytics" | "alerts" | "attendance-history" | "staff-dashboard" | "roster">("login");
+  const [page, setPage] = useState<"login" | "dashboard" | "upload" | "attendance" | "admin" | "search" | "matrix" | "analytics" | "alerts" | "attendance-history" | "roster" | "attendance-v2">("login");
   
   // Auth Hook
   const { 
@@ -122,17 +120,6 @@ export default function App() {
   } = useSystemConfig(user, showToast, isFirebaseAuthenticated);
 
   const { staffStatus } = useStaffStatus(user, isFirebaseAuthenticated);
-
-  const isStaffDashEnabled = !!user && [
-    'admin', 'supervisor', 'manager', 'store'
-  ].includes(String(user.role).toLowerCase());
-  const {
-    data:        staffDashData,
-    loading:     staffDashLoading,
-    error:       staffDashError,
-    lastFetched: staffDashFetched,
-    refetch:     refetchStaffDash,
-  } = useStaffDashboard(user, isStaffDashEnabled);
 
   const { 
     attendanceStatus, hoursWorked, isShiftComplete, 
@@ -271,20 +258,19 @@ export default function App() {
       showToast("Access Denied: Admin or Supervisor Only", "error");
       return;
     }
-    if (target === "staff-dashboard" && role !== "admin" && role !== "supervisor") {
-      showToast("Access Denied: Admin or Supervisor Only", "error");
-      return;
-    }
     if (target === "roster" && role !== "admin" && role !== "supervisor" && role !== "manager") {
       showToast("Access Denied: Admin, Supervisor or Manager only", "error");
       return;
     }
+    if (target === "attendance-v2" && role !== "admin" && role !== "supervisor" && role !== "manager") {
+      showToast("Access Denied: Admin, Supervisor or Manager only", "error");
+      return;
+    }
     setPage(target);
-    if (target === "admin") fetchAdminData();
-    if (target === "staff-dashboard") refetchStaffDash();
+    if (target === "admin" || target === "attendance-v2") fetchAdminData();
     if (target === "matrix" || target === "dashboard") fetchMatrixData();
     window.scrollTo(0, 0);
-  }, [user, showToast, fetchAdminData, fetchMatrixData, refetchStaffDash]);
+  }, [user, showToast, fetchAdminData, fetchMatrixData]);
 
   // Sync user state from useAuth to other hooks if needed
   // (Most hooks take user as a parameter and handle internal effects)
@@ -477,23 +463,22 @@ export default function App() {
             onViewImage={setFullImage}
           />
         );
-      case "staff-dashboard":
-        return (
-          <StaffDashboard
-            user={user}
-            data={staffDashData}
-            loading={staffDashLoading}
-            error={staffDashError}
-            lastFetched={staffDashFetched}
-            onRefetch={refetchStaffDash}
-            navigateTo={navigateTo}
-          />
-        );
       case "roster":
         return (
           <RosterDashboard
             user={user}
             navigateTo={navigateTo}
+          />
+        );
+      case "attendance-v2":
+        return (
+          <AttendanceIntelligence
+            user={user}
+            adminData={adminData}
+            navigateTo={navigateTo}
+            onViewImage={setFullImage}
+            onRefetch={fetchAdminData}
+            isLoading={loading}
           />
         );
       default:
@@ -538,8 +523,8 @@ export default function App() {
             case 'admin': return 'Admin Control';
             case 'attendance': return 'Shift Attendance';
             case 'attendance-history': return 'Attendance History';
-            case 'staff-dashboard':    return 'Staff Coverage';
             case 'roster':            return 'Roster & Availability';
+            case 'attendance-v2': return 'Workforce Intelligence';
             default: return page.charAt(0).toUpperCase() + page.slice(1).replace("-", " ");
           }
         })()} 

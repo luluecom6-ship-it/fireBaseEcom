@@ -197,7 +197,10 @@ const HourlyTab: React.FC<{
     [allStaff, selectedDay]
   );
   const offDay = useMemo(
-    () => allStaff.filter(s => s.weekOffDay === selectedDay && s.status === 'Active'),
+    () => allStaff.filter(s => {
+      const uOff = String(s.weekOffDay || '').trim().toLowerCase();
+      return uOff === selectedDay.toLowerCase() && s.status?.toLowerCase() === 'active';
+    }),
     [allStaff, selectedDay]
   );
   const noSched = useMemo(
@@ -221,13 +224,15 @@ const HourlyTab: React.FC<{
     <div className="space-y-4">
       {/* Filters */}
       <div className="flex flex-wrap gap-2 items-center">
-        <select
-          value={selectedStore}
-          onChange={e => setSelectedStore(e.target.value)}
-          className="border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-        >
-          {stores.map(s => <option key={s} value={s}>Store {s}</option>)}
-        </select>
+        {stores.length > 1 && (
+          <select
+            value={selectedStore}
+            onChange={e => setSelectedStore(e.target.value)}
+            className="border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+          >
+            {stores.map(s => <option key={s} value={s}>Store {s}</option>)}
+          </select>
+        )}
         <div className="flex flex-wrap gap-1.5">
           {DAYS_OF_WEEK.map(d => (
             <button
@@ -424,13 +429,15 @@ const WeeklyTab: React.FC<{
 
   return (
     <div className="space-y-4">
-      <select
-        value={selectedStore}
-        onChange={e => setSelectedStore(e.target.value)}
-        className="border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-      >
-        {stores.map(s => <option key={s} value={s}>Store {s}</option>)}
-      </select>
+      {stores.length > 1 && (
+        <select
+          value={selectedStore}
+          onChange={e => setSelectedStore(e.target.value)}
+          className="border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+        >
+          {stores.map(s => <option key={s} value={s}>Store {s}</option>)}
+        </select>
+      )}
 
       {sorted.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-100 p-8 text-center text-slate-400 text-sm">
@@ -467,7 +474,7 @@ const WeeklyTab: React.FC<{
                     <div className="mt-0.5">{roleBadge(s.role)}</div>
                   </td>
                   {DAYS_OF_WEEK.map(d => {
-                    const isOff     = s.weekOffDay === d;
+                    const isOff     = String(s.weekOffDay || '').trim().toLowerCase() === d.toLowerCase();
                     const hasShift  = s.hasSchedule;
                     const isToday   = d === TODAY;
                     const working   = isWorkingOnDay(s, d);
@@ -674,8 +681,12 @@ const GapsTab: React.FC<{
 
 export const RosterDashboard: React.FC<RosterDashboardProps> = ({ user, navigateTo }) => {
   const { data, loading, error, lastUpdated } = useRosterDashboard(user);
-  const [activeTab, setActiveTab] = useState<Tab>('overview');
-  const [drillStore, setDrillStore] = useState<string | undefined>();
+  
+  const userRole = String(user.role || '').toLowerCase().trim();
+  const isRestricted = userRole === 'store' || userRole === 'manager';
+  
+  const [activeTab, setActiveTab] = useState<Tab>(isRestricted ? 'hourly' : 'overview');
+  const [drillStore, setDrillStore] = useState<string | undefined>(isRestricted ? String(user.storeId || '').trim() : undefined);
 
   const handleDrillStore = (sid: string) => {
     setDrillStore(sid);
@@ -687,7 +698,7 @@ export const RosterDashboard: React.FC<RosterDashboardProps> = ({ user, navigate
     { id: 'hourly',   label: 'Hourly',     icon: Clock       },
     { id: 'weekly',   label: 'Weekly',     icon: Calendar    },
     { id: 'gaps',     label: 'Gaps',       icon: Activity    },
-  ];
+  ].filter(t => !isRestricted || t.id !== 'overview') as { id: Tab; label: string; icon: React.ElementType }[];
 
   // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) {

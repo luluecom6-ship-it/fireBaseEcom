@@ -66,15 +66,28 @@ export function todayName(): DayName {
   return DAYS_OF_WEEK[new Date().getDay()];
 }
 
+export function normalizeDayName(day: string): string {
+  const d = day.trim().toLowerCase();
+  if (d.startsWith('sun')) return 'sunday';
+  if (d.startsWith('mon')) return 'monday';
+  if (d.startsWith('tue')) return 'tuesday';
+  if (d.startsWith('wed')) return 'wednesday';
+  if (d.startsWith('thu')) return 'thursday';
+  if (d.startsWith('fri')) return 'friday';
+  if (d.startsWith('sat')) return 'saturday';
+  return d;
+}
+
 export function fmtHour(h: number): string {
   if (h === 0 || h === 24) return '12 AM';
   if (h === 12) return '12 PM';
   return h < 12 ? `${h} AM` : `${h - 12} PM`;
 }
 
-export function isWorkingOnDay(s: RosterUser, day: DayName): boolean {
-  if (s.status !== 'Active') return false;
-  if (s.weekOffDay === day) return false;
+export function isWorkingOnDay(s: User, day: string): boolean {
+  if (s.status?.toLowerCase() !== 'active') return false;
+  const uOff = String(s.weekOffDay || '').trim();
+  if (normalizeDayName(uOff) === normalizeDayName(day)) return false;
   return true;
 }
 
@@ -95,7 +108,10 @@ function buildStoreCoverage(
 ): StoreCoverage {
   const storeStaff = staff.filter(s => String(s.storeId) === storeId);
   const working = storeStaff.filter(s => isWorkingOnDay(s, day));
-  const offToday = storeStaff.filter(s => s.weekOffDay === day && s.status === 'Active');
+  const offToday = storeStaff.filter(s => {
+    const uOff = String(s.weekOffDay || '').trim();
+    return normalizeDayName(uOff) === normalizeDayName(day) && s.status?.toLowerCase() === 'active';
+  });
   const supervisors = storeStaff.filter(s => s.role === 'supervisor');
   const supsWorking = supervisors.filter(s => isWorkingOnDay(s, day));
 
@@ -168,19 +184,19 @@ function buildAlerts(
     }
 
     // Single-person store (≤1 active staff total)
-    if (sc.staff.filter(s => s.status === 'Active').length <= 1) {
+    if (sc.staff.filter(s => s.status?.toLowerCase() === 'active').length <= 1) {
       alerts.push({
         level: 'warning',
         storeId: sid,
         title: `Store ${sid} — critically understaffed`,
-        detail: `Only ${sc.staff.filter(s => s.status === 'Active').length} active staff member(s) assigned.`,
+        detail: `Only ${sc.staff.filter(s => s.status?.toLowerCase() === 'active').length} active staff member(s) assigned.`,
       });
     }
   });
 
   // Staff-level: missing schedule data
   const noSchedule = staff.filter(
-    s => ROSTER_ROLES.has(s.role) && s.status === 'Active' && !s.hasSchedule
+    s => ROSTER_ROLES.has(s.role) && s.status?.toLowerCase() === 'active' && !s.hasSchedule
   );
   if (noSchedule.length) {
     alerts.push({
@@ -196,7 +212,7 @@ function buildAlerts(
     if (d === day) return; // already covered per-store above
     stores.forEach(sid => {
       const sc2 = buildStoreCoverage(staff, sid, d);
-      if (sc2.workingToday.length === 0 && sc2.staff.filter(s => s.status === 'Active').length > 0) {
+      if (sc2.workingToday.length === 0 && sc2.staff.filter(s => s.status?.toLowerCase() === 'active').length > 0) {
         alerts.push({
           level: 'warning',
           storeId: sid,
@@ -230,8 +246,18 @@ export function useRosterDashboard(currentUser: User | null) {
       collection(db, 'users'),
       snapshot => {
         const users: User[] = [];
+        const role = String(currentUser.role || '').toLowerCase().trim();
+        const userStore = String(currentUser.storeId || '').trim();
+
         snapshot.forEach(doc => {
           const d = doc.data();
+          const uStore = String(d.storeId || '').trim();
+          
+          // Restrict data for store/manager roles
+          if ((role === 'store' || role === 'manager') && userStore && uStore !== userStore) {
+            return;
+          }
+
           users.push({
             ...d,
             empId:   String(d.empId   || doc.id).trim(),
@@ -239,7 +265,8 @@ export function useRosterDashboard(currentUser: User | null) {
             storeId: String(d.storeId || '').trim(),
             role:    String(d.role    || 'user').toLowerCase().trim() as User['role'],
             region:  String(d.region  || '').trim(),
-            status:  String(d.status  || 'Active').trim(),
+            status:  String(d.status  || 'active').toLowerCase().trim(),
+            weekOffDay: String(d.weekOffDay || '').trim(),
           } as User);
         });
         setRawStaff(users);
@@ -263,40 +290,52 @@ export function useRosterDashboard(currentUser: User | null) {
 
     const day = todayName();
 
-    // Filter to roster-relevant, active staff only (Exclude store 3800)
+    // Filter to roster-relevant, active staff only
     const allStaff: RosterUser[] = rawStaff
-      .filter(s => ROSTER_ROLES.has(s.role) && s.status === 'Active' && String(s.storeId).trim() !== '3800')
+      .filter(s => ROSTER_ROLES.has(s.role) && s.status?.toLowerCase() === 'active')
       .map(s => ({
         ...s,
         hasSchedule: s.shiftStart != null && !!s.shiftHours,
       }));
 
+    // Filtered staff for summary metrics (Exclude store 3800)
+    const summaryStaff = allStaff.filter(s => String(s.storeId || '').trim() !== '3800');
+
     // Unique store IDs, sorted
-    const stores = [...new Set(allStaff.map(s => s.storeId))]
-      .filter(Boolean)
+    const stores = [...new Set(allStaff.map(s => String(s.storeId || '').trim()))]
+      .filter(sid => sid && sid !== 'undefined' && sid !== 'null')
       .sort();
 
     // Per-store coverage for today
     const storeCoverage: Record<string, StoreCoverage> = {};
     stores.forEach(sid => {
-      storeCoverage[sid] = buildStoreCoverage(allStaff, sid, day);
+      try {
+        storeCoverage[sid] = buildStoreCoverage(allStaff, sid, day);
+      } catch (e) {
+        console.error(`[useRosterDashboard] Error building coverage for store ${sid}:`, e);
+      }
     });
 
-    const alerts = buildAlerts(stores, storeCoverage, allStaff, day);
+    try {
+      const alerts = buildAlerts(stores, storeCoverage, allStaff, day);
 
-    const today = {
-      totalWorking:    allStaff.filter(s => isWorkingOnDay(s, day)).length,
-      totalOff:        allStaff.filter(s => s.weekOffDay === day).length,
-      totalNoSchedule: allStaff.filter(s => !s.hasSchedule).length,
-      criticalStores:  Object.values(storeCoverage).filter(sc =>
-        sc.workingToday.length === 0 || !sc.hasSupervisor
-      ).length,
-      warningStores: Object.values(storeCoverage).filter(sc =>
-        sc.workingToday.length > 0 && sc.hasSupervisor && sc.supervisorsToday.length === 0
-      ).length,
-    };
+      const today = {
+        totalWorking:    summaryStaff.filter(s => isWorkingOnDay(s, day)).length,
+        totalOff:        summaryStaff.filter(s => String(s.weekOffDay || '').trim().toLowerCase() === day.toLowerCase()).length,
+        totalNoSchedule: summaryStaff.filter(s => !s.hasSchedule).length,
+        criticalStores:  Object.values(storeCoverage).filter(sc =>
+          sc.storeId !== '3800' && (sc.workingToday.length === 0 || !sc.hasSupervisor)
+        ).length,
+        warningStores: Object.values(storeCoverage).filter(sc =>
+          sc.storeId !== '3800' && sc.workingToday.length > 0 && sc.hasSupervisor && sc.supervisorsToday.length === 0
+        ).length,
+      };
 
-    return { allStaff, stores, storeCoverage, alerts, today };
+      return { allStaff, stores, storeCoverage, alerts, today };
+    } catch (e) {
+      console.error('[useRosterDashboard] Error calculations failed:', e);
+      return null;
+    }
   }, [rawStaff]);
 
   return { data, loading, error, lastUpdated };

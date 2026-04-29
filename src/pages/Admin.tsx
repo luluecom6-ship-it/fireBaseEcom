@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Clock, RefreshCw, Package, Users, UserCheck, TrendingUp, 
   ShieldCheck, AlertTriangle, History, Save, X, AlertCircle, Send,
-  UserPlus, UserMinus, Key, Trash2, Edit3, Settings, LayoutDashboard, CalendarDays
+  UserPlus, UserMinus, Key, Trash2, Edit3, Settings, LayoutDashboard, CalendarDays, Activity
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -350,19 +350,20 @@ export const Admin: React.FC<AdminProps> = ({
 
           <div className="flex items-center gap-2">
             <button
+              onClick={() => navigateTo('attendance-v2')}
+              className="bg-indigo-600 text-white p-2 rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all flex items-center gap-2"
+              title="Workforce Intelligence"
+            >
+              <Activity size={16} />
+              <span className="hidden sm:inline text-[10px] font-black uppercase tracking-widest px-1">Workforce</span>
+            </button>
+            <button
               onClick={() => navigateTo('roster')}
               className="bg-teal-600 text-white p-2 rounded-xl shadow-lg shadow-teal-200 hover:bg-teal-700 transition-all flex items-center gap-2"
               title="Roster & Availability"
             >
               <CalendarDays size={16} />
               <span className="hidden sm:inline text-[10px] font-black uppercase tracking-widest px-1">Roster</span>
-            </button>
-            <button
-              onClick={() => navigateTo('staff-dashboard')}
-              className="bg-purple-600 text-white p-2 rounded-xl shadow-lg shadow-purple-200 hover:bg-purple-700 transition-all flex items-center gap-2"
-            >
-              <Users size={16} />
-              <span className="hidden sm:inline text-[10px] font-black uppercase tracking-widest px-1">Staff Coverage</span>
             </button>
             {activeTab === 'users' && (
             <button 

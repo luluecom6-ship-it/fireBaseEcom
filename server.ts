@@ -103,58 +103,67 @@ async function startServer() {
 
   // GAS Proxy Route
   app.all("/api/proxy-gas", async (req, res) => {
-    let rawUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
-    const queryGasUrl = req.query.gasUrl;
-    if (queryGasUrl) rawUrl = String(queryGasUrl).trim();
-    
-    // Consistent fallback across all environments
-    if (!rawUrl || rawUrl === "undefined" || !rawUrl.startsWith("http")) {
-      rawUrl = "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec";
-    }
-
-    let urlObj: URL;
     try {
-      urlObj = new URL(rawUrl);
-    } catch (e) {
-      return res.status(400).json({ error: "Invalid GAS URL configuration" });
-    }
-
-    const cacheKey = req.method + ":" + rawUrl + ":" + JSON.stringify(Object.keys(req.query).sort().reduce((acc: any, k) => {
-      if (k !== '_t' && k !== 'gasUrl') acc[k] = req.query[k];
-      return acc;
-    }, {}));
-
-    for (const [key, value] of Object.entries(req.query)) {
-      if (key !== 'gasUrl') urlObj.searchParams.set(key, String(value));
-    }
-
-    const config: any = {
-      method: req.method,
-      url: urlObj.toString(),
-      timeout: 60000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/plain, */*',
-      },
-      validateStatus: () => true,
-      maxRedirects: 15
-    };
-
-    if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
-      if (req.headers['content-type']?.includes('application/x-www-form-urlencoded')) {
-        const params = new URLSearchParams();
-        for (const key in req.body) params.append(key, req.body[key]);
-        config.data = params.toString();
-        config.headers['Content-Type'] = 'application/x-www-form-urlencoded';
-      } else {
-        config.data = req.body;
-        config.headers['Content-Type'] = req.headers['content-type'] || 'application/json';
+      let rawUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
+      const queryGasUrl = req.query.gasUrl;
+      if (queryGasUrl) rawUrl = String(queryGasUrl).trim();
+      
+      // Consistent fallback across all environments
+      if (!rawUrl || rawUrl === "undefined" || !rawUrl.startsWith("http")) {
+        rawUrl = "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec";
       }
-    }
 
-    try {
+      let urlObj: URL;
+      try {
+        urlObj = new URL(rawUrl);
+      } catch (e) {
+        return res.status(400).json({ status: "error", message: "Invalid GAS URL configuration" });
+      }
+
+      const action = req.query.action || "unknown";
+      console.log(`[Proxy] Incoming request: ${req.method} action=${action}`);
+
+      const cacheKey = req.method + ":" + rawUrl + ":" + JSON.stringify(Object.keys(req.query).sort().reduce((acc: any, k) => {
+        if (k !== '_t' && k !== 'gasUrl') acc[k] = req.query[k];
+        return acc;
+      }, {}));
+
+      for (const [key, value] of Object.entries(req.query)) {
+        if (key !== 'gasUrl') urlObj.searchParams.set(key, String(value));
+      }
+
+      const config: any = {
+        method: req.method,
+        url: urlObj.toString(),
+        timeout: 60000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36',
+          'Accept': 'application/json, text/plain, */*',
+        },
+        validateStatus: () => true,
+        maxRedirects: 15
+      };
+
+      if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+        if (req.headers['content-type']?.includes('application/x-www-form-urlencoded')) {
+          const params = new URLSearchParams();
+          for (const key in req.body) params.append(key, req.body[key]);
+          config.data = params.toString();
+          config.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+        } else {
+          config.data = req.body;
+          config.headers['Content-Type'] = req.headers['content-type'] || 'application/json';
+        }
+      }
+
       const skipCache = req.method !== 'GET' || req.query.cache === 'skip' || req.query._skipCache === 'true';
       const response = await executeGasRequest(config, { skipCache, cacheKey });
+      
+      if (res.headersSent) {
+        console.warn(`[Proxy] Response already sent for action=${action}, skipping send.`);
+        return;
+      }
+
       if (response.headers && response.headers['content-type']) {
         res.setHeader('Content-Type', response.headers['content-type']);
       }
@@ -165,6 +174,7 @@ async function startServer() {
         
       if (dataStr.includes('goog-script-error') || dataStr.includes('Rate exceeded')) {
         const isRate = dataStr.includes('Rate exceeded');
+        console.warn(`[Proxy] GAS Error detected: ${isRate ? 'Rate Limit' : 'Script Error'}`);
         return res.status(isRate ? 429 : 502).json({ 
           status: "error", 
           message: isRate ? "Rate limit reached" : "GAS Error",
@@ -173,7 +183,10 @@ async function startServer() {
       }
       res.status(response.status).send(response.data);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error(`[Proxy] FATAL Error for ${req.query.action}:`, error.message);
+      if (!res.headersSent) {
+        res.status(500).json({ status: "error", error: error.message });
+      }
     }
   });
 
@@ -290,6 +303,15 @@ async function startServer() {
 
       const email = mapUsernameToEmail(userData.username);
       const uid = String(userData.empId).trim();
+
+      // Ensure no email collision with other UIDs
+      try {
+        const existingEmailUser = await admin.auth().getUserByEmail(email);
+        if (existingEmailUser && existingEmailUser.uid !== uid) {
+          console.log(`[Admin] Email ${email} in use by UID ${existingEmailUser.uid}. Deleting conflict.`);
+          await admin.auth().deleteUser(existingEmailUser.uid);
+        }
+      } catch (e) {}
 
       // Check if user exists in Auth
       let authUser;
@@ -460,6 +482,15 @@ async function startServer() {
 
           console.log(`[Migrate] Processing ${username} (${uid})...`);
           const email = mapUsernameToEmail(username);
+
+          // Handle email conflicts
+          try {
+            const existingEmailUser = await admin.auth().getUserByEmail(email);
+            if (existingEmailUser && existingEmailUser.uid !== uid) {
+              console.log(`[Migrate] Email ${email} in use by UID ${existingEmailUser.uid}. Deleting conflict.`);
+              await admin.auth().deleteUser(existingEmailUser.uid);
+            }
+          } catch (e) {}
 
           // Create in Auth (ignore if exists)
           try {

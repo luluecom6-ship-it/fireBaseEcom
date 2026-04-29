@@ -63,6 +63,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const email = mapUsernameToEmail(username);
 
+        // Ensure no email collision with other UIDs
+        try {
+          const existingEmailUser = await admin.auth().getUserByEmail(email);
+          if (existingEmailUser && existingEmailUser.uid !== uid) {
+            console.log(`[Vercel Migrate] Email ${email} matches another UID ${existingEmailUser.uid}. Cleaning up.`);
+            await admin.auth().deleteUser(existingEmailUser.uid);
+          }
+        } catch (e) {}
+
         // Create in Auth
         try {
           await admin.auth().createUser({

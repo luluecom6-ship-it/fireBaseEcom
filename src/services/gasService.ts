@@ -8,7 +8,7 @@ const REGIONS_TTL = 3600000; // 1 Hour for regions
 
 // Request Queue for GAS Proxy with Limited Concurrency
 let activeRequests = 0;
-const MAX_CONCURRENT = 5; // Increased to 5 for better throughput
+const MAX_CONCURRENT = 10; // Increased to 10 for better throughput
 let backoffMultiplier = 1;
 const gasQueue: { config: any, resolve: any, reject: any, skipCache?: boolean, startTime: number }[] = [];
 
@@ -18,8 +18,8 @@ async function processGasQueue() {
   const item = gasQueue.shift();
   if (!item) return;
 
-  // Check if item has been in queue too long (e.g. 2 minutes)
-  if (Date.now() - item.startTime > 120000) {
+  // Check if item has been in queue too long (e.g. 5 minutes)
+  if (Date.now() - item.startTime > 300000) {
     item.reject(new Error("Request timed out in queue"));
     processGasQueue();
     return;

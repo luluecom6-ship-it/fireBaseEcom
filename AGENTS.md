@@ -1,28 +1,24 @@
-# Project Context: Version 5.1 (Roster Intelligence & Availability)
+# Project Context: Version 6.0 (Unified Workforce Intelligence)
 
-Whenever the user refers to **Version 5.1**, it refers to the application state as of April 25, 2026, with the following enhancements:
+Whenever the user refers to **Version 6.0**, it refers to the application state as of April 29, 2026, with the following enhancements:
 
-## Core Enhancements (v5.1)
+## Core Enhancements (v6.0)
+1. **Unified Workforce Intelligence**:
+   - **Real-time Verification**: Integrated a "Staff Detail Modal" in the Workforce Intelligence dashboard, allowing supervisors to view punch-in/out verification images and timestamps instantly.
+   - **Roster-Aware Attendance**: Synchronization between Roster Planner and Attendance logs ensures "Week Off" staff are correctly categorized, preventing false "Absent" alerts in dashboard KPIs.
+   - **Store Coverage Intelligence**: Enhanced store-level tiles to show live "Off Today" counts alongside active and absent staff metrics.
+   - **Dual-View Exploration**: Maintains the historical monthly grid expansion (trends) while adding the new instant verification modal (daily compliance).
+
+2. **UI/UX Cleanup & Optimization**:
+   - **Consolidated Navigation**: Removed redundant "Attendance Intelligence" (v1) and "Staff Coverage" modules to focus all workforce tracking into the unified v2 dashboard.
+   - **Standardized Data Mapping**: Normalized Firestore user data mapping (weekOffDay, status, role) across all hooks and pages for consistent logic.
+   - **Role-Based Intelligence**: Restricted "Workforce Intelligence" and "Roster Planner" visibility for the **Manager** role, limiting their data exploration to their assigned store—matching the secure boundaries of the "Store" role.
+   - **Admin Hub**: Refined the Admin page navigation to provide professional, thematic entry points for "Workforce" and "Roster" intelligence.
+
+## Legacy Enhancements (v5.1 preserved)
 1. **Roster & Availability Planner**:
-   - **Real-time Availability**: Integrated a new Roster Dashboard with live synchronization from Firebase Firestore.
    - **Hourly Coverage View**: Interactive timeline showing staff availability across the 6 AM – 11 PM operational window.
    - **Gap Intelligence**: Automatic detection of "Zero-Coverage" hours, missing supervisors, and understaffed shifts.
-   - **Weekly Schedule Matrix**: A bird's-eye view of staff week-off patterns and shift assignments across the entire store network.
-   - **Role-Based Access**: Restricted Roster planning and visibility to Admin, Supervisor, and Manager roles.
-
-2. **UX & Accessibility Improvements**:
-   - **Mobile-Optimized Capture**: Relocated the camera capture button to the bottom of the screen for one-handed operation during shift attendance.
-   - **Optimistic Attendance Updates**: Enhanced the punch-in workflow to reflect status changes immediately in the UI while backend synchronization completes.
-
-## Baseline Features (v5.0 preserved)
-1. **24-Hour Operations & Midnight Shifts**:
-   - **Full Day Timeline**: 24-hour Staff Dashboard display (12 AM – 12 AM).
-   - **Cross-Midnight Logic**: Support for shifts that span across calendar days.
-   - **Current-Time Glow**: High-visibility blue marker on timelines.
-
-2. **Legacy Log Integrity**:
-   - **Historical Audit Fix**: Proper ISO-to-Date object comparison for historical log filtering.
-   - **Schema Alignment**: Bucket field integration for legacy GAS AlertLogs.
 
 [ ... rest of technical architecture and core features preserved ...]
 
@@ -63,4 +59,4 @@ Whenever the user refers to **Version 5.1**, it refers to the application state 
 - **Deployment**: Configured for Vercel (Project: `fire-base-ecom`, ID: `prj_tz4mVBUk0Lbrz0KxK190eWmOqIKQ`).
 
 ## Persistence Instruction
-This file serves as the definitive reference for Version 5.0. All future modifications should build upon this baseline unless otherwise specified.
+This file serves as the definitive reference for Version 6.0. All future modifications should build upon this baseline unless otherwise specified.

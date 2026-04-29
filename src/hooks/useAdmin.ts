@@ -21,7 +21,10 @@ export function useAdmin(
     
     if (!API_URL) {
       console.error("Admin sync failed: API_URL is not configured.");
-      if (isManual) showToast("API Configuration Missing", "error");
+      if (isManual) {
+        showToast("API Configuration Missing", "error");
+        setLoading(false);
+      }
       return;
     }
 
@@ -54,7 +57,10 @@ export function useAdmin(
         } else {
           console.error("Admin sync failed: Response was not JSON", text.substring(0, 100));
         }
-        if (isManual && !isHtml) showToast("Server Error: Invalid data format", "error");
+        if (isManual) {
+          if (!isHtml) showToast("Server Error: Invalid data format", "error");
+          setLoading(false);
+        }
         return;
       }
 

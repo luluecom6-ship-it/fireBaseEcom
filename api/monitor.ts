@@ -13,9 +13,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const monitorKey = req.headers['x-monitor-key'];
   const isVercelCron = req.headers['x-vercel-cron'] === '1';
   const secretKey = process.env.MONITOR_SECRET_KEY;
+  const gasUrlKey = process.env.GAS_API_URL || process.env.VITE_GAS_API_URL;
 
-  if (secretKey && !isVercelCron && (!monitorKey || monitorKey !== secretKey)) {
-    console.warn('[API Monitor] Unauthorized request attempt');
+  const isAuthorized = 
+    isVercelCron || 
+    !secretKey || 
+    (monitorKey && (monitorKey === secretKey || monitorKey === gasUrlKey));
+
+  if (!isAuthorized) {
+    console.warn('[API Monitor] Unauthorized request attempt. Key received:', monitorKey);
     return res.status(401).json({ error: 'Unauthorized' });
   }
 

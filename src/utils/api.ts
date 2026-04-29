@@ -4,14 +4,31 @@
 export async function robustFetch(
   url: string, 
   options: RequestInit = {}, 
-  retries = options.method === 'POST' ? 0 : 3, 
+  retries = options.method === 'POST' ? 1 : 3, 
   backoff = 1000
 ): Promise<Response> {
   const cleanUrl = url.trim();
-  console.log(`[Fetch] Requesting: ${cleanUrl}`);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+
+  console.log(`[Fetch] Requesting: ${cleanUrl} (Retries left: ${retries})`);
+  
+  // Convert absolute URL to relative if it's on the same origin
+  let finalUrl = cleanUrl;
   try {
-    const response = await fetch(cleanUrl, {
+    const parsed = new URL(cleanUrl, window.location.origin);
+    if (parsed.origin === window.location.origin) {
+      finalUrl = parsed.pathname + parsed.search + parsed.hash;
+      console.log(`[Fetch] Normalized to relative: ${finalUrl}`);
+    }
+  } catch (e) {
+    // Stick with original if parsing fails (likely already relative or malformed)
+  }
+
+  try {
+    const response = await fetch(finalUrl, {
       ...options,
+      signal: controller.signal,
       // Default to follow redirects as GAS uses them heavily
       redirect: 'follow',
       // Ensure CORS is handled correctly
@@ -19,6 +36,8 @@ export async function robustFetch(
       // Avoid caching issues
       cache: 'no-store',
     });
+    
+    clearTimeout(timeoutId);
 
     if (!response.ok && response.status !== 0) {
       // Log the body for debugging if it's not JSON

@@ -109,6 +109,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 1. Auth Management
     try {
+      // Check if email is in use by another account
+      try {
+        const existingEmailUser = await admin.auth().getUserByEmail(email);
+        if (existingEmailUser && existingEmailUser.uid !== uid) {
+          console.log(`[Vercel Admin] Email ${email} belongs to UID ${existingEmailUser.uid} instead of ${uid}. Deleting conflicting account.`);
+          await admin.auth().deleteUser(existingEmailUser.uid);
+        }
+      } catch (e) {
+        // Email not found, proceed
+      }
+
       await admin.auth().getUser(uid);
       await admin.auth().updateUser(uid, {
         email,
