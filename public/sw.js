@@ -67,6 +67,11 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   
+  // EXCLUDE API REQUESTS FROM SERVICE WORKER
+  if (url.pathname.startsWith('/api/')) {
+    return;
+  }
+  
   // Network-first strategy for the root and index.html to ensure latest version
   if (url.pathname === '/' || url.pathname === '/index.html') {
     event.respondWith(

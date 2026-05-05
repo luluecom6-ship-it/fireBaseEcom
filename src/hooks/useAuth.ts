@@ -369,5 +369,26 @@ export function useAuth() {
     };
   }, [logout]);
 
-  return { user, loading, isFirebaseAuthenticated, login, loginWithEmail, loginWithGoogle, logout, toggleSound, setUser };
+  const updateProfileImage = useCallback(async (base64Image: string) => {
+    if (!user?.empId) return { success: false, message: "User not authenticated" };
+    
+    try {
+      const userRef = doc(db, 'users', user.empId);
+      await setDoc(userRef, { 
+        profileImage: base64Image,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      
+      // Local update is handled by the onSnapshot listener, 
+      // but we can update state immediately for snappy feel
+      setUser(prev => prev ? ({ ...prev, profileImage: base64Image }) : null);
+      
+      return { success: true };
+    } catch (error) {
+      console.error("Error updating profile image:", error);
+      return { success: false, message: "Update failed" };
+    }
+  }, [user]);
+
+  return { user, loading, isFirebaseAuthenticated, login, loginWithEmail, loginWithGoogle, logout, toggleSound, updateProfileImage, setUser };
 }

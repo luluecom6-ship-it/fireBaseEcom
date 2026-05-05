@@ -8,9 +8,12 @@ const REGIONS_TTL = 3600000; // 1 Hour for regions
 
 // Request Queue for GAS Proxy with Limited Concurrency
 let activeRequests = 0;
-const MAX_CONCURRENT = 10; // Increased to 10 for better throughput
+const MAX_CONCURRENT = 5; // Reduced to 5 to prevent OOM/Overwhelm in small containers
 let backoffMultiplier = 1;
 const gasQueue: { config: any, resolve: any, reject: any, skipCache?: boolean, startTime: number }[] = [];
+
+// Coalescing map for in-flight requests to same action
+const inFlightRequests = new Map<string, Promise<any>>();
 
 async function processGasQueue() {
   if (gasQueue.length === 0 || activeRequests >= MAX_CONCURRENT) return;
@@ -40,7 +43,7 @@ async function processGasQueue() {
     // Enforce a strict timeout at the axios level
     const response = await axiosLib({
       ...config,
-      timeout: 60000 // 60s timeout for individual GAS requests
+      timeout: 120000 // 120s timeout for individual GAS requests
     });
     
     const dataStr = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
@@ -80,7 +83,18 @@ export async function executeGasRequest(config: any, options: { skipCache?: bool
     }
   }
 
-  return new Promise((resolve, reject) => {
+  // Request Coalescing: Only for GET requests with same action
+  const method = config.method || 'GET';
+  const urlObj = new URL(config.url);
+  const action = urlObj.searchParams.get('action') || 'default';
+  const coalescingKey = `${method}:${action}:${JSON.stringify(config.data || "")}`;
+
+  if (method === 'GET' && inFlightRequests.has(coalescingKey)) {
+    console.log(`[GAS Queue] Coalescing request for action=${action}`);
+    return inFlightRequests.get(coalescingKey);
+  }
+
+  const requestPromise = new Promise((resolve, reject) => {
     gasQueue.push({ config, resolve, reject, skipCache, startTime: Date.now() });
     processGasQueue();
   }).then((response: any) => {
@@ -106,5 +120,13 @@ export async function executeGasRequest(config: any, options: { skipCache?: bool
       }
     }
     return response;
+  }).finally(() => {
+    inFlightRequests.delete(coalescingKey);
   });
+
+  if (method === 'GET') {
+    inFlightRequests.set(coalescingKey, requestPromise);
+  }
+
+  return requestPromise;
 }

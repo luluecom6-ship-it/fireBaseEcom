@@ -9,7 +9,7 @@ export async function robustFetch(
 ): Promise<Response> {
   const cleanUrl = url.trim();
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+  const timeoutId = setTimeout(() => controller.abort(), 120000); // 120s timeout for slow GAS
 
   console.log(`[Fetch] Requesting: ${cleanUrl} (Retries left: ${retries})`);
   
@@ -37,8 +37,6 @@ export async function robustFetch(
       cache: 'no-store',
     });
     
-    clearTimeout(timeoutId);
-
     if (!response.ok && response.status !== 0) {
       // Log the body for debugging if it's not JSON
       const text = await response.text();
@@ -70,16 +68,21 @@ export async function robustFetch(
     }
 
     return response;
-  } catch (error) {
+  } catch (error: any) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error(`[Fetch] FAILED: ${cleanUrl}`, error);
+    const isAbort = error.name === 'AbortError' || errorMsg.includes('aborted');
+    
+    console.error(`[Fetch] FAILED: ${cleanUrl} | Type: ${isAbort ? 'TIMEOUT/ABORT' : 'NETWORK'} | Error: ${errorMsg}`);
     
     if (retries > 0) {
-      console.warn(`[Fetch] Network error: ${errorMsg}. Retrying in ${backoff}ms... (${retries} left)`);
-      await new Promise(resolve => setTimeout(resolve, backoff));
+      const retryDelay = isAbort ? backoff * 2 : backoff;
+      console.warn(`[Fetch] ${isAbort ? 'Timeout' : 'Network error'}. Retrying in ${retryDelay}ms... (${retries} left)`);
+      await new Promise(resolve => setTimeout(resolve, retryDelay));
       return robustFetch(url, options, retries - 1, backoff * 2);
     }
     throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 

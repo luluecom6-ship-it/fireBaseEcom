@@ -62,6 +62,7 @@ export default function App() {
     loginWithGoogle, 
     logout, 
     toggleSound,
+    updateProfileImage,
     setUser 
   } = useAuth();
   
@@ -350,6 +351,7 @@ export default function App() {
             showInstallPrompt={showInstallPrompt}
             soundAlertsEnabled={user?.soundAlertsEnabled !== false}
             onToggleSound={() => handleToggleSound()}
+            onUpdateProfileImage={updateProfileImage}
           />
         );
       case "upload":
@@ -502,6 +504,7 @@ export default function App() {
             showInstallPrompt={showInstallPrompt}
             soundAlertsEnabled={user?.soundAlertsEnabled !== false}
             onToggleSound={() => handleToggleSound()}
+            onUpdateProfileImage={updateProfileImage}
           />
         );
     }
@@ -534,6 +537,7 @@ export default function App() {
         isInstallable={isInstallable}
         onInstall={showInstallPrompt}
         onToggleSound={() => handleToggleSound()}
+        onUpdateProfileImage={updateProfileImage}
       />
       
       <AlertOverlay 

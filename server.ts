@@ -135,7 +135,7 @@ async function startServer() {
       const config: any = {
         method: req.method,
         url: urlObj.toString(),
-        timeout: 60000,
+        timeout: 120000,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36',
           'Accept': 'application/json, text/plain, */*',
@@ -164,23 +164,29 @@ async function startServer() {
         return;
       }
 
-      if (response.headers && response.headers['content-type']) {
-        res.setHeader('Content-Type', response.headers['content-type']);
+      // Consistent content type
+      const contentType = response.headers?.['content-type'] || 'application/json';
+      res.setHeader('Content-Type', contentType);
+      
+      // OPTIMIZATION: Send data directly if it matches desired format
+      const responseSize = response.data 
+        ? (typeof response.data === 'string' ? response.data.length : JSON.stringify(response.data).length) 
+        : 0;
+      
+      const mem = process.memoryUsage();
+      console.log(`[Proxy] Response action=${action} size=${(responseSize / 1024).toFixed(1)}KB | Mem: RSS=${(mem.rss / 1024 / 1024).toFixed(1)}MB`);
+
+      // Detect common GAS error indicators in the raw response
+      if (typeof response.data === 'string') {
+        if (response.data.includes('goog-script-error') || response.data.includes('Rate exceeded')) {
+          const isRate = response.data.includes('Rate exceeded');
+          return res.status(isRate ? 429 : 502).json({ 
+            status: "error", 
+            message: isRate ? "Rate limit reached" : "GAS Error",
+          });
+        }
       }
       
-      const dataStr = response.data 
-        ? (typeof response.data === 'string' ? response.data : JSON.stringify(response.data)) 
-        : "";
-        
-      if (dataStr.includes('goog-script-error') || dataStr.includes('Rate exceeded')) {
-        const isRate = dataStr.includes('Rate exceeded');
-        console.warn(`[Proxy] GAS Error detected: ${isRate ? 'Rate Limit' : 'Script Error'}`);
-        return res.status(isRate ? 429 : 502).json({ 
-          status: "error", 
-          message: isRate ? "Rate limit reached" : "GAS Error",
-          debug: dataStr.substring(0, 100) 
-        });
-      }
       res.status(response.status).send(response.data);
     } catch (error: any) {
       console.error(`[Proxy] FATAL Error for ${req.query.action}:`, error.message);
