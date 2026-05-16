@@ -51,31 +51,6 @@ export const getBucketIndex = (bucket: string) => {
   return -1;
 };
 
-export const parseTime = (t: string) => {
-  if (!t) return 0;
-  const cleaned = t.trim().toUpperCase();
-  // Match HH:MM AM/PM or HH AM/PM, potentially preceded by a date
-  const match = cleaned.match(/(\d+)(?::(\d+))?\s*(AM|PM)/);
-  if (!match) return 0;
-  
-  let hrs = parseInt(match[1], 10);
-  let mins = match[2] ? parseInt(match[2], 10) : 0;
-  const period = match[3];
-  
-  if (period === 'PM' && hrs !== 12) hrs += 12;
-  if (period === 'AM' && hrs === 12) hrs = 0;
-  return hrs * 60 + mins;
-};
-
-export const parseSlot = (slot: string) => {
-  if (!slot || !slot.includes('-')) return null;
-  const [startStr, endStr] = slot.split('-').map(s => s.trim());
-  return {
-    start: parseTime(startStr),
-    end: parseTime(endStr)
-  };
-};
-
 export interface AlertTriggerResult {
   alertKey: string;
   item: MatrixItem;
@@ -83,6 +58,134 @@ export interface AlertTriggerResult {
   bucket: string;
   type: 'QUICK' | 'SCHED';
 }
+
+// Helper to get local info for a specific region
+export const getLocalInfo = (region: string) => {
+  const utcNow = new Date();
+  const r = (region || "").toUpperCase().trim();
+  
+  // Default to KSA (+3:00) as per primary operating region
+  let offsetMinutes = 180; 
+  
+  // Mapping of common regions to their UTC offsets in minutes
+  const OFFSETS: Record<string, number> = {
+    'DUBAI': 240,    // UTC+4
+    'UAE': 240,
+    'SHARJAH': 240,
+    'ABUDHABI': 240,
+    'KSA': 180,      // UTC+3
+    'SAUDI': 180,
+    'RIYADH': 180,
+    'JEDDAH': 180,
+    'QATAR': 180,
+    'DOHA': 180,
+    'KUWAIT': 180,
+    'BAHRAIN': 180,
+    'OMAN': 240,     // UTC+4
+    'MUSCAT': 240,
+    'JORDAN': 180,   // UTC+3
+    'EGYPT': 120,    // UTC+2
+    'CAIRO': 120,
+    'INDIA': 330,    // UTC+5:30
+    'MUMBAI': 330,
+    'DELHI': 330,
+    'BENGALURU': 330,
+    'CHENNAI': 330,
+    'HYDERABAD': 330,
+    'MALAYSIA': 480, // UTC+8
+    'INDONESIA': 420, // UTC+7 (WIB)
+  };
+
+  // Check if the region name (or part of it) matches an offset
+  for (const [key, offset] of Object.entries(OFFSETS)) {
+    if (r.indexOf(key) !== -1) {
+      offsetMinutes = offset;
+      break;
+    }
+  }
+
+  // Create a local date for the region to handle date rollovers correctly
+  const localTimeLong = utcNow.getTime() + (offsetMinutes * 60000);
+  const localDate = new Date(localTimeLong);
+  
+  return {
+    nowMins: localDate.getUTCHours() * 60 + localDate.getUTCMinutes(),
+    dateStr: localDate.getUTCFullYear() + '-' + String(localDate.getUTCMonth() + 1).padStart(2, '0') + '-' + String(localDate.getUTCDate()).padStart(2, '0'),
+    offsetMins: offsetMinutes,
+    rawLocalDate: localDate
+  };
+};
+
+export const parseTime = (t: string, offsetMins: number = 0) => {
+  if (!t) return 0;
+  const cleaned = t.trim().toUpperCase();
+  
+  // 1. Check if it's an ISO date string or full date string
+  if (cleaned.includes('T') || cleaned.includes('-') || (cleaned.includes(':') && cleaned.length > 8)) {
+    const d = new Date(cleaned);
+    if (!isNaN(d.getTime())) {
+      // Use getUTC components + offset to get the local minutes in that region
+      const totalMins = d.getUTCHours() * 60 + d.getUTCMinutes() + offsetMins;
+      return (totalMins + 1440) % 1440;
+    }
+  }
+
+  // 2. Try HH:MM AM/PM or HH AM/PM
+  const ampmMatch = cleaned.match(/(\d+)(?::(\d+))?\s*(AM|PM)/);
+  if (ampmMatch) {
+    let hrs = parseInt(ampmMatch[1], 10);
+    let mins = ampmMatch[2] ? parseInt(ampmMatch[2], 10) : 0;
+    const period = ampmMatch[3];
+    
+    if (period === 'PM' && hrs !== 12) hrs += 12;
+    if (period === 'AM' && hrs === 12) hrs = 0;
+    return hrs * 60 + mins;
+  }
+
+  // 3. Try 24h format HH:MM or HH
+  const h24Match = cleaned.match(/(\d{1,2})(?::(\d{2}))?/);
+  if (h24Match) {
+    const hrs = parseInt(h24Match[1], 10);
+    const mins = h24Match[2] ? parseInt(h24Match[2], 10) : 0;
+    if (hrs >= 0 && hrs < 24) {
+      return hrs * 60 + mins;
+    }
+  }
+
+  return 0;
+};
+
+export const formatTimeDisplay = (mins: number) => {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  const period = h >= 12 ? 'PM' : 'AM';
+  const displayH = h % 12 || 12;
+  return `${displayH}:${m.toString().padStart(2, '0')} ${period}`;
+};
+
+export const formatSlotDisplay = (slot: string, offsetMins: number = 0) => {
+  if (!slot) return "";
+  if (!slot.includes('-')) return slot;
+  
+  const parts = slot.split(' - ');
+  if (parts.length !== 2) return slot;
+
+  const startMins = parseTime(parts[0], offsetMins);
+  const endMins = parseTime(parts[1], offsetMins);
+
+  if (startMins === 0 && endMins === 0 && !parts[0].includes('00:00')) return slot;
+
+  return `${formatTimeDisplay(startMins)} - ${formatTimeDisplay(endMins)}`;
+};
+
+export const parseSlot = (slot: string, offsetMins: number = 0) => {
+  if (!slot || !slot.includes('-')) return null;
+  const [startStr, endStr] = slot.split('-').map(s => s.trim());
+  return {
+    start: parseTime(startStr, offsetMins),
+    end: parseTime(endStr, offsetMins)
+  };
+};
 
 export function detectAlerts(
   matrixData: MatrixData,
@@ -99,50 +202,6 @@ export function detectAlerts(
   // Use UTC as base for all calculations
   const utcNow = new Date();
   
-  // Helper to get local minutes for a specific region
-  const getLocalMins = (region: string) => {
-    const r = (region || "").toUpperCase().trim();
-    
-    // Default to KSA (+3:00) as per primary operating region
-    let offsetMinutes = 180; 
-    
-    // Mapping of common regions to their UTC offsets in minutes
-    const OFFSETS: Record<string, number> = {
-      'DUBAI': 240,    // UTC+4
-      'UAE': 240,
-      'SHARJAH': 240,
-      'ABUDHABI': 240,
-      'SAUDI': 180,    // UTC+3
-      'RIYADH': 180,
-      'JEDDAH': 180,
-      'QATAR': 180,
-      'DOHA': 180,
-      'KUWAIT': 180,
-      'BAHRAIN': 180,
-      'OMAN': 240,     // UTC+4
-      'MUSCAT': 240,
-      'INDIA': 330,    // UTC+5:30
-      'MUMBAI': 330,
-      'DELHI': 330,
-      'BENGALURU': 330,
-      'CHENNAI': 330,
-      'HYDERABAD': 330,
-      'EGYPT': 120,     // UTC+2
-      'CAIRO': 120,
-    };
-
-    // Check if the region name (or part of it) matches an offset
-    for (const [key, offset] of Object.entries(OFFSETS)) {
-      if (r.includes(key)) {
-        offsetMinutes = offset;
-        break;
-      }
-    }
-
-    const utcMins = utcNow.getUTCHours() * 60 + utcNow.getUTCMinutes();
-    return (utcMins + offsetMinutes) % 1440;
-  };
-
   const normalize = (s: string) => (s || "").toString().toUpperCase().replace(/\s+/g, '').trim();
   const activeRules = escalationRules.filter(r => r.isActive);
 
@@ -176,14 +235,18 @@ export function detectAlerts(
       });
 
       if (matchingRules.length > 0) {
-        const alertKey = `QUICK|${item.orderID}|${status}`.toLowerCase().trim();
-        results.push({
-          alertKey,
-          item,
-          statusTrigger: `${item.status} (${item.bucket})`,
-          bucket: item.bucket,
-          type: 'QUICK'
-        });
+        // Dedup by orderId + status + bucket. 
+        const alertKey = `QUICK|${item.orderID}|${status}|${bucket}`.toLowerCase().trim();
+        
+        if (!existingAlertIds.has(alertKey)) {
+          results.push({
+            alertKey,
+            item,
+            statusTrigger: `${item.status} (${item.bucket})`,
+            bucket: item.bucket,
+            type: 'QUICK'
+          });
+        }
       }
     });
   }
@@ -192,11 +255,13 @@ export function detectAlerts(
   (matrixData.schedule || []).forEach((item, idx) => {
     const itemStoreId = String(item.storeID || "").trim();
     const itemRegion = normalize(storeToRegion[itemStoreId] || "");
-    const nowMins = getLocalMins(itemRegion);
+    const localInfo = getLocalInfo(itemRegion);
+    const nowMins = localInfo.nowMins;
+    const offsetMins = localInfo.offsetMins;
     const status = (item.status || "").toUpperCase().trim();
 
     if (idx < 5) {
-      console.log(`[AlertLogic DEBUG] Checking Sched Order ${item.orderID}: Status=${status}, Slot=${item.slot}, NowMins=${nowMins}, Region=${itemRegion}`);
+      console.log(`[AlertLogic DEBUG] Checking Sched Order ${item.orderID}: Status=${status}, Slot=${item.slot}, NowMins=${nowMins}, Region=${itemRegion}, LocalDate=${localInfo.dateStr}`);
     }
 
     // Check if slot contains a date and if it's today
@@ -205,17 +270,14 @@ export function detectAlerts(
       if (dateMatch) {
         const d = new Date(dateMatch[1]);
         if (!isNaN(d.getTime())) {
-          // Compare using local date of the region if possible, but ISO today is usually fine for daily resets
-          const today = new Date();
-          const isToday = d.getDate() === today.getDate() && 
-                          d.getMonth() === today.getMonth() && 
-                          d.getFullYear() === today.getFullYear();
-          if (!isToday) return; // Skip if not today
+          // Compare using local date of the region
+          const slotDateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+          if (slotDateStr !== localInfo.dateStr) return; // Skip if not today in that region
         }
       }
     }
 
-    const slotInfo = parseSlot(item.slot);
+    const slotInfo = parseSlot(item.slot, offsetMins);
     if (!slotInfo) return;
 
 
@@ -249,17 +311,25 @@ export function detectAlerts(
           if (!matchesRegion) shouldTrigger = false;
         }
       }
+    } else if (shouldTrigger && triggerType && !scheduledConfig) {
+      // Default behavior if config is missing: allow PAST alerts but maybe restrict RUNNING
+      // For now, if config is missing, we follow the default logic (which might be too aggressive)
+      // but we MUST check dedup regardless.
     }
 
     if (shouldTrigger) {
-      const alertKey = `SCHED|${item.orderID}|${status}`.toLowerCase().trim();
-      results.push({
-        alertKey,
-        item,
-        statusTrigger: `Still in '${item.status}' Stage - ${item.slot}`,
-        bucket: item.slot,
-        type: 'SCHED'
-      });
+      const displaySlot = formatSlotDisplay(item.slot, offsetMins);
+      const alertKey = `SCHED|${item.orderID}|${status}|${normalize(item.slot)}`.toLowerCase().trim();
+      
+      if (!existingAlertIds.has(alertKey)) {
+        results.push({
+          alertKey,
+          item,
+          statusTrigger: `Stage: ${item.status || status} - ${displaySlot}`,
+          bucket: displaySlot,
+          type: 'SCHED'
+        });
+      }
     }
   });
 

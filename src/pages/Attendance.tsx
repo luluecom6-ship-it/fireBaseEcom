@@ -9,7 +9,7 @@ import { useCamera } from '../hooks/useCamera';
 interface AttendanceProps {
   user: User | null;
   attendanceStatus: AttendanceStatus;
-  onAttendanceSubmit: (image: string) => Promise<boolean>;
+  onAttendanceSubmit: (image: string) => Promise<any>;
   loading: boolean;
   navigateTo: (page: any) => void;
 }

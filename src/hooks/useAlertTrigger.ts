@@ -8,7 +8,12 @@ export function useAlertTrigger(
   escalationRules: EscalationRule[],
   alertLogs: AlertLog[],
   logAlertAction: (alert: Partial<MatrixItem> & { statusTrigger: string, triggeredAt: string, orderCreatedAt: string }, action: 'trigger') => Promise<void>,
-  scheduledThreshold: number = 30
+  scheduledThreshold: number = 30,
+  storeToRegion: Record<string, string> = {},
+  scheduledConfig?: {
+    pastSlot?: { isActive: boolean, regions: string[] };
+    runningSlot?: { isActive: boolean, regions: string[] };
+  }
 ) {
   const triggeredAlertsRef = useRef<Set<string>>(new Set());
 
@@ -35,15 +40,23 @@ export function useAlertTrigger(
     };
 
     const existingAlertIds = new Set<string>([
-      ...alertLogs.map(log => log.id.toLowerCase().trim()),
+      ...alertLogs.map(log => String(log.id || "").toLowerCase().trim()),
       ...(Array.from(triggeredAlertsRef.current) as string[])
     ]);
 
-    const newAlerts = detectAlerts(filteredMatrix, escalationRules, existingAlertIds, scheduledThreshold);
+    const newAlerts = detectAlerts(
+      filteredMatrix, 
+      escalationRules, 
+      existingAlertIds, 
+      scheduledThreshold,
+      storeToRegion,
+      scheduledConfig
+    );
 
     newAlerts.forEach(alert => {
       triggeredAlertsRef.current.add(alert.alertKey);
       logAlertAction({
+        id: alert.alertKey,
         orderId: alert.item.orderID,
         storeId: alert.item.storeID,
         statusTrigger: alert.statusTrigger,
@@ -53,5 +66,5 @@ export function useAlertTrigger(
         timestamp: new Date().toISOString()
       } as any, 'trigger');
     });
-  }, [matrixData, escalationRules, user, logAlertAction, alertLogs, scheduledThreshold]);
+  }, [matrixData, escalationRules, user, logAlertAction, alertLogs, scheduledThreshold, scheduledConfig, storeToRegion]);
 }

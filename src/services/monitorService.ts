@@ -1,5 +1,5 @@
-import { detectAlerts } from "../utils/alertLogic.js";
-import { executeGasRequest } from "./gasService.js";
+import { detectAlerts } from "../utils/alertLogic";
+import { executeGasRequest } from "./gasService";
 import axios from "axios";
 
 export async function runMonitorTick(db: any, messaging: any) {
@@ -22,24 +22,28 @@ export async function runMonitorTick(db: any, messaging: any) {
 
     // 2. Fetch Matrix Data & Admin Data from GAS via common service
     let baseUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
+    // V2 GAS URL added
+    const v2Url = "https://script.google.com/macros/s/AKfycbzIVMXK29x1t1YUrNPjyKt2v231WNcosaQJCW8bN4ZfTBMjUKK6GtIW4dRftri02z_gQw/exec";
     
     // Consistent fallback across all environments
     if (!baseUrl || baseUrl === "undefined" || !baseUrl.startsWith("http")) {
       baseUrl = "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec";
     }
     
-    console.log(`[Monitor DEBUG] Using GAS URL: ${baseUrl.substring(0, 50)}...`);
+    console.log(`[Monitor DEBUG] Using GAS URLs: V1=${baseUrl.substring(0, 50)}... | V2=${v2Url.substring(0, 50)}...`);
     
     console.log("[Monitor DEBUG] Fetching data via gasService...");
 
     // Using executeGasRequest ensures these requests are queued and cached
-    const [matrixRes, adminRes] = await Promise.all([
+    const [matrixRes, adminRes, matrixV2Res] = await Promise.all([
       executeGasRequest({ method: 'GET', url: `${baseUrl}?action=getMatrixData` }, { cacheKey: `GET:${baseUrl}:action=getMatrixData` }),
-      executeGasRequest({ method: 'GET', url: `${baseUrl}?action=getAdminData` }, { cacheKey: `GET:${baseUrl}:action=getAdminData` })
+      executeGasRequest({ method: 'GET', url: `${baseUrl}?action=getAdminData` }, { cacheKey: `GET:${baseUrl}:action=getAdminData` }),
+      executeGasRequest({ method: 'GET', url: `${v2Url}` }, { cacheKey: `GET:${v2Url}` })
     ]);
 
     const matrixRaw = matrixRes.data.status === "success" ? matrixRes.data.data : (matrixRes.data.data || matrixRes.data);
     const adminRaw = adminRes.data.status === "success" ? adminRes.data.data : (adminRes.data.data || adminRes.data);
+    const matrixV2Raw = matrixV2Res.data.status === "success" ? matrixV2Res.data.data : (matrixV2Res.data.data || matrixV2Res.data || []);
     
     if (!matrixRaw || !adminRaw) {
       console.error("[Monitor DEBUG] GAS data missing or invalid.", { matrix: !!matrixRaw, admin: !!adminRaw });
@@ -64,8 +68,68 @@ export async function runMonitorTick(db: any, messaging: any) {
       quick: processItems(matrixRaw.quick || []),
       schedule: processItems(matrixRaw.schedule || [])
     };
+    
+    // 3. Process V2 Data and integrate into alerts
+    if (Array.isArray(matrixV2Raw) && matrixV2Raw.length > 0) {
+      console.log(`[Monitor DEBUG] Processing ${matrixV2Raw.length} V2 orders...`);
+      
+      // I need some utility functions for V2 processing. 
+      // Instead of importing, I'll implement enough to match MatrixItem interface.
+      const v2Quick: any[] = [];
+      const v2Schedule: any[] = [];
+      const now = Date.now();
+      
+      matrixV2Raw.forEach((order: any) => {
+        const storeID = String(order.store_name || "").match(/^(\d{4})/) ? order.store_name.match(/^(\d{4})/)[1] : String(order.store_name || "").slice(0, 4);
+        const status = (order.partial_status || "CREATED").toUpperCase();
+        
+        // Age calculation
+        let ageMins = 0;
+        if (order.created_at) {
+          const created = new Date(order.created_at).getTime();
+          if (!isNaN(created)) ageMins = Math.floor((now - created) / 60000);
+        }
+        
+        // Bucket
+        let bucket = "60+ MIN";
+        if (ageMins < 5) bucket = "0-5 MIN";
+        else if (ageMins < 10) bucket = "5-10 MIN";
+        else if (ageMins < 15) bucket = "10-15 MIN";
+        else if (ageMins < 20) bucket = "15-20 MIN";
+        else if (ageMins < 30) bucket = "20-30 MIN";
+        else if (ageMins < 40) bucket = "30-40 MIN";
+        else if (ageMins < 50) bucket = "40-50 MIN";
+        else if (ageMins < 60) bucket = "50-60 MIN";
+
+        // Slot formulation for schedule
+        const slot = `${order.slot_from || ""} - ${order.slot_to || ""}`.trim();
+
+        const item = {
+          status,
+          storeID,
+          orderID: order.job_number || "",
+          slot,
+          bucket,
+          timestamp: order.created_at || ""
+        };
+
+        if (order.source === 'EXPRESS') {
+          v2Quick.push(item);
+        } else if (order.source === 'DEFAULT') {
+          v2Schedule.push(item);
+        }
+      });
+      
+      console.log(`[Monitor DEBUG] V2 Processed: Quick=${v2Quick.length}, Sched=${v2Schedule.length}`);
+      
+      // Merge with V1 data
+      // For now, we prefer V2 if it exists, but keeping V1 in case some stores are still on old system
+      matrixData.quick = [...matrixData.quick, ...v2Quick];
+      matrixData.schedule = [...matrixData.schedule, ...v2Schedule];
+    }
+
     const regions = adminRaw.regions || [];
-    console.log(`[Monitor DEBUG] Orders: Quick=${matrixData.quick.length}, Sched=${matrixData.schedule.length}, Regions Raw=${regions.length}`);
+    console.log(`[Monitor DEBUG] Total Orders (V1+V2): Quick=${matrixData.quick.length}, Sched=${matrixData.schedule.length}, Regions Raw=${regions.length}`);
 
     // 4. Fetch Existing Alerts (to avoid duplicates) - Only last 2 hours
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);

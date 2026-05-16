@@ -243,7 +243,6 @@ export function useAuth() {
 
   useEffect(() => {
     let userUnsubscribe: (() => void) | null = null;
-    let fallbackUnsubscribe: (() => void) | null = null;
 
     const authUnsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       setIsFirebaseAuthenticated(!!fbUser);
@@ -365,7 +364,6 @@ export function useAuth() {
     return () => {
       authUnsubscribe();
       if (userUnsubscribe) userUnsubscribe();
-      if (fallbackUnsubscribe) fallbackUnsubscribe();
     };
   }, [logout]);
 

@@ -1,7 +1,6 @@
 {
-  "name": "Jee V2 E-Commerce",
-  "description": "A modern, mobile-first warehouse management system with PWA support, Firebase-enabled real-time alerts, and biometric attendance.",
-  "requestFramePermissions": [
-    "camera"
-  ]
+  "name": "Matrix Intelligence",
+  "description": "Unified logistics intelligence platform with regional mapping, timezone-aware scheduling, real-time tracking, and predictive analytics.",
+  "requestFramePermissions": ["camera", "notifications"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

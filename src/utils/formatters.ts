@@ -1,4 +1,5 @@
 import { AGE_BUCKETS } from '../constants';
+import { parseServerDate } from './api';
 
 export const fixImageUrl = (url: any) => {
   if (!url) return "";
@@ -36,13 +37,7 @@ export const getImages = (url: any): string[] => {
 
 export const getAgeing = (triggeredAt: any) => {
   if (!triggeredAt) return "N/A";
-  const str = String(triggeredAt);
-  let start = new Date(str).getTime();
-  
-  if (isNaN(start)) {
-    const cleaned = str.replace(/,/g, '');
-    start = new Date(cleaned).getTime();
-  }
+  const start = parseServerDate(triggeredAt).getTime();
   
   if (isNaN(start)) return "N/A";
   const now = new Date().getTime();
@@ -54,20 +49,9 @@ export const getAgeing = (triggeredAt: any) => {
 
 export const getBucketFromAgeing = (createdAt: any, triggeredAt?: any) => {
   if (!createdAt) return "--";
-  const strCreated = String(createdAt);
-  const strTriggered = triggeredAt ? String(triggeredAt) : null;
   
-  let start = new Date(strCreated).getTime();
-  let end = strTriggered ? new Date(strTriggered).getTime() : new Date().getTime();
-
-  if (isNaN(start)) {
-    const cleaned = strCreated.replace(/,/g, '');
-    start = new Date(cleaned).getTime();
-  }
-  if (isNaN(end) && strTriggered) {
-    const cleaned = strTriggered.replace(/,/g, '');
-    end = new Date(cleaned).getTime();
-  }
+  const start = parseServerDate(createdAt).getTime();
+  const end = triggeredAt ? parseServerDate(triggeredAt).getTime() : new Date().getTime();
 
   if (isNaN(start)) return "--";
   

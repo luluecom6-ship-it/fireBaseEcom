@@ -24,12 +24,13 @@ interface DashboardProps {
   matrixData: MatrixData | null;
   setShowEarlyPunchOutConfirm: (show: boolean) => void;
   requestNotificationPermission: () => Promise<boolean>;
-  testAlert: () => void;
+  testAlert: () => any;
   testBuzzer: () => void;
   isInstallable: boolean;
   showInstallPrompt: () => Promise<void>;
   soundAlertsEnabled: boolean;
   onToggleSound: () => void;
+  onUpdateProfileImage?: (base64Image: string) => Promise<any>;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -50,7 +51,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
   isInstallable,
   showInstallPrompt,
   soundAlertsEnabled,
-  onToggleSound
+  onToggleSound,
+  onUpdateProfileImage
 }) => {
   const [isIOS, setIsIOS] = useState(false);
 
@@ -500,40 +502,63 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <motion.div 
               whileHover={{ y: -5 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => { fetchMatrixData(); navigateTo("matrix"); }}
-              className="bg-white p-3 sm:p-8 rounded-xl sm:rounded-[2.5rem] shadow-xl border border-slate-100 flex flex-col sm:flex-row items-center gap-2 sm:gap-6 cursor-pointer group"
+              onClick={() => { navigateTo("matrix-v2"); }}
+              className="bg-white p-3 sm:p-8 rounded-xl sm:rounded-[2.5rem] shadow-xl border border-blue-100 flex flex-col sm:flex-row items-center gap-2 sm:gap-6 cursor-pointer group relative overflow-hidden"
             >
-              <div className="h-10 w-10 sm:h-20 sm:w-20 rounded-xl sm:rounded-3xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition-all duration-300">
+              <div className="h-10 w-10 sm:h-20 sm:w-20 rounded-xl sm:rounded-3xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all duration-300">
                 <LayoutDashboard size={20} className="sm:hidden" />
                 <LayoutDashboard size={36} className="hidden sm:block" />
               </div>
               <div className="flex-1 text-center sm:text-left">
-                <h4 className="font-black text-slate-800 text-[11px] sm:text-xl tracking-tight">Matrix View</h4>
-                <p className="text-slate-500 text-[8px] sm:text-sm font-bold mt-0.5">Live Ageing</p>
-              </div>
-              <div className="hidden sm:flex h-10 w-10 rounded-full bg-slate-50 items-center justify-center text-slate-300 group-hover:bg-amber-50 group-hover:text-amber-600 transition-all">
-                <ArrowRight size={20} />
-              </div>
-            </motion.div>
-
-            <motion.div 
-              whileHover={{ y: -5 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => { fetchMatrixData(); navigateTo("analytics"); }}
-              className="bg-white p-3 sm:p-8 rounded-xl sm:rounded-[2.5rem] shadow-xl border border-slate-100 flex flex-col sm:flex-row items-center gap-2 sm:gap-6 cursor-pointer group"
-            >
-              <div className="h-10 w-10 sm:h-20 sm:w-20 rounded-xl sm:rounded-3xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all duration-300">
-                <BarChart3 size={20} className="sm:hidden" />
-                <BarChart3 size={36} className="hidden sm:block" />
-              </div>
-              <div className="flex-1 text-center sm:text-left">
-                <h4 className="font-black text-slate-800 text-[11px] sm:text-xl tracking-tight">Analytics</h4>
-                <p className="text-slate-500 text-[8px] sm:text-sm font-bold mt-0.5">Trends</p>
+                <h4 className="font-black text-slate-800 text-[11px] sm:text-xl tracking-tight">Matrix V2</h4>
+                <p className="text-slate-500 text-[8px] sm:text-sm font-bold mt-0.5">Quick Commerce</p>
               </div>
               <div className="hidden sm:flex h-10 w-10 rounded-full bg-slate-50 items-center justify-center text-slate-300 group-hover:bg-blue-50 group-hover:text-blue-600 transition-all">
                 <ArrowRight size={20} />
               </div>
             </motion.div>
+
+            {String(user.role || "").toLowerCase().trim() === "admin" && (
+              <>
+                <motion.div 
+                  whileHover={{ y: -5 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => { fetchMatrixData(); navigateTo("matrix"); }}
+                  className="bg-white p-3 sm:p-8 rounded-xl sm:rounded-[2.5rem] shadow-xl border border-slate-100 flex flex-col sm:flex-row items-center gap-2 sm:gap-6 cursor-pointer group"
+                >
+                  <div className="h-10 w-10 sm:h-20 sm:w-20 rounded-xl sm:rounded-3xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition-all duration-300">
+                    <LayoutDashboard size={20} className="sm:hidden" />
+                    <LayoutDashboard size={36} className="hidden sm:block" />
+                  </div>
+                  <div className="flex-1 text-center sm:text-left">
+                    <h4 className="font-black text-slate-800 text-[11px] sm:text-xl tracking-tight">Matrix View</h4>
+                    <p className="text-slate-500 text-[8px] sm:text-sm font-bold mt-0.5">Live Ageing</p>
+                  </div>
+                  <div className="hidden sm:flex h-10 w-10 rounded-full bg-slate-50 items-center justify-center text-slate-300 group-hover:bg-amber-50 group-hover:text-amber-600 transition-all">
+                    <ArrowRight size={20} />
+                  </div>
+                </motion.div>
+
+                <motion.div 
+                  whileHover={{ y: -5 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => { fetchMatrixData(); navigateTo("analytics"); }}
+                  className="bg-white p-3 sm:p-8 rounded-xl sm:rounded-[2.5rem] shadow-xl border border-slate-100 flex flex-col sm:flex-row items-center gap-2 sm:gap-6 cursor-pointer group"
+                >
+                  <div className="h-10 w-10 sm:h-20 sm:w-20 rounded-xl sm:rounded-3xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all duration-300">
+                    <BarChart3 size={20} className="sm:hidden" />
+                    <BarChart3 size={36} className="hidden sm:block" />
+                  </div>
+                  <div className="flex-1 text-center sm:text-left">
+                    <h4 className="font-black text-slate-800 text-[11px] sm:text-xl tracking-tight">Analytics</h4>
+                    <p className="text-slate-500 text-[8px] sm:text-sm font-bold mt-0.5">Trends</p>
+                  </div>
+                  <div className="hidden sm:flex h-10 w-10 rounded-full bg-slate-50 items-center justify-center text-slate-300 group-hover:bg-blue-50 group-hover:text-blue-600 transition-all">
+                    <ArrowRight size={20} />
+                  </div>
+                </motion.div>
+              </>
+            )}
           </>
         )}
       </div>

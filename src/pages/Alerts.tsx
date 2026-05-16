@@ -4,6 +4,7 @@ import { Clock, RefreshCw } from 'lucide-react';
 import { AlertLog, User } from '../types';
 import { Header } from '../components/layout/Header';
 import { getBucketFromAgeing } from '../utils/formatters';
+import { parseServerDate } from '../utils/api';
 import { cn } from '../lib/utils';
 
 interface AlertsProps {
@@ -126,7 +127,7 @@ export const Alerts: React.FC<AlertsProps> = ({
                   [...filteredLogs].reverse().map(log => (
                     <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="p-4 sm:p-6 text-[10px] sm:text-xs font-bold text-slate-500">
-                        {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {parseServerDate(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </td>
                       <td className="p-4 sm:p-6 font-black text-slate-800 text-xs sm:text-sm">{log.orderId}</td>
                       <td className="p-4 sm:p-6 text-[10px] sm:text-xs font-bold text-slate-500">{log.storeId}</td>
