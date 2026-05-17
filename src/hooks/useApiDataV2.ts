@@ -30,7 +30,7 @@ export function useApiDataV2(): UseApiDataReturn {
       setError(null);
 
       // Use the proxy instead of direct GAS call to avoid CORS issues
-      const proxyUrl = `${API_URL}?gasUrl=${encodeURIComponent(V2_GAS_URL)}&_t=${Date.now()}&_skipCache=true`;
+      const proxyUrl = `${API_URL}?gasUrl=${encodeURIComponent(V2_GAS_URL)}&action=getMatrixData&_t=${Date.now()}&_skipCache=true`;
       const response = await robustFetch(proxyUrl);
 
       if (!response.ok) {
