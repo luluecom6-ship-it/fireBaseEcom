@@ -38,7 +38,20 @@ export function useApiDataV2(): UseApiDataReturn {
       }
 
       const result = await response.json();
-      console.log('[useApiDataV2] API Response raw:', result);
+
+        // ✅ PASTE DEBUG LOG HERE ↓↓↓
+        console.log('[DEBUG] Full result:', JSON.stringify(result, null, 2).substring(0, 500));
+        console.log('[DEBUG] result.data type:', typeof result.data);
+        console.log('[DEBUG] result.data isArray:', Array.isArray(result.data));
+        console.log('[DEBUG] result.data keys:', result.data ? Object.keys(result.data).slice(0, 5) : 'null');
+        // ✅ END DEBUG LOG ↑↑↑
+        
+        console.log('[useApiDataV2] API Response received:', {
+          type: typeof result,
+          isArray: Array.isArray(result),
+          size: JSON.stringify(result).length,
+          preview: JSON.stringify(result).substring(0, 200)
+        });
 
       // Handle the new JSON format - could be direct array or wrapped in object
       // let orders: Order[] = [];
