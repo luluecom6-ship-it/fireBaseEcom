@@ -94,14 +94,7 @@ if (Array.isArray(result)) {
   }
 }
 
-      const result = await response.json();
-
-// TEMPORARY DEBUG - remove after confirming
-console.log('[DEBUG] Full result:', JSON.stringify(result, null, 2).substring(0, 500));
-console.log('[DEBUG] result.data type:', typeof result.data);
-console.log('[DEBUG] result.data isArray:', Array.isArray(result.data));
-console.log('[DEBUG] result.data keys:', result.data ? Object.keys(result.data).slice(0, 5) : 'null');
-
+     
       // If we got valid data from API (even empty array), use it
       if (Array.isArray(orders)) {
         console.log(`[useApiDataV2] Successfully sets ${orders.length} orders from API`);
