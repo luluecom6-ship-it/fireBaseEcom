@@ -41,24 +41,66 @@ export function useApiDataV2(): UseApiDataReturn {
       console.log('[useApiDataV2] API Response raw:', result);
 
       // Handle the new JSON format - could be direct array or wrapped in object
+      // let orders: Order[] = [];
+
+      // if (Array.isArray(result)) {
+      //   orders = result;
+      // } else if (result && typeof result === 'object') {
+      //   // Look for any property that contains an array
+      //   const arrayProps = Object.keys(result).filter(k => Array.isArray(result[k]));
+        
+      //   if (arrayProps.length > 0) {
+      //     // Priority keys to check first
+      //     const priorityKeys = ['data', 'orders', 'results', 'rows', 'items', 'matrix'];
+      //     const foundKey = priorityKeys.find(k => Array.isArray(result[k])) || arrayProps[0];
+      //     orders = result[foundKey];
+      //     console.log(`[useApiDataV2] Found array in property: "${foundKey}" (${orders.length} items)`);
+      //   } else if (result.status === 'error') {
+      //      throw new Error(result.message || 'API returned an error status');
+      //   }
+      // }
+
       let orders: Order[] = [];
 
-      if (Array.isArray(result)) {
-        orders = result;
-      } else if (result && typeof result === 'object') {
-        // Look for any property that contains an array
-        const arrayProps = Object.keys(result).filter(k => Array.isArray(result[k]));
-        
-        if (arrayProps.length > 0) {
-          // Priority keys to check first
-          const priorityKeys = ['data', 'orders', 'results', 'rows', 'items', 'matrix'];
-          const foundKey = priorityKeys.find(k => Array.isArray(result[k])) || arrayProps[0];
-          orders = result[foundKey];
-          console.log(`[useApiDataV2] Found array in property: "${foundKey}" (${orders.length} items)`);
-        } else if (result.status === 'error') {
-           throw new Error(result.message || 'API returned an error status');
-        }
+if (Array.isArray(result)) {
+  // GAS returned a direct array
+  orders = result;
+
+} else if (result && typeof result === 'object') {
+  const inner = result.data ?? result;
+
+  if (Array.isArray(inner)) {
+    // data IS the array
+    orders = inner;
+
+  } else if (inner && typeof inner === 'object') {
+    // Try named array keys inside data
+    const candidate =
+      inner.orders ??
+      inner.rows ??
+      inner.items ??
+      inner.results ??
+      null;
+
+    if (Array.isArray(candidate)) {
+      orders = candidate;
+    } else {
+      // GAS often returns object-as-array: {"0":{...},"1":{...}}
+      const vals = Object.values(inner);
+      if (vals.length > 0 && vals.every(v => v && typeof v === 'object' && !Array.isArray(v))) {
+        orders = vals as Order[];
       }
+    }
+  }
+}
+
+      const result = await response.json();
+
+// TEMPORARY DEBUG - remove after confirming
+console.log('[DEBUG] Full result:', JSON.stringify(result, null, 2).substring(0, 500));
+console.log('[DEBUG] result.data type:', typeof result.data);
+console.log('[DEBUG] result.data isArray:', Array.isArray(result.data));
+console.log('[DEBUG] result.data keys:', result.data ? Object.keys(result.data).slice(0, 5) : 'null');
 
       // If we got valid data from API (even empty array), use it
       if (Array.isArray(orders)) {
