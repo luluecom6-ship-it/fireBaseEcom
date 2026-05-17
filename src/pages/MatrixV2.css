@@ -1742,3 +1742,35 @@
   border: 1px dashed rgba(255, 255, 255, 0.05);
   border-radius: 12px;
 }
+
+.matrix-v2-scope .api-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 16px 12px;
+  padding: 8px 14px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: 8px;
+  font-size: 0.75rem;
+  color: #fbbf24;
+}
+
+.matrix-v2-scope .data-source-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.matrix-v2-scope .api-diagnostic-tooltip {
+  color: #f59e0b;
+  cursor: help;
+  display: flex;
+  align-items: center;
+  opacity: 0.8;
+  transition: opacity 0.2s;
+}
+
+.matrix-v2-scope .api-diagnostic-tooltip:hover {
+  opacity: 1;
+}
