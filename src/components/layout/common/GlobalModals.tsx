@@ -19,7 +19,7 @@ interface GlobalModalsProps {
   handleDeepDive: (order: OrderRecord) => void;
   successOrder: OrderRecord | null;
   setSuccessOrder: (order: OrderRecord | null) => void;
-  navigateTo: (page: string) => void;
+  navigateTo: (page: any) => void;
   matrixDetail: MatrixDetail | null;
   setMatrixDetail: (detail: MatrixDetail | null) => void;
   showToast: (msg: string, type?: 'success' | 'error') => void;

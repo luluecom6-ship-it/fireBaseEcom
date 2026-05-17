@@ -4,10 +4,12 @@ import { Package, ArrowRight } from 'lucide-react';
 
 interface LoginProps {
   onLogin: (username: string, password: string) => void;
+  onEmailLogin?: (email: string, pass: string) => Promise<void>;
+  onGoogleLogin?: () => Promise<any>;
   loading: boolean;
 }
 
-export const Login: React.FC<LoginProps> = ({ onLogin, loading }) => {
+export const Login: React.FC<LoginProps> = ({ onLogin, onEmailLogin, onGoogleLogin, loading }) => {
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);

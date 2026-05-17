@@ -1,4 +1,4 @@
-import axiosLib from 'axios';
+import axios from 'axios';
 
 // Optimized Cache for GAS Proxy
 const gasCache = new Map<string, { data: any, headers: any, status: number, expiry: number }>();
@@ -41,7 +41,7 @@ async function processGasQueue() {
     console.log(`[GAS Queue] Executing [${config.method}] ${action} (${activeRequests}/${MAX_CONCURRENT}) QSize: ${gasQueue.length}`);
     
     // Enforce a strict timeout at the axios level
-    const response = await axiosLib({
+    const response = await axios({
       ...config,
       timeout: 120000 // 120s timeout for individual GAS requests
     });

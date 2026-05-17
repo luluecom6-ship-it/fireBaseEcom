@@ -113,10 +113,12 @@ export function parseServerDate(dateStr: any): Date {
   }
   
   // If it's a simple YYYY-MM-DD HH:mm:ss format, assume UTC and add 'Z'
-  const isoStr = str.replace(' ', 'T');
-  if (isoStr.includes('T') && !isoStr.includes('Z')) {
+  const trimmed = str.trim();
+  const isoStr = trimmed.replace(' ', 'T');
+  if (/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$/.test(isoStr)) {
     return new Date(isoStr + 'Z');
   }
   
-  return new Date(str);
+  const finalDate = new Date(str);
+  return isNaN(finalDate.getTime()) ? new Date() : finalDate;
 }

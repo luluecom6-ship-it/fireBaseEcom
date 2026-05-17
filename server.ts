@@ -10,8 +10,8 @@ import cors from "cors";
 import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import fs from "fs";
-import { executeGasRequest } from "./src/services/gasService.ts";
-import { runMonitorTick } from "./src/services/monitorService.ts";
+import { executeGasRequest } from "./src/services/gasService";
+import { runMonitorTick } from "./src/services/monitorService";
 
 const FIRESTORE_DB_ID = process.env.FIREBASE_DATABASE_ID || 'ai-studio-589cf723-ab60-4b6f-a2cd-f84f8c8c1b48';
 
@@ -102,8 +102,11 @@ async function startServer() {
   });
 
   // GAS Proxy Route
-  app.all("/api/proxy-gas", async (req, res) => {
+    app.all("/api/proxy-gas", async (req, res) => {
+    const start = Date.now();
+    const action = req.query.action || "unknown";
     try {
+      console.log(`[Proxy] >>> START ${req.method} action=${action}`);
       let rawUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
       const queryGasUrl = req.query.gasUrl;
       if (queryGasUrl) rawUrl = String(queryGasUrl).trim();
@@ -120,7 +123,6 @@ async function startServer() {
         return res.status(400).json({ status: "error", message: "Invalid GAS URL configuration" });
       }
 
-      const action = req.query.action || "unknown";
       console.log(`[Proxy] Incoming request: ${req.method} action=${action}`);
 
       const cacheKey = req.method + ":" + rawUrl + ":" + JSON.stringify(Object.keys(req.query).sort().reduce((acc: any, k) => {
@@ -188,6 +190,7 @@ async function startServer() {
       }
       
       res.status(response.status).send(response.data);
+      console.log(`[Proxy] <<< END ${req.method} action=${action} in ${Date.now() - start}ms`);
     } catch (error: any) {
       console.error(`[Proxy] FATAL Error for ${req.query.action}:`, error.message);
       if (!res.headersSent) {

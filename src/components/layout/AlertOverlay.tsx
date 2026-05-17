@@ -11,7 +11,7 @@ interface AlertOverlayProps {
   expandedAlertId: string | null;
   setExpandedAlertId: (id: string | null) => void;
   adminHiddenAlerts: string[];
-  handleAlertAction: (alert: ActiveAlert, action: 'acknowledge' | 'escalate' | 'hide') => Promise<void>;
+  handleAlertAction: (alert: ActiveAlert, action: 'acknowledge' | 'escalate' | 'hide') => Promise<any>;
   setMinimizedAlerts: React.Dispatch<React.SetStateAction<string[]>>;
   lastBroadcast: { id: string, title: string, body: string } | null;
   setLastBroadcast: (broadcast: { id: string, title: string, body: string } | null) => void;

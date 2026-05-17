@@ -2,7 +2,6 @@ import React from 'react';
 import { cn } from '../../lib/utils';
 import { MatrixItem } from '../../types';
 import { STATUSES } from '../../constants';
-import { getAgeing, getBucketFromAgeing, sortSlots } from '../../utils/formatters';
 
 interface MatrixTableProps {
   title: string;

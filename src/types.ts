@@ -92,7 +92,7 @@ export interface EscalationRule {
   id: string;
   status: string;
   bucket: string;
-  region: string;
+  region?: string;
   escalationUser: string;
   isActive: boolean;
 }
@@ -100,7 +100,47 @@ export interface EscalationRule {
 export interface Toast {
   message: string;
   type: 'success' | 'error' | 'info';
-  id: number;
+  id?: number;
+}
+
+export interface StaffTimeline {
+  empId: string;
+  name: string;
+  role: string;
+  shiftStart: number;
+  shiftHours: number;
+  isWeekOff: boolean;
+  isActive: boolean;
+  punchedIn: boolean;
+}
+
+export interface StoreSummary {
+  storeId: string;
+  totalStaff: number;
+  activeNow: number;
+  weekOff: number;
+  notStarted: number;
+  staffTimeline: StaffTimeline[];
+}
+
+export interface HourlySlot {
+  hour: number;
+  label: string;
+  active: number;
+  weekOff: number;
+  notStarted: number;
+}
+
+export interface StaffDashboardData {
+  summary: {
+    totalStores: number;
+    totalStaff: number;
+    activeNow: number;
+    weekOff: number;
+    notLoggedIn: number;
+  };
+  hourlyBreakdown: HourlySlot[];
+  storeBreakdown: StoreSummary[];
 }
 
 export interface AttendanceStatus {

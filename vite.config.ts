@@ -12,7 +12,7 @@ export default defineConfig(({mode}) => {
     },
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(process.cwd(), '.'),
       },
     },
     server: {
@@ -21,6 +21,8 @@ export default defineConfig(({mode}) => {
       hmr: process.env.DISABLE_HMR !== 'true' ? {
         overlay: false
       } : false,
+      port: 3000,
+      host: '0.0.0.0',
     },
     build: {
       outDir: 'dist',

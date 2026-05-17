@@ -47,10 +47,11 @@ import { Alerts } from "./pages/Alerts";
 import { AttendanceHistory } from "./pages/AttendanceHistory";
 import { RosterDashboard } from "./pages/RosterDashboard";
 import { AttendanceIntelligence } from "./pages/AttendanceDashboard2";
+import MatrixV2 from "./pages/MatrixV2";
 
 export default function App() {
   // Navigation
-  const [page, setPage] = useState<"login" | "dashboard" | "upload" | "attendance" | "admin" | "search" | "matrix" | "analytics" | "alerts" | "attendance-history" | "roster" | "attendance-v2">("login");
+  const [page, setPage] = useState<"login" | "dashboard" | "upload" | "attendance" | "admin" | "search" | "matrix" | "analytics" | "alerts" | "attendance-history" | "roster" | "attendance-v2" | "matrix-v2">("login");
   
   // Auth Hook
   const { 
@@ -255,6 +256,14 @@ export default function App() {
   // Navigation Helper
   const navigateTo = useCallback((target: typeof page) => {
     const role = String(user?.role || "").toLowerCase().trim();
+    if (target === "matrix" && role !== "admin") {
+      showToast("Access Denied: Admin Only", "error");
+      return;
+    }
+    if (target === "analytics" && role !== "admin") {
+      showToast("Access Denied: Admin Only", "error");
+      return;
+    }
     if (target === "admin" && role !== "admin" && role !== "supervisor") {
       showToast("Access Denied: Admin or Supervisor Only", "error");
       return;
@@ -267,9 +276,13 @@ export default function App() {
       showToast("Access Denied: Admin, Supervisor or Manager only", "error");
       return;
     }
+    if (target === "matrix-v2" && role !== "admin" && role !== "supervisor" && role !== "manager" && role !== "picker" && role !== "store") {
+      showToast("Access Denied: Restricted access", "error");
+      return;
+    }
     setPage(target);
     if (target === "admin" || target === "attendance-v2") fetchAdminData();
-    if (target === "matrix" || target === "dashboard") fetchMatrixData();
+    if (target === "matrix" || target === "dashboard" || target === "matrix-v2") fetchMatrixData();
     window.scrollTo(0, 0);
   }, [user, showToast, fetchAdminData, fetchMatrixData]);
 
@@ -390,6 +403,29 @@ export default function App() {
           />
         );
       case "matrix":
+        if (user?.role !== 'admin') {
+          return <Dashboard 
+            user={user} 
+            onLogout={logout} 
+            attendanceStatus={attendanceStatus} 
+            hoursWorked={hoursWorked} 
+            isShiftComplete={isShiftComplete} 
+            navigateTo={navigateTo as any} 
+            fetchAdminData={fetchAdminData} 
+            fetchMatrixData={fetchMatrixData} 
+            isMatrixLoading={isMatrixLoading} 
+            matrixData={matrixData} 
+            setShowEarlyPunchOutConfirm={setShowEarlyPunchOutConfirm}
+            requestNotificationPermission={requestNotificationPermission}
+            testAlert={testAlert}
+            testBuzzer={testBuzzer}
+            isInstallable={isInstallable}
+            showInstallPrompt={showInstallPrompt}
+            soundAlertsEnabled={user?.soundAlertsEnabled !== false}
+            onToggleSound={() => handleToggleSound()}
+            onUpdateProfileImage={updateProfileImage}
+          />;
+        }
         return (
           <Matrix 
             matrixData={matrixData}
@@ -397,18 +433,41 @@ export default function App() {
             isMatrixLoading={isMatrixLoading}
             onRefetch={fetchMatrixData}
             setMatrixDetail={setMatrixDetail}
-            navigateTo={navigateTo}
+            navigateTo={navigateTo as any}
             user={user}
           />
         );
       case "analytics":
+        if (user?.role !== 'admin') {
+          return <Dashboard 
+            user={user} 
+            onLogout={logout} 
+            attendanceStatus={attendanceStatus} 
+            hoursWorked={hoursWorked} 
+            isShiftComplete={isShiftComplete} 
+            navigateTo={navigateTo as any} 
+            fetchAdminData={fetchAdminData} 
+            fetchMatrixData={fetchMatrixData} 
+            isMatrixLoading={isMatrixLoading} 
+            matrixData={matrixData} 
+            setShowEarlyPunchOutConfirm={setShowEarlyPunchOutConfirm}
+            requestNotificationPermission={requestNotificationPermission}
+            testAlert={testAlert}
+            testBuzzer={testBuzzer}
+            isInstallable={isInstallable}
+            showInstallPrompt={showInstallPrompt}
+            soundAlertsEnabled={user?.soundAlertsEnabled !== false}
+            onToggleSound={() => handleToggleSound()}
+            onUpdateProfileImage={updateProfileImage}
+          />;
+        }
         return (
           <Analytics 
             matrixData={matrixData}
             adminData={adminData}
             isMatrixLoading={isMatrixLoading}
             onRefetch={fetchMatrixData}
-            navigateTo={navigateTo}
+            navigateTo={navigateTo as any}
             user={user}
           />
         );
@@ -417,7 +476,7 @@ export default function App() {
           <Alerts 
             alertLogs={alertLogs}
             onViewImage={setFullImage}
-            navigateTo={navigateTo}
+            navigateTo={navigateTo as any}
             user={user}
           />
         );
@@ -448,7 +507,7 @@ export default function App() {
             staffStatus={staffStatus}
             scheduledThreshold={scheduledThreshold}
             setScheduledThreshold={setScheduledThreshold}
-            navigateTo={navigateTo}
+            navigateTo={navigateTo as any}
             onViewImage={setFullImage}
             onGoogleLogin={loginWithGoogle}
             onEmailLogin={handleEmailLogin}
@@ -461,7 +520,7 @@ export default function App() {
         return (
           <AttendanceHistory 
             user={user}
-            navigateTo={navigateTo}
+            navigateTo={navigateTo as any}
             onViewImage={setFullImage}
           />
         );
@@ -469,7 +528,7 @@ export default function App() {
         return (
           <RosterDashboard
             user={user}
-            navigateTo={navigateTo}
+            navigateTo={navigateTo as any}
           />
         );
       case "attendance-v2":
@@ -477,10 +536,27 @@ export default function App() {
           <AttendanceIntelligence
             user={user}
             adminData={adminData}
-            navigateTo={navigateTo}
+            navigateTo={navigateTo as any}
             onViewImage={setFullImage}
             onRefetch={fetchAdminData}
             isLoading={loading}
+          />
+        );
+      case "matrix-v2":
+        return (
+          <MatrixV2 
+            user={user}
+            adminData={adminData}
+            staffStatus={staffStatus}
+            navigateTo={navigateTo as any}
+            escalationRules={escalationRules}
+            alertLogs={alertLogs}
+            logAlertAction={logAlertAction}
+            scheduledThreshold={scheduledThreshold}
+            scheduledConfig={{
+              pastSlot: { isActive: scheduledPastSlotActive, regions: scheduledPastSlotRegions },
+              runningSlot: { isActive: scheduledRunningSlotActive, regions: scheduledRunningSlotRegions }
+            }}
           />
         );
       default:
@@ -491,7 +567,7 @@ export default function App() {
             attendanceStatus={attendanceStatus} 
             hoursWorked={hoursWorked} 
             isShiftComplete={isShiftComplete} 
-            navigateTo={navigateTo} 
+            navigateTo={navigateTo as any} 
             fetchAdminData={fetchAdminData} 
             fetchMatrixData={fetchMatrixData} 
             isMatrixLoading={isMatrixLoading} 
@@ -528,6 +604,7 @@ export default function App() {
             case 'attendance-history': return 'Attendance History';
             case 'roster':            return 'Roster & Availability';
             case 'attendance-v2': return 'Workforce Intelligence';
+            case 'matrix-v2': return 'Matrix Intelligence V2';
             default: return page.charAt(0).toUpperCase() + page.slice(1).replace("-", " ");
           }
         })()} 
@@ -572,7 +649,7 @@ export default function App() {
         }}
         successOrder={successOrder}
         setSuccessOrder={setSuccessOrder}
-        navigateTo={navigateTo}
+        navigateTo={navigateTo as any}
         matrixDetail={matrixDetail}
         setMatrixDetail={setMatrixDetail}
         showToast={showToast}

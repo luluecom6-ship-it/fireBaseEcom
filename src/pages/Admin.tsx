@@ -31,7 +31,7 @@ interface AdminProps {
   setEscalationRules: React.Dispatch<React.SetStateAction<EscalationRule[]>>;
   maxImages: number;
   setMaxImages: (num: number) => void;
-  onSaveConfig: () => Promise<void>;
+  onSaveConfig: () => Promise<any>;
   isSavingConfig: boolean;
   systemSoundEnabled: boolean;
   setSystemSoundEnabled: (val: boolean) => void;
@@ -368,7 +368,20 @@ export const Admin: React.FC<AdminProps> = ({
             {activeTab === 'users' && (
             <button 
               onClick={() => {
-                setUserForm({ username: '', name: '', empId: '', role: 'picker', storeId: '', region: '', password: '', shiftStart: 6, shiftHours: 8, weekOffDay: '' });
+                setUserForm({ 
+                  username: '', 
+                  name: '', 
+                  empId: '', 
+                  role: 'picker', 
+                  storeId: '', 
+                  region: '', 
+                  password: '', 
+                  shiftStart: 6, 
+                  shiftHours: 8, 
+                  weekOffDay: '',
+                  status: 'Active',
+                  profileImage: ''
+                });
                 setShowAddUserModal(true);
               }}
               className="bg-blue-600 text-white p-2 rounded-xl shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all flex items-center gap-2"
@@ -789,7 +802,7 @@ export const Admin: React.FC<AdminProps> = ({
                   onClick={() => navigateTo("alerts")}
                   className="px-3 py-1.5 sm:px-4 sm:py-2 bg-slate-100 text-slate-700 rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center gap-1.5 sm:gap-2"
                 >
-                  <History size={12} sm:size={14} /> History
+                  <History size={14} /> History
                 </button>
                 <button 
                   onClick={onSaveConfig}
@@ -799,7 +812,7 @@ export const Admin: React.FC<AdminProps> = ({
                     (isSavingConfig || !isFirebaseAuthenticated) ? "bg-slate-100 text-slate-400" : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-200"
                   )}
                 >
-                  <Save size={12} sm:size={14} /> {isSavingConfig ? "Syncing..." : "Save"}
+                  <Save size={14} /> {isSavingConfig ? "Syncing..." : "Save"}
                 </button>
                 <button 
                   onClick={() => {
@@ -888,7 +901,7 @@ export const Admin: React.FC<AdminProps> = ({
                           onClick={() => setEscalationRules(prev => prev.filter(r => r.id !== rule.id))}
                           className="text-red-400 hover:text-red-600 transition-colors"
                         >
-                          <X size={16} sm:size={18} />
+                          <X size={18} />
                         </button>
                       </td>
                     </tr>
@@ -909,6 +922,16 @@ export const Admin: React.FC<AdminProps> = ({
                   <Clock size={20} className="text-indigo-600 hidden sm:block" />
                   Scheduled Alerts Config
                 </h4>
+                <button 
+                  onClick={onSaveConfig}
+                  disabled={isSavingConfig || !isFirebaseAuthenticated}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
+                    (isSavingConfig || !isFirebaseAuthenticated) ? "bg-slate-100 text-slate-400" : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-md"
+                  )}
+                >
+                  <Save size={12} /> {isSavingConfig ? "Saving..." : "Save Config"}
+                </button>
               </div>
               
               <div className="overflow-x-auto">
@@ -1139,7 +1162,7 @@ export const Admin: React.FC<AdminProps> = ({
                 <button 
                   onClick={() => {
                     staffStatus.forEach(s => setSoundAlertsEnabled(false, s.empId));
-                    showToast("All Buzzers Disabled Remotely", "info");
+                    showToast("All Buzzers Disabled Remotely", "success");
                   }}
                   className="flex-1 sm:flex-none px-4 py-2 bg-red-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg shadow-red-900/40"
                 >
