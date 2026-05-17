@@ -1,6 +1,6 @@
 {
   "name": "Matrix Intelligence",
-  "description": "Unified logistics intelligence platform with regional mapping, timezone-aware scheduling, real-time tracking, and predictive analytics.",
+  "description": "v7.2: Unified logistics intelligence platform with critical recovery fixes, regional mapping, and timezone-aware scheduling.",
   "requestFramePermissions": ["camera", "notifications"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

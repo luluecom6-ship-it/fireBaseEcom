@@ -5,7 +5,8 @@ import { API_URL } from '../constants';
 import { robustFetch } from '../utils/api';
 
 // V2 GAS URL added to proxy options
-const V2_GAS_URL = "https://script.google.com/macros/s/AKfycbzIVMXK29x1t1YUrNPjyKt2v231WNcosaQJCW8bN4ZfTBMjUKK6GtIW4dRftri02z_gQw/exec";
+const FALLBACK_V2_GAS_URL = "https://script.google.com/macros/s/AKfycbzIVMXK29x1t1YUrNPjyKt2v231WNcosaQJCW8bN4ZfTBMjUKK6GtIW4dRftri02z_gQw/exec";
+const V2_GAS_URL = import.meta.env.VITE_V2_GAS_URL || FALLBACK_V2_GAS_URL;
 
 interface UseApiDataReturn {
   data: Order[];

@@ -1,22 +1,26 @@
-# Project Context: Version 7.1 (Regional Intelligence & Temporal Precision)
+# Project Context: Version 7.2 (System Stability & Structural Integrity)
 
-Whenever the user refers to **Version 7.1**, it refers to the application state as of May 16, 2026, with the following enhancements:
+Whenever the user refers to **Version 7.2**, it refers to the application state as of May 17, 2026, with the following enhancements:
 
-## Core Enhancements (v7.1)
-1. **Regional Mapping Intelligence**:
+## Core Enhancements (v7.2)
+1. **Critical System Recovery**:
+   - **Structural Alignment**: Restored missing structural files (`/src/lib/utils.ts`, `/src/utils/imageUtils.ts`, `/src/components/Matrix/MatrixTable.tsx`) that were causing build failures and loading issues.
+   - **Import Integrity**: Fixed broken relative imports across numerous pages (Matrix, Admin, Alerts, etc.) to ensure reliable module resolution.
+
+2. **Regional Mapping Intelligence (v7.1 baseline)**:
    - **Unified Store-Region Mapping**: Integrated data from Admin Control to map stores to their respective regions (UAE, KSA, India, etc.).
    - **Regional Filtering & Badges**: Added region-specific filtering logic to the Management view and visual region badges to store cards for instant geographic context.
 
-2. **Temporal Alignment (Timezone Precision)**:
+3. **Temporal Alignment (Timezone Precision)**:
    - **Regional UTC Offsets**: Implemented intelligent timezone offsets for Scheduled Commerce delivery slots (UTC+4 for UAE/Oman, UTC+3 for KSA/Qatar, UTC+5.5 for India).
    - **Source-Corrected Bucketing**: Fixed "slot shifting" where orders appeared in incorrect time buckets due to UTC/Local time mismatches.
 
-3. **UI Accessibility & Reliability**:
+4. **UI Accessibility & Reliability**:
    - **Dark-Mode Contrast Fix**: Optimized filter dropdown styling with high-contrast backgrounds and visible text for selection menus.
    - **Dynamic Source Tagging**: Corrected "Order Source" logic in Recent Orders lists, using dynamic, color-coded tags (Emerald for EXPRESS, Blue for SCHEDULE) that accurately reflect real-time order data.
    - **Navigation Integrity**: Restored functional back-linkage from Store Detail views to the primary Management dashboard.
 
-## Previous Enhancements (v7.0 preserved)
+## Previous Enhancements (v7.1 preserved)
 1. **High-Fidelity Order Lifecycle**:
    - **12-Box Breakdown**: Comprehensive lifecycle matrix tracking from Order Created to Multi-stage Delivery.
    - **Wait-Time Intelligence**: Calculation of Picker vs. Driver wait times using synchronized timestamps.
@@ -47,4 +51,4 @@ Whenever the user refers to **Version 7.1**, it refers to the application state 
 - **Precision Styling**: Custom CSS scope (`.matrix-v2-scope`) for the Indigo/Slate "High-Tech Dashboard" aesthetic.
 
 ## Persistence Instruction
-This file serves as the definitive reference for Version 7.1. All future modifications should build upon this baseline unless otherwise specified.
+This file serves as the definitive reference for Version 7.2. All future modifications should build upon this baseline unless otherwise specified.

@@ -23,7 +23,8 @@ export async function runMonitorTick(db: any, messaging: any) {
     // 2. Fetch Matrix Data & Admin Data from GAS via common service
     let baseUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
     // V2 GAS URL added
-    const v2Url = "https://script.google.com/macros/s/AKfycbzIVMXK29x1t1YUrNPjyKt2v231WNcosaQJCW8bN4ZfTBMjUKK6GtIW4dRftri02z_gQw/exec";
+    const FALLBACK_V2_GAS_URL = "https://script.google.com/macros/s/AKfycbzIVMXK29x1t1YUrNPjyKt2v231WNcosaQJCW8bN4ZfTBMjUKK6GtIW4dRftri02z_gQw/exec";
+    const v2Url = (process.env.V2_GAS_URL || process.env.VITE_V2_GAS_URL || FALLBACK_V2_GAS_URL).trim();
     
     // Consistent fallback across all environments
     if (!baseUrl || baseUrl === "undefined" || !baseUrl.startsWith("http")) {
