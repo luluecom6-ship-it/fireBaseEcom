@@ -1,0 +1,193 @@
+[
+  {
+    "job_number": "Lulu-323539209013INP1",
+    "source": "EXPRESS",
+    "partial_status": "GOING_TO_DESTINATION",
+    "is_big_order": "YES",
+    "created_at": "2026-05-14T12:22:26.321Z",
+    "slot_from": "2026-05-14T12:22:25.000Z",
+    "slot_to": "2026-05-14T13:22:25.000Z",
+    "origin_name": "2382 - LH,FESTIVAL PLAZA,DUBAI",
+    "origin_lat": 25.029966724337218,
+    "origin_lng": 55.10755452679831,
+    "dest_lat": 25.039165296328566,
+    "dest_lng": 55.143539663404226,
+    "store_name": "2382 - LH,FESTIVAL PLAZA,DUBAI",
+    "packages_count": 4,
+    "items": [
+      {"item_name": "Al Rawabi Full Cream Fresh Yoghurt 1 kg", "item_status": "ADDED", "quantity": 1, "found_qty": 1, "sku": "293819", "location": "26A-SH238273", "package_ref": "23821189", "package_name": "Mto1", "photo_url": "https://bf1af2.cdn.akinoncloud.com/products/2024/09/09/54018/37bd2362-1d55-4899-af5d-8d64e65e6f8b.jpg"},
+      {"item_name": "Mango Alphonso 1 kg", "item_status": "ADDED", "quantity": 2, "found_qty": 2, "sku": "150351_EA", "location": "29-SH238243", "package_ref": "23821189", "package_name": "Mto1", "photo_url": "https://bf1af2.cdn.akinoncloud.com/products/2026/04/27/146026/2be3058b-83ba-42ac-8c13-dac1db80dffe.jpg"},
+      {"item_name": "Watermelon Kiran India 1 kg", "item_status": "ADDED", "quantity": 2, "found_qty": 2, "sku": "1411290_EA", "location": "29-SH238245", "package_ref": "23821172", "package_name": "Fruits2", "photo_url": "https://bf1af2.cdn.akinoncloud.com/products/2025/03/18/71535/5015c8eb-a364-48dd-959a-adef92abfe50.jpg"}
+    ],
+    "tasks": [
+      {"task_type": "PICKING_AND_STORAGE", "task_status": "FINISHED", "fleet_name": "Picker Express Lulu HM Festival Plaza", "contact_name": "Felicia Takyiakwaa", "contact_phone": "+9714646465464", "steps": [{"step_type": "PICKING_WITH_PACKING", "step_status": "DONE", "actual_start": "2026-05-14T12:23:09.280Z", "actual_end": "2026-05-14T13:24:11.458Z"}]},
+      {"task_type": "DELIVERY_WITH_STORAGE", "task_status": "DOING", "fleet_name": "Driver Express Lulu HM Festival Plaza", "contact_name": "Hamza Khurshid Eagle", "contact_phone": "+971561916018", "steps": [{"step_type": "GOING_TO_DESTINATION", "step_status": "DOING", "actual_start": "2026-05-14T13:31:08.372Z", "actual_end": ""}]}
+    ]
+  },
+  {
+    "job_number": "Lulu-323538824181INP1",
+    "source": "EXPRESS",
+    "partial_status": "GOING_TO_DESTINATION",
+    "is_big_order": "YES",
+    "created_at": "2026-05-14T12:15:45.924Z",
+    "slot_from": "2026-05-14T12:15:45.000Z",
+    "slot_to": "2026-05-14T13:15:45.000Z",
+    "origin_name": "2290 - LULU CENTRE,MUHAISNAH,DUBAI",
+    "origin_lat": 25.28073664739902,
+    "origin_lng": 55.410485216283014,
+    "dest_lat": 25.276749813816757,
+    "dest_lng": 55.40468892082572,
+    "store_name": "2290 - LULU CENTRE,MUHAISNAH,DUBAI",
+    "packages_count": 4,
+    "items": [
+      {"item_name": "Carrots Australia 500 g", "item_status": "ADDED", "quantity": 1, "found_qty": 1, "sku": "18892_EA", "location": "FV1-SH2290936", "package_ref": "2290288", "package_name": "Fruits1", "photo_url": "https://bf1af2.cdn.akinoncloud.com/products/2024/10/01/151070/a8e70433-5d8b-41d6-afdc-c1afdb3af9c2.jpg"},
+      {"item_name": "Mango Alphonso 1 kg", "item_status": "ADDED", "quantity": 1, "found_qty": 1, "sku": "150351_EA", "location": "FV1-SH2290937", "package_ref": "2290288", "package_name": "Fruits1", "photo_url": "https://bf1af2.cdn.akinoncloud.com/products/2026/04/27/146026/2be3058b-83ba-42ac-8c13-dac1db80dffe.jpg"}
+    ],
+    "tasks": [
+      {"task_type": "PICKING_AND_STORAGE", "task_status": "FINISHED", "fleet_name": "Picker Express LuLu Village", "contact_name": "ZAHARAH TABU - 2290 VILLAGE", "contact_phone": "+971557498866", "steps": [{"step_type": "PICKING_WITH_PACKING", "step_status": "DONE", "actual_start": "2026-05-14T12:16:32.091Z", "actual_end": "2026-05-14T12:40:09.848Z"}]},
+      {"task_type": "DELIVERY_WITH_STORAGE", "task_status": "DOING", "fleet_name": "Driver Express LuLu Village", "contact_name": "Hamza Munir Ahmad - 2290 VILLAGE", "contact_phone": "+971564471932", "steps": [{"step_type": "GOING_TO_DESTINATION", "step_status": "DOING", "actual_start": "2026-05-14T13:27:41.832Z", "actual_end": ""}]}
+    ]
+  },
+  {
+    "job_number": "Lulu-323539774071INP1",
+    "source": "EXPRESS",
+    "partial_status": "TRANSFERRING",
+    "is_big_order": "YES",
+    "created_at": "2026-05-14T12:34:06.057Z",
+    "slot_from": "2026-05-14T12:34:05.000Z",
+    "slot_to": "2026-05-14T13:34:05.000Z",
+    "origin_name": "3739-LH,As Suwaidi,KSA",
+    "origin_lat": 24.562747653144825,
+    "origin_lng": 46.642867411083685,
+    "dest_lat": 24.610737435813405,
+    "dest_lng": 46.6436873562634,
+    "store_name": "3739-LH,As Suwaidi,KSA",
+    "packages_count": 1,
+    "items": [
+      {"item_name": "Kinder Bueno Milk Chocolate Bar 10 x 2 Bars 430 g", "item_status": "ADDED", "quantity": 17, "found_qty": 17, "sku": "971999", "location": "-", "package_ref": "1234", "package_name": "Grocery1", "photo_url": "https://bf1af2.cdn.akinoncloud.com/products/2026/01/05/95723/80489d49-46dc-4eca-b228-f2c47e87c029.jpg"}
+    ],
+    "tasks": [
+      {"task_type": "PICKING_AND_STORAGE", "task_status": "FINISHED", "fleet_name": "3739 Picker Express Lulu HM Suwaidi", "contact_name": "suwaidi  Picker P1", "contact_phone": "+96611111111111", "steps": [{"step_type": "PICKING_WITH_PACKING", "step_status": "DONE", "actual_start": "2026-05-14T12:36:01.177Z", "actual_end": "2026-05-14T13:00:07.057Z"}]},
+      {"task_type": "DELIVERY_WITH_STORAGE", "task_status": "DOING", "fleet_name": "3739 Alshrouq Badiya", "contact_name": "Abdelaziz Elsiddig Ahmed", "contact_phone": "503508171", "steps": [{"step_type": "TRANSFERRING_FROM_STORAGE_TO_DELIVERY", "step_status": "DOING", "actual_start": "2026-05-14T13:04:48.073Z", "actual_end": ""}]}
+    ]
+  },
+  {
+    "job_number": "Lulu-323536093983INP1",
+    "source": "EXPRESS",
+    "partial_status": "DELIVERED",
+    "is_big_order": "YES",
+    "created_at": "2026-05-14T11:31:07.435Z",
+    "slot_from": "2026-05-14T11:31:06.000Z",
+    "slot_to": "2026-05-14T12:31:06.000Z",
+    "origin_name": "2190 - LH,KUWAITAT,ALAIN",
+    "origin_lat": 24.23331911394611,
+    "origin_lng": 55.77417312419584,
+    "dest_lat": 24.235962931106236,
+    "dest_lng": 55.69441543892026,
+    "store_name": "2190 - LH,KUWAITAT,ALAIN",
+    "packages_count": 2,
+    "items": [
+      {"item_name": "Bounty Chocolate Bar Value Pack 5 x 50 g 3 pkt", "item_status": "ADDED", "quantity": 1, "found_qty": 1, "sku": "2559588", "location": "-", "package_ref": "21902045", "package_name": "Ambientf1", "photo_url": "https://bf1af2.cdn.akinoncloud.com/products/2025/09/09/612382/aaf9f7ad-0636-41be-acec-ef31a2e385b9.jpg"},
+      {"item_name": "Pepsi Cola Bottle 1.25 Litres", "item_status": "ADDED", "quantity": 2, "found_qty": 2, "sku": "451777", "location": "25-SH2190545", "package_ref": "21902041", "package_name": "Ambientf2", "photo_url": "https://bf1af2.cdn.akinoncloud.com/products/2024/09/11/67018/80ce6b33-cbbc-4b62-a42f-fa971dafef20.jpg"}
+    ],
+    "tasks": [
+      {"task_type": "PICKING_AND_STORAGE", "task_status": "FINISHED", "fleet_name": "Picker Express-AL Kuwaitat", "contact_name": "2190-express picker 11 rabin", "contact_phone": "+971509054867", "steps": [{"step_type": "PICKING_WITH_PACKING", "step_status": "DONE", "actual_start": "2026-05-14T11:31:28.153Z", "actual_end": "2026-05-14T11:52:49.540Z"}]},
+      {"task_type": "DELIVERY_WITH_STORAGE", "task_status": "FINISHED", "fleet_name": "Driver Express-AL Kuwaitat", "contact_name": "Usman khalid khalid  Mahmood", "contact_phone": "+9710502303923", "steps": [{"step_type": "GOING_TO_DESTINATION", "step_status": "DONE", "actual_start": "2026-05-14T12:22:35.796Z", "actual_end": "2026-05-14T12:36:07.984Z"}, {"step_type": "DELIVERING", "step_status": "DONE", "actual_start": "2026-05-14T12:36:07.984Z", "actual_end": "2026-05-14T12:50:00.000Z"}]}
+    ]
+  },
+  {
+    "job_number": "Lulu-323539310043INP1",
+    "source": "EXPRESS",
+    "partial_status": "GOING_TO_DESTINATION",
+    "is_big_order": "YES",
+    "created_at": "2026-05-14T12:24:40.408Z",
+    "slot_from": "2026-05-14T12:24:39.000Z",
+    "slot_to": "2026-05-14T13:24:39.000Z",
+    "origin_name": "3250-KUW - Dajeej",
+    "origin_lat": 29.2645886927206,
+    "origin_lng": 47.9636625840349,
+    "dest_lat": 29.257476,
+    "dest_lng": 47.936008,
+    "store_name": "3250-KUW - Dajeej",
+    "packages_count": 7,
+    "items": [
+      {"item_name": "Banana Chiquita Ecuador 1 kg", "item_status": "ADDED", "quantity": 1, "found_qty": 1, "sku": "380260_EA", "location": "-", "package_ref": "32505804", "package_name": "Fruits1", "photo_url": "https://bf1af2.cdn.akinoncloud.com/products/2024/10/01/145634/067712f2-3dfa-40d1-afe0-8c0bda925272.jpg"},
+      {"item_name": "Cucumber Kuwait 500g", "item_status": "ADDED", "quantity": 1, "found_qty": 1, "sku": "1758176_EA", "location": "-", "package_ref": "32505806", "package_name": "Vegetables1", "photo_url": "https://bf1af2.cdn.akinoncloud.com/products/2024/10/01/160522/5505c3ce-b320-4ab3-9060-aa09afd8cb3b.jpg"}
+    ],
+    "tasks": [
+      {"task_type": "PICKING_AND_STORAGE", "task_status": "FINISHED", "fleet_name": "3250 Picker Express LH Dajeej", "contact_name": "F1 - 3pl arman express", "contact_phone": "+96532503250", "steps": [{"step_type": "PICKING_WITH_PACKING", "step_status": "DONE", "actual_start": "2026-05-14T12:30:21.226Z", "actual_end": "2026-05-14T13:26:50.891Z"}]},
+      {"task_type": "DELIVERY_WITH_STORAGE", "task_status": "DOING", "fleet_name": "3250 Driver-LH Dajeej", "contact_name": "Tahaco Ayaz", "contact_phone": "+96597591528", "steps": [{"step_type": "GOING_TO_DESTINATION", "step_status": "DOING", "actual_start": "2026-05-14T13:29:30.350Z", "actual_end": ""}]}
+    ]
+  },
+  {
+    "job_number": "Lulu-323479438054INP1",
+    "source": "DEFAULT",
+    "partial_status": "DELIVERED",
+    "is_big_order": "YES",
+    "created_at": "2026-05-13T19:45:52.557Z",
+    "slot_from": "2026-05-14T04:00:00.000Z",
+    "slot_to": "2026-05-14T05:59:00.000Z",
+    "origin_name": "2474 - LH,RABDAN MALL - AUH",
+    "origin_lat": 24.40745470415043,
+    "origin_lng": 54.50696253358931,
+    "dest_lat": 24.430222578386726,
+    "dest_lng": 54.57344938069582,
+    "store_name": "2474 - LH,RABDAN MALL - AUH",
+    "packages_count": 3,
+    "items": [
+      {"item_name": "Almarai Full Fat Fresh Milk 2 Litres", "item_status": "REJECTED", "quantity": 1, "found_qty": 0, "sku": "7548", "location": "12-SH2474414", "package_ref": "24743234", "package_name": "Chiller1", "photo_url": "https://bf1af2.cdn.akinoncloud.com/products/2024/09/09/55822/f3f62a0b-9ffe-4e18-8e2d-fa1a211ab844.jpg"}
+    ],
+    "tasks": [
+      {"task_type": "ZONE_PICKING", "task_status": "FINISHED", "fleet_name": "Picking F&V-LH Rabdan Mall", "contact_name": "2474-WORLDSTAR- AASHISH KUMAR", "contact_phone": "+9710565367735", "steps": [{"step_type": "PICKING_WITH_PACKING", "step_status": "DONE", "actual_start": "2026-05-13T19:48:15.698Z", "actual_end": "2026-05-13T21:27:26.464Z"}]},
+      {"task_type": "DELIVERY_WITH_STORAGE", "task_status": "FINISHED", "fleet_name": "Driver-LH Rabdan Mall", "contact_name": "2474-GODELIVERY- IZAAZ KHAN", "contact_phone": "+34523744696", "steps": [{"step_type": "GOING_TO_DESTINATION", "step_status": "DONE", "actual_start": "2026-05-14T03:05:10.274Z", "actual_end": "2026-05-14T05:16:17.026Z"}]}
+    ]
+  },
+  {
+    "job_number": "Lulu-323543592356INP1",
+    "source": "DEFAULT",
+    "partial_status": "CREATED",
+    "is_big_order": "YES",
+    "created_at": "2026-05-14T13:35:34.983Z",
+    "slot_from": "2026-05-14T17:00:00.000Z",
+    "slot_to": "2026-05-14T18:59:00.000Z",
+    "origin_name": "3814-LH,BAGHDADIYA,KSA",
+    "origin_lat": 21.494091,
+    "origin_lng": 39.174456,
+    "dest_lat": 21.555346459665806,
+    "dest_lng": 39.20580927282572,
+    "store_name": "3814-LH,BAGHDADIYA,KSA",
+    "packages_count": 0,
+    "items": [
+      {"item_name": "Saudia UHT Whole Milk 1 Litre", "item_status": "PENDING", "quantity": 1, "found_qty": 0, "sku": "2410060_EA", "location": "11-SH3814232", "package_ref": "", "package_name": "", "photo_url": "https://bf1af2.cdn.akinoncloud.com/products/2025/11/07/623111/92e5339c-00e3-4abc-903a-764de046cd95.jpg"},
+      {"item_name": "Cucumber Saudi Arabia 500 g", "item_status": "PENDING", "quantity": 4, "found_qty": 0, "sku": "2114351_EA", "location": "-", "package_ref": "", "package_name": "", "photo_url": "https://bf1af2.cdn.akinoncloud.com/products/2025/02/17/160409/0c219c6e-d75d-4f04-b0a7-6d8035de5698.jpg"}
+    ],
+    "tasks": [
+      {"task_type": "ZONE_PICKING", "task_status": "PROCESSING", "fleet_name": "", "contact_name": "", "contact_phone": "", "steps": [{"step_type": "PICKING_WITH_PACKING", "step_status": "PENDING", "actual_start": "", "actual_end": ""}]},
+      {"task_type": "DELIVERY_WITH_STORAGE", "task_status": "PROCESSING", "fleet_name": "", "contact_name": "", "contact_phone": "", "steps": [{"step_type": "GOING_TO_ORIGIN", "step_status": "PENDING", "actual_start": "", "actual_end": ""}]}
+    ]
+  },
+  {
+    "job_number": "Lulu-323543023474INP1",
+    "source": "DEFAULT",
+    "partial_status": "PICKING_WITH_PACKING",
+    "is_big_order": "YES",
+    "created_at": "2026-05-14T13:26:08.109Z",
+    "slot_from": "2026-05-14T15:00:00.000Z",
+    "slot_to": "2026-05-14T16:59:00.000Z",
+    "origin_name": "3810-LH,AL MARWA,KSA",
+    "origin_lat": 21.620161,
+    "origin_lng": 39.215571,
+    "dest_lat": 21.6097765,
+    "dest_lng": 39.21354780000001,
+    "store_name": "3810-LH,AL MARWA,KSA",
+    "packages_count": 0,
+    "items": [
+      {"item_name": "Al Arabi Pure Vegetable Oil 2.9 Litres", "item_status": "PENDING", "quantity": 1, "found_qty": 0, "sku": "1671739", "location": "9-SH3810323", "package_ref": "", "package_name": "", "photo_url": "https://bf1af2.cdn.akinoncloud.com/products/2024/09/11/81574/3514f380-2012-419b-bfe4-e3d51fc8ddc7.jpg"},
+      {"item_name": "Sadia Premium Fresh Chicken 900 g", "item_status": "PENDING", "quantity": 3, "found_qty": 0, "sku": "2608590", "location": "-", "package_ref": "", "package_name": "", "photo_url": "https://bf1af2.cdn.akinoncloud.com/products/2026/02/06/639218/313ef395-8736-4b77-b2dc-8d1061f87605.jpg"}
+    ],
+    "tasks": [
+      {"task_type": "ZONE_PICKING", "task_status": "DOING", "fleet_name": "3810 Picking Ambient-LH MARWAH", "contact_name": "Afran 3810", "contact_phone": "+966554558888", "steps": [{"step_type": "PICKING_WITH_PACKING", "step_status": "DOING", "actual_start": "2026-05-14T13:27:41.757Z", "actual_end": ""}]},
+      {"task_type": "DELIVERY_WITH_STORAGE", "task_status": "PROCESSING", "fleet_name": "", "contact_name": "", "contact_phone": "", "steps": [{"step_type": "GOING_TO_ORIGIN", "step_status": "PENDING", "actual_start": "", "actual_end": ""}]}
+    ]
+  }
+]
