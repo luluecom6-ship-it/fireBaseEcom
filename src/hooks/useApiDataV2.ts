@@ -30,7 +30,7 @@ export function useApiDataV2(): UseApiDataReturn {
       setError(null);
 
       // Use the proxy instead of direct GAS call to avoid CORS issues
-      const proxyUrl = `${API_URL}?gasUrl=${encodeURIComponent(V2_GAS_URL)}&_t=${Date.now()}`;
+      const proxyUrl = `${API_URL}?gasUrl=${encodeURIComponent(V2_GAS_URL)}&_t=${Date.now()}&_skipCache=true`;
       const response = await robustFetch(proxyUrl);
 
       if (!response.ok) {
@@ -38,32 +38,35 @@ export function useApiDataV2(): UseApiDataReturn {
       }
 
       const result = await response.json();
+      console.log('[useApiDataV2] API Response received:', {
+        type: typeof result,
+        isArray: Array.isArray(result),
+        size: JSON.stringify(result).length,
+        preview: JSON.stringify(result).substring(0, 200)
+      });
 
       // Handle the new JSON format - could be direct array or wrapped in object
       let orders: Order[] = [];
 
       if (Array.isArray(result)) {
         orders = result;
-      } else if (result && typeof result === 'object' && result.data) {
-        orders = result.data;
-      } else if (result && typeof result === 'object' && Array.isArray(result.orders)) {
-        orders = result.orders;
-      } else if (result && typeof result === 'object' && Array.isArray(result.results)) {
-        orders = result.results;
-      } else if (result && typeof result === 'object' && Array.isArray(result.rows)) {
-        orders = result.rows;
+      } else if (result && typeof result === 'object') {
+        // Try various common property names
+        orders = result.data || result.orders || result.results || result.rows || result.items || [];
       }
 
-      // If we got valid data from API, use it
-      if (orders.length > 0) {
+      // If we got valid data from API (even empty array), use it
+      if (Array.isArray(orders)) {
+        console.log(`[useApiDataV2] Successfully parsed ${orders.length} orders from API`);
         setData(orders);
         setDataSource('api');
         setLastUpdated(new Date());
         return;
       }
 
-      // Fall back to local data if API returns empty
-      throw new Error('No data from API');
+      // Fall back only if we didn't get any recognizable structure
+      console.warn('[useApiDataV2] API returned unrecognized format or empty:', result);
+      throw new Error(`API format unrecognized (Type: ${typeof result})`);
 
     } catch (err) {
       console.warn('API fetch failed, using fallback data:', err);

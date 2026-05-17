@@ -33,7 +33,7 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
         )}
         <div className="title-section">
           <h1 className="dashboard-title">{title}</h1>
-          <p className="dashboard-subtitle">{subtitle}</p>
+          <p className="dashboard-subtitle">{subtitle} <span className="text-[10px] opacity-40 ml-1">v7.2</span></p>
         </div>
       </div>
       <div className="header-right">

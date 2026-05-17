@@ -113,6 +113,7 @@ async function startServer() {
     app.all(["/api/proxy-gas", "/proxy-gas"], async (req, res) => {
     const start = Date.now();
     const action = req.query.action || "unknown";
+    console.log(`[Proxy] >>> Incoming Request: ${req.method} ${req.url} (Path: ${req.path})`);
     try {
       console.log(`[Proxy] >>> START ${req.method} action=${action}`);
       
@@ -191,13 +192,32 @@ async function startServer() {
 
       // Detect common GAS error indicators in the raw response
       if (typeof response.data === 'string') {
-        if (response.data.includes('goog-script-error') || response.data.includes('Rate exceeded')) {
+        const isHtml = response.data.includes('<!DOCTYPE html>') || response.data.includes('<html');
+        const isError = response.data.includes('goog-script-error') || response.data.includes('Rate exceeded');
+        
+        if (isError || (isHtml && !response.data.includes('JSON'))) {
+          console.error(`[Proxy] Detected INVALID Response from GAS for action=${action}: ${isHtml ? 'HTML' : 'Error Page'}`);
           const isRate = response.data.includes('Rate exceeded');
           return res.status(isRate ? 429 : 502).json({ 
             status: "error", 
-            message: isRate ? "Rate limit reached" : "GAS Error",
+            message: isRate ? "Rate limit reached" : (isHtml ? "GAS returned HTML (Login required?)" : "GAS Error"),
+            debug: response.data.substring(0, 100)
           });
         }
+      }
+      
+      // LOG DATA SUMMARY
+      if (response.data) {
+        if (Array.isArray(response.data)) {
+           console.log(`[Proxy] Response action=${action} is ARRAY with ${response.data.length} items`);
+        } else if (typeof response.data === 'object') {
+           console.log(`[Proxy] Response action=${action} is OBJECT with keys: ${Object.keys(response.data).join(', ')}`);
+        } else {
+           const strPreview = String(response.data).substring(0, 150);
+           console.log(`[Proxy] Response action=${action} is ${typeof response.data} (length: ${String(response.data).length}) | Preview: ${strPreview}`);
+        }
+      } else {
+        console.warn(`[Proxy] Response action=${action} is EMPTY/NULL`);
       }
       
       res.status(response.status).send(response.data);
