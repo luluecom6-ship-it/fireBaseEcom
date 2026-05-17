@@ -311,7 +311,14 @@ const MatrixV2: React.FC<MatrixV2Props> = ({
             </div>
             <div className="time-info">
               {showDataSourceBadge && (
-                <span className="data-source-badge fallback">Demo Data</span>
+                <div className="data-source-wrapper">
+                  <span className="data-source-badge fallback">Demo Data</span>
+                  {error && (
+                    <div className="api-diagnostic-tooltip" title={error}>
+                      <AlertCircle size={12} />
+                    </div>
+                  )}
+                </div>
               )}
               <span className="sync-time">Sync: {syncTime}</span>
               <span className="last-updated">Updated: {currentTime}</span>
@@ -320,6 +327,13 @@ const MatrixV2: React.FC<MatrixV2Props> = ({
               </button>
             </div>
           </div>
+
+          {showDataSourceBadge && error && (
+            <div className="api-error-banner">
+              <AlertCircle size={14} className="text-amber-500" />
+              <span>API connectivity issue detected. Showing local fallback data. Details: <code className="text-[10px] bg-amber-100 px-1 rounded">{error}</code></span>
+            </div>
+          )}
 
           {loading && apiData.length === 0 ? (
             <div className="loading-container">

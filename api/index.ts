@@ -96,20 +96,31 @@ async function startServer() {
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-  // Health check
+  // Health check with diagnostics
   app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", time: new Date().toISOString(), env: process.env.NODE_ENV });
+    res.json({ 
+      status: "ok", 
+      time: new Date().toISOString(), 
+      env: process.env.NODE_ENV,
+      vercel: !!process.env.VERCEL,
+      firebase: admin.apps.length > 0 ? "ready" : "missing",
+      hasGasUrl: !!(process.env.GAS_API_URL || process.env.VITE_GAS_API_URL),
+      hasV2Url: !!(process.env.V2_GAS_URL || process.env.VITE_V2_GAS_URL)
+    });
   });
 
   // GAS Proxy Route
-    app.all("/api/proxy-gas", async (req, res) => {
+    app.all(["/api/proxy-gas", "/proxy-gas"], async (req, res) => {
     const start = Date.now();
     const action = req.query.action || "unknown";
     try {
       console.log(`[Proxy] >>> START ${req.method} action=${action}`);
-      let rawUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
-      const queryGasUrl = req.query.gasUrl;
-      if (queryGasUrl) rawUrl = String(queryGasUrl).trim();
+      
+      // Hierarchy: 1. Specialized V2 env (PRIORITY), 2. query param, 3. general GAS env, 4. Hardcoded fallback
+      let rawUrl = (process.env.V2_GAS_URL || process.env.VITE_V2_GAS_URL || req.query.gasUrl || process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
+      
+      // Specifically check if this is likely a V2 request (by action or by client indication)
+      // but the above hierarchy already covers it.
       
       // Consistent fallback across all environments
       if (!rawUrl || rawUrl === "undefined" || !rawUrl.startsWith("http")) {
