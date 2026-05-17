@@ -1,0 +1,630 @@
+/**
+ * LULU E-COM BACKEND V5 → V6 (FLUSH + LOCK FIX)
+ * Fixes applied on 18 April 2026:
+ *   FIX 1 — uploadMatrixData: SpreadsheetApp.flush() added after each
+ *            chunk write so the data is committed before the execution
+ *            returns and the next chunk's execution can read it reliably.
+ *   FIX 2 — uploadMatrixData: SpreadsheetApp.flush() added after
+ *            storeAcrossRows() so MatrixLive is fully committed before
+ *            MatrixTemp is cleared.
+ *   FIX 3 — uploadMatrixData: lock timeout raised from 8 000 → 20 000 ms
+ *            so slow GAS servers don't cause tryLock() to time out and
+ *            silently drop chunks.
+ * Everything else is UNCHANGED from V5.
+ */
+
+const SHEET_ID = "1CaFw4_MRVHg1UV8GTketzUJIhnL_Me5GHp9Lau2cs0c";
+
+function doGet(e)  { return handleRequest(e); }
+function doPost(e) { return handleRequest(e); }
+
+function handleRequest(e) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+
+  // ✅ Payload merge (GET + POST JSON) — UNCHANGED
+  let payload = {};
+  if (e && e.parameter) payload = { ...e.parameter };
+
+  if (e && e.postData && e.postData.contents) {
+    try {
+      const json = JSON.parse(e.postData.contents);
+      payload = { ...payload, ...json };
+    } catch (err) {}
+  }
+
+  const action = (payload.action || "").toLowerCase().trim();
+  if (!action) return jsonResponse({ status: "error", message: "No action provided" });
+
+  try {
+    if (action === "login")           return loginUser(ss, payload);
+    if (action === "getadmindata")    return getAdminData(ss, payload);
+    if (action === "attendance")      return markAttendance(ss, payload);
+    if (action === "gettodayattendance") return getTodayAttendance(ss, payload);
+    if (action === "uploadorder")     return uploadOrder(ss, payload);
+    if (action === "getorder")        return getOrder(ss, payload);
+    if (action === "logalertv2")      return logAlertV2(ss, payload);
+    if (action === "uploadmatrixdata") return uploadMatrixData(ss, payload);
+    if (action === "getmatrixdata")   return getMatrixData(ss);
+    if (action === "getalertlogs")    return getAlertLogs(ss);
+    if (action === "getregions")      return getRegions(ss);
+
+    return jsonResponse({ status: "error", message: "Invalid action: " + action });
+  } catch (err) {
+    return jsonResponse({ status: "error", message: err.toString() });
+  }
+}
+
+//////////////////////////////////////////////
+// GET REGIONS (NEW FAST ACTION)
+//////////////////////////////////////////////
+function getRegions(ss) {
+  const sheet = ss.getSheetByName("Regions");
+  if (!sheet) return jsonResponse({ status: "success", data: [] });
+  
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return jsonResponse({ status: "success", data: [] });
+  
+  const headers = data[0].map(h => String(h).toLowerCase().trim());
+  const storeIdx = headers.indexOf("storeid");
+  const regionIdx = headers.indexOf("region");
+  
+  const regions = [];
+  for (let i = 1; i < data.length; i++) {
+    regions.push({
+      storeId: String(data[i][storeIdx] || "").trim(),
+      region: String(data[i][regionIdx] || "").trim()
+    });
+  }
+  return jsonResponse({ status: "success", data: regions });
+}
+
+//////////////////////////////////////////////
+// ADMIN DATA (OPTIMIZED FOR SPEED)
+//////////////////////////////////////////////
+function getAdminData(ss, params) {
+  const usersSheet = ss.getSheetByName("Users");
+  const regionsSheet = ss.getSheetByName("Regions");
+  const attendanceSheet = ss.getSheetByName("Attendance");
+  const ordersSheet = ss.getSheetByName("Orders");
+  
+  const result = {
+    users: [],
+    regions: [],
+    attendance: [],
+    orders: []
+  };
+
+  // 1. Users (Full read - usually small enough)
+  if (usersSheet) {
+    const data = usersSheet.getDataRange().getValues();
+    const headers = data.shift().map(h => String(h).toLowerCase().trim());
+    result.users = data.map(r => {
+      let obj = {};
+      headers.forEach((h, i) => { if(h!=="password") obj[h] = r[i]; });
+      return obj;
+    });
+  }
+
+  // 2. Regions (Full read - small)
+  if (regionsSheet) {
+    const data = regionsSheet.getDataRange().getValues();
+    const headers = data.shift();
+    result.regions = data.map(r => {
+      let obj = {};
+      headers.forEach((h, i) => {
+        const key = String(h).toLowerCase().trim();
+        if (key === "storeid") obj["storeId"] = r[i];
+        else if (key === "region") obj["region"] = r[i];
+        else obj[key] = r[i];
+      });
+      return obj;
+    });
+  }
+
+  // 3. Attendance (LAST 1500 rows - Optimized read)
+  if (attendanceSheet) {
+    const lastRow = attendanceSheet.getLastRow();
+    if (lastRow > 1) {
+      const rowCount = Math.min(1500, lastRow - 1);
+      const startRow = lastRow - rowCount + 1;
+      const data = attendanceSheet.getRange(startRow, 1, rowCount, 6).getValues();
+      result.attendance = data.map(r => ({
+        empId: r[0], name: r[1], storeId: r[2], type: r[3], timestamp: r[4], imageUrl: r[5]
+      })).reverse();
+    }
+  }
+
+  // 4. Orders (LAST 1500 rows - Optimized read)
+  if (ordersSheet) {
+    const lastRow = ordersSheet.getLastRow();
+    if (lastRow > 1) {
+      const rowCount = Math.min(1500, lastRow - 1);
+      const startRow = lastRow - rowCount + 1;
+      const data = ordersSheet.getRange(startRow, 1, rowCount, 6).getValues();
+      result.orders = data.map(r => ({
+        orderId: r[0], storeId: r[1], pickerName: r[2], imageUrl: r[3], timestamp: r[4], uploadedBy: r[5]
+      })).reverse();
+    }
+  }
+
+  return jsonResponse({ status: "success", data: result });
+}
+
+//////////////////////////////////////////////
+// TODAY ATTENDANCE (OPTIMIZED)
+//////////////////////////////////////////////
+function getTodayAttendance(ss, params) {
+  const sheet = ss.getSheetByName("Attendance");
+  if (!sheet) return jsonResponse({ status: "error", message: "Attendance sheet missing" });
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return jsonResponse({ status: "success", data: [] });
+
+  const limit = 2000;
+  const startRow = Math.max(2, lastRow - limit + 1);
+  const rowCount = lastRow - startRow + 1;
+  const data = sheet.getRange(startRow, 1, rowCount, 6).getValues();
+
+  const tz = Session.getScriptTimeZone();
+  const today = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd");
+  const filterEmpId = (params.empId || "").toString().trim();
+
+  const result = data.filter(r => {
+    try {
+      const rowDate = Utilities.formatDate(new Date(r[4]), tz, "yyyy-MM-dd");
+      return rowDate === today && (!filterEmpId || String(r[0]).trim() === filterEmpId);
+    } catch (e) { return false; }
+  }).map(r => ({
+    empId: r[0], name: r[1], storeId: r[2], type: r[3], timestamp: r[4], imageUrl: r[5]
+  }));
+
+  return jsonResponse({ status: "success", data: result });
+}
+
+//////////////////////////////////////////////
+// LOGIN (FIXED + SAFE) — UNCHANGED
+//////////////////////////////////////////////
+function loginUser(ss, params) {
+  const sheet = ss.getSheetByName("Users");
+  if (!sheet) return jsonResponse({ status: "error", message: "Users sheet missing" });
+
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return jsonResponse({ status: "error", message: "No users" });
+
+  const headers = data[0].map(h => String(h).toLowerCase().trim());
+
+  const userIdx   = headers.indexOf("username");
+  const passIdx   = headers.indexOf("password");
+  const statusIdx = headers.indexOf("status");
+  const roleIdx   = headers.indexOf("role");
+  const storeIdx  = headers.indexOf("storeid");
+  const nameIdx   = headers.indexOf("name");
+  const empIdx    = headers.indexOf("empid");
+  const regionIdx = headers.indexOf("region");
+
+  if (userIdx === -1 || passIdx === -1 || statusIdx === -1) {
+    return jsonResponse({ status: "error", message: "Invalid sheet structure" });
+  }
+
+  const username = (params.username || "").trim();
+  const password = (params.password || "").trim();
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+
+    if (
+      String(row[userIdx]).trim() === username &&
+      String(row[passIdx]).trim() === password
+    ) {
+      if (String(row[statusIdx]).toLowerCase().trim() !== "active") {
+        return jsonResponse({ status: "error", message: "Account inactive" });
+      }
+
+      return jsonResponse({
+        status: "success",
+        user: {
+          username,
+          role:    row[roleIdx]   || "user",
+          storeId: row[storeIdx]  || "",
+          name:    row[nameIdx]   || username,
+          empId:   row[empIdx]    || "",
+          region:  row[regionIdx] || ""
+        }
+      });
+    }
+  }
+
+  return jsonResponse({ status: "error", message: "Invalid credentials" });
+}
+
+//////////////////////////////////////////////
+// ATTENDANCE (SAFE + IMAGE FALLBACK) — UNCHANGED
+//////////////////////////////////////////////
+function markAttendance(ss, params) {
+  const sheet = ss.getSheetByName("Attendance");
+  if (!sheet) return jsonResponse({ status: "error", message: "Attendance missing" });
+
+  let imageUrl = "";
+  if (params.image) {
+    imageUrl = uploadImageToDrive(params.image, params.empId + "_" + Date.now() + ".jpg");
+  }
+
+  sheet.appendRow([
+    params.empId,
+    params.name,
+    params.storeId,
+    params.type,
+    new Date(),
+    imageUrl
+  ]);
+
+  return jsonResponse({ status: "success", imageUrl });
+}
+
+//////////////////////////////////////////////
+// ORDER UPLOAD — UNCHANGED
+//////////////////////////////////////////////
+function uploadOrder(ss, params) {
+  const sheet = ss.getSheetByName("Orders");
+  if (!sheet) return jsonResponse({ status: "error", message: "Orders missing" });
+
+  const orderId = params.orderId.toString().startsWith("Lulu-")
+    ? params.orderId
+    : "Lulu-" + params.orderId;
+
+  let imageUrl = "";
+  if (params.image) {
+    imageUrl = uploadImageToDrive(params.image, orderId + ".jpg");
+  }
+
+  sheet.appendRow([
+    orderId,
+    params.storeId,
+    params.pickerName,
+    imageUrl,
+    new Date(),
+    params.uploadedBy
+  ]);
+
+  return jsonResponse({ status: "success", imageUrl });
+}
+
+//////////////////////////////////////////////
+// ALERT LOG — UNCHANGED
+//////////////////////////////////////////////
+function logAlertV2(ss, params) {
+  const sheet = getOrCreateSheet(ss, "AlertLogs");
+
+  const lastRow  = sheet.getLastRow();
+  
+  // FIXED: Handle empty sheet or headers-only to prevent range error
+  if (lastRow < 2) {
+    const row = [
+      params.timestamp || new Date(),
+      params.orderId,
+      params.eventType,
+      params.storeId,
+      params.userId,
+      params.notificationTime,
+      params.storeStaffName,
+      params.status,
+      params.escalation,
+      params.managerName,
+      params.statusTrigger,
+      params.managerStatus,
+      params.orderCreatedAt,
+      params.bucket || ""
+    ];
+    sheet.appendRow(row);
+    return jsonResponse({ status: "success" });
+  }
+
+  const startRow = Math.max(2, lastRow - 500);
+  const rowCount = lastRow - startRow + 1;
+  const data     = sheet.getRange(startRow, 1, rowCount, 14).getValues();
+
+  let found = -1;
+
+  for (let i = 0; i < data.length; i++) {
+    if (
+      String(data[i][1]).trim()  === params.orderId &&
+      String(data[i][10]).trim() === params.statusTrigger // FIXED: index 10 is statusTrigger, index 13 was bucket
+    ) {
+      found = startRow + i;
+      break;
+    }
+  }
+
+  const row = [
+    params.timestamp || new Date(),
+    params.orderId,
+    params.eventType,
+    params.storeId,
+    params.userId,
+    params.notificationTime,
+    params.storeStaffName,
+    params.status,
+    params.escalation,
+    params.managerName,
+    params.statusTrigger,
+    params.managerStatus,
+    params.orderCreatedAt,
+    params.bucket || ""
+  ];
+
+  if (found !== -1) {
+    sheet.getRange(found, 1, 1, row.length).setValues([row]);
+  } else {
+    sheet.appendRow(row);
+  }
+
+  return jsonResponse({ status: "success" });
+}
+
+//////////////////////////////////////////////
+// MATRIX UPLOAD — CHANGED (V5 → V6)
+//
+// V5 ROOT CAUSE (kept for reference):
+//   Accepted chunked uploads and staged them in MatrixTemp, then merged
+//   into MatrixLive via storeAcrossRows(). The approach was correct but
+//   had three execution-level gaps:
+//
+//   GAP 1 — No SpreadsheetApp.flush() after writing each non-final chunk.
+//     GAS batches setValue() calls internally. When chunk 0's execution
+//     returned "partial" without calling flush(), the write was queued but
+//     NOT guaranteed to be committed before the execution ended. When chunk
+//     1's execution called getValues() on MatrixTemp rows 1..N, it could
+//     read a stale (empty) row 1, triggering missingCount > 0 and aborting
+//     the merge — leaving MatrixTemp dirty and MatrixLive unchanged.
+//
+//   GAP 2 — No SpreadsheetApp.flush() after storeAcrossRows().
+//     storeAcrossRows() does clearContents() + setValues() + two setValue()
+//     calls. Without flushing before tempSheet.clearContents(), all five
+//     operations are queued together; if GAS reorders or batches them, the
+//     clear could execute before the write, wiping MatrixLive data.
+//
+//   GAP 3 — Lock timeout of 8 000 ms too short under GAS load.
+//     setValue() calls under a slow GAS server can each take 2–5 s. Two
+//     calls = up to 10 s, exceeding the 8 000 ms tryLock() wait for the
+//     NEXT chunk. That chunk returned "Busy, please retry" — which the
+//     scraper silently treated as success (fixed separately in the scraper).
+//
+// V6 FIXES (all within this function + storeAcrossRows):
+//   FIX 1 — SpreadsheetApp.flush() called after the two setValue() lines
+//            that write a non-final chunk to MatrixTemp, BEFORE returning
+//            "partial". This commits the write to Sheets before the lock is
+//            released, so the next chunk's execution sees committed data.
+//   FIX 2 — SpreadsheetApp.flush() called after storeAcrossRows() returns,
+//            before tempSheet.clearContents(). This ensures all MatrixLive
+//            writes (clearContents, setValues, B1, B2) are committed before
+//            the staging sheet is wiped.
+//   FIX 3 — tryLock() timeout raised from 8 000 → 20 000 ms so chunks
+//            queuing behind a slow chunk-0 execution can wait long enough
+//            to acquire the lock instead of failing immediately.
+//////////////////////////////////////////////
+function uploadMatrixData(ss, payload) {
+  const lock = LockService.getScriptLock();
+
+  // ════════════════════════════════════════════════════════════════
+  // FIX 3 — Raised from 8 000 → 20 000 ms.
+  //
+  // OLD:  if (!lock.tryLock(8000))  ...
+  // NEW:  if (!lock.tryLock(20000)) ...
+  //
+  // WHY: Two setValue() calls under a loaded GAS server can take
+  // 2–5 s each (= up to 10 s total). With the old 8 000 ms timeout,
+  // chunk 1 could time out waiting for chunk 0 to release the lock,
+  // return "Busy", and be silently lost by the scraper.
+  // ════════════════════════════════════════════════════════════════
+  if (!lock.tryLock(20000)) return jsonResponse({ status: "error", message: "Busy, please retry" });
+  // ════════════════════════════════════════════════════════════════
+
+  try {
+    const chunkIndex  = (payload.chunkIndex  !== undefined) ? parseInt(payload.chunkIndex,  10) : -1;
+    const totalChunks = (payload.totalChunks !== undefined) ? parseInt(payload.totalChunks, 10) : 1;
+    const isChunked   = chunkIndex >= 0;
+
+    // ── NON-CHUNKED PATH (small data / legacy calls) ──────────
+    if (!isChunked) {
+      const jsonStr = (typeof payload.data === "string")
+        ? payload.data
+        : JSON.stringify(payload.data);
+      const liveSheet = ss.getSheetByName("MatrixLive") || ss.insertSheet("MatrixLive");
+      storeAcrossRows(liveSheet, jsonStr, payload.timestamp);
+      return jsonResponse({ status: "success" });
+    }
+
+    // ── CHUNKED PATH ──────────────────────────────────────────
+    const chunkData = String(payload.data  || "");
+    const timestamp = String(payload.timestamp || new Date().toISOString());
+    const tempSheet = ss.getSheetByName("MatrixTemp") || ss.insertSheet("MatrixTemp");
+
+    // Write this chunk into its own row in the staging sheet.
+    // Column A = chunk data, Column B = timestamp (for audit).
+    tempSheet.getRange(chunkIndex + 1, 1).setValue(chunkData);
+    tempSheet.getRange(chunkIndex + 1, 2).setValue(timestamp);
+
+    // ════════════════════════════════════════════════════════════════
+    // FIX 1 — SpreadsheetApp.flush() added here (NON-FINAL CHUNKS).
+    //
+    // OLD:  (no flush — write was queued; next chunk could read empty)
+    // NEW:  SpreadsheetApp.flush(); // commit before returning
+    //
+    // WHY: GAS batches setValue() writes for performance. Without an
+    // explicit flush(), the bytes written above may still be in GAS's
+    // internal write buffer when this execution returns "partial" and
+    // releases the lock. The NEXT chunk's execution then opens the
+    // spreadsheet and calls getValues() on MatrixTemp — but because
+    // the previous write was never committed it sees an EMPTY row,
+    // sets missingCount > 0, and aborts the merge. The flush() here
+    // forces all buffered writes to be sent to the Sheets API before
+    // this execution ends, guaranteeing the data is in the sheet when
+    // the next execution reads it.
+    // ════════════════════════════════════════════════════════════════
+    SpreadsheetApp.flush();
+    // ════════════════════════════════════════════════════════════════
+
+    // If this is not the last chunk, just acknowledge receipt.
+    if (chunkIndex < totalChunks - 1) {
+      return jsonResponse({ status: "partial", chunk: chunkIndex });
+    }
+
+    // ── LAST CHUNK: verify completeness before merging ────────
+    // Read all expected rows from MatrixTemp in one batch call.
+    const allRows = tempSheet.getRange(1, 1, totalChunks, 1).getValues().flat();
+
+    // Check that every slot has data — guards against out-of-order
+    // or dropped chunks producing a corrupt merged string.
+    const missingCount = allRows.filter(c => c === "" || c === null || c === undefined).length;
+    if (missingCount > 0) {
+      return jsonResponse({
+        status:   "partial",
+        message:  "Last chunk received but " + missingCount + " earlier chunk(s) are missing. Scraper will retry on the next cycle.",
+        received: totalChunks - missingCount,
+        total:    totalChunks
+      });
+    }
+
+    // All chunks present — join and persist.
+    const mergedJson = allRows.join("");
+    const liveSheet  = ss.getSheetByName("MatrixLive") || ss.insertSheet("MatrixLive");
+    storeAcrossRows(liveSheet, mergedJson, timestamp);
+
+    // ════════════════════════════════════════════════════════════════
+    // FIX 2 — SpreadsheetApp.flush() added after storeAcrossRows().
+    //
+    // OLD:  (no flush between storeAcrossRows() and clearContents())
+    // NEW:  SpreadsheetApp.flush(); // commit MatrixLive before wiping temp
+    //
+    // WHY: storeAcrossRows() issues clearContents() + setValues() +
+    // two setValue() calls on MatrixLive — all queued in GAS's write
+    // buffer. Without an explicit flush(), those five operations and
+    // the tempSheet.clearContents() below are all pending at the same
+    // time. GAS could (in theory) submit them in any order, risking
+    // the temp clear arriving at the Sheets API before the live data
+    // write. Flushing here drains the MatrixLive operations completely
+    // before we clear MatrixTemp, guaranteeing the correct order.
+    // ════════════════════════════════════════════════════════════════
+    SpreadsheetApp.flush();
+    // ════════════════════════════════════════════════════════════════
+
+    // Clear the staging sheet so it is clean for the next cycle.
+    tempSheet.clearContents();
+
+    return jsonResponse({ status: "success", message: "All " + totalChunks + " chunks merged and saved." });
+
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+//////////////////////////////////////////////
+// MATRIX READ — UNCHANGED FROM V5
+//////////////////////////////////////////////
+function getMatrixData(ss) {
+  const sheet = ss.getSheetByName("MatrixLive");
+  if (!sheet) return jsonResponse({ status: "success", data: { quick: [], schedule: [] }, timestamp: null });
+
+  try {
+    const timestamp    = sheet.getRange("B1").getValue();
+    const totalRowsVal = sheet.getRange("B2").getValue();
+    // Default to 1 for backward compatibility with old single-cell format.
+    const totalRows    = (totalRowsVal && !isNaN(parseInt(totalRowsVal))) ? parseInt(totalRowsVal, 10) : 1;
+
+    if (totalRows < 1) {
+      return jsonResponse({ status: "success", data: { quick: [], schedule: [] }, timestamp });
+    }
+
+    const dataValues = sheet.getRange(1, 1, totalRows, 1).getValues().flat();
+    const merged     = dataValues.join("");
+
+    if (!merged || merged.trim() === "") {
+      return jsonResponse({ status: "success", data: { quick: [], schedule: [] }, timestamp });
+    }
+
+    const parsed = JSON.parse(merged);
+    return jsonResponse({ status: "success", data: parsed, timestamp });
+
+  } catch (e) {
+    return jsonResponse({ status: "error", message: "Parse error: " + e.toString() });
+  }
+}
+
+//////////////////////////////////////////////
+// HELPERS
+//////////////////////////////////////////////
+
+// storeAcrossRows — UNCHANGED FROM V5
+// Splits jsonStr into ≤ 45,000-char slices and writes them as a
+// batch setValues() to column A of the given sheet, then writes
+// B1 = timestamp, B2 = total row count.
+function storeAcrossRows(sheet, jsonStr, timestamp) {
+  const CELL_LIMIT = 45000;
+  sheet.clearContents();
+
+  const dataRows = [];
+  for (let i = 0; i < jsonStr.length; i += CELL_LIMIT) {
+    dataRows.push([jsonStr.slice(i, i + CELL_LIMIT)]);
+  }
+
+  const totalRows = dataRows.length;
+
+  if (totalRows > 0) {
+    sheet.getRange(1, 1, totalRows, 1).setValues(dataRows);
+  }
+
+  sheet.getRange(1, 2).setValue(timestamp || new Date().toISOString()); // B1 = timestamp
+  sheet.getRange(2, 2).setValue(totalRows);                              // B2 = row count
+  // NOTE: The caller (uploadMatrixData) calls SpreadsheetApp.flush()
+  // immediately after this function returns, so we do not need a
+  // flush() here — it would be a no-op duplicate.
+}
+
+// All functions below this line are UNCHANGED.
+
+function uploadImageToDrive(base64, fileName) {
+  try {
+    if (!base64 || !base64.includes(",")) return "";
+    const bytes = Utilities.base64Decode(base64.split(",")[1]);
+    const blob  = Utilities.newBlob(bytes, "image/jpeg", fileName);
+    const file  = DriveApp.createFile(blob);
+    return "https://lh3.googleusercontent.com/d/" + file.getId();
+  } catch (e) {
+    return "";
+  }
+}
+
+function getAlertLogs(ss) {
+  const sheet = ss.getSheetByName("AlertLogs");
+  if (!sheet) return jsonResponse({ status: "success", data: [] });
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return jsonResponse({ status: "success", data: [] });
+
+  // Read headers
+  const headers = sheet.getRange(1, 1, 1, 14).getValues()[0];
+
+  // Read data (last 1500 rows - matching pattern in getAdminData)
+  const rowCount = Math.min(1500, lastRow - 1);
+  const startRow = lastRow - rowCount + 1;
+  const data = sheet.getRange(startRow, 1, rowCount, 14).getValues();
+
+  const result = data.map(r => {
+    let obj = {};
+    headers.forEach((h, i) => (obj[h] = r[i]));
+    return obj;
+  }).reverse(); // Display latest alerts first
+
+  return jsonResponse({ status: "success", data: result });
+}
+
+function getOrCreateSheet(ss, name) {
+  let sheet = ss.getSheetByName(name);
+  if (!sheet) sheet = ss.insertSheet(name);
+  return sheet;
+}
+
+function jsonResponse(data) {
+  return ContentService.createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
