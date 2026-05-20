@@ -247,7 +247,7 @@ async function startServer() {
     const action = req.query.action || "unknown";
     try {
       console.log(`[Proxy] >>> START ${req.method} action=${action}`);
-      const V2_FALLBACK = "https://script.google.com/macros/s/AKfycbz6l6gUuVhoXde_zYZNNGchQLnvzZHE8_kkk2RcvQyk55tpitg2N8ZQHVo_DV7FO71Gzw/exec";
+      const V2_FALLBACK = "https://script.google.com/macros/s/AKfycbx9GSOgBy9dLdd4vn2JLu3piAOVxTj-5AfKZ3NeomK5mMgbSVDrzd_ny8qI1k4Bf6vq_Q/exec";
       const V1_FALLBACK = "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec";
 
       // Precise identification of the target GAS URL
@@ -398,7 +398,7 @@ async function startServer() {
     try {
       let baseUrl = (process.env.V2_GAS_URL || process.env.VITE_V2_GAS_URL || process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
       if (!baseUrl || baseUrl === "undefined" || !baseUrl.startsWith("http")) {
-        baseUrl = "https://script.google.com/macros/s/AKfycbz6l6gUuVhoXde_zYZNNGchQLnvzZHE8_kkk2RcvQyk55tpitg2N8ZQHVo_DV7FO71Gzw/exec";
+        baseUrl = "https://script.google.com/macros/s/AKfycbx9GSOgBy9dLdd4vn2JLu3piAOVxTj-5AfKZ3NeomK5mMgbSVDrzd_ny8qI1k4Bf6vq_Q/exec";
       }
     const params = new URLSearchParams();
     params.append('action', 'syncUser');
@@ -631,7 +631,7 @@ async function startServer() {
       // 1. Fetch users from GAS (V2 Preferred)
       let baseUrl = (process.env.V2_GAS_URL || process.env.VITE_V2_GAS_URL || process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
       if (!baseUrl || baseUrl === "undefined" || !baseUrl.startsWith("http")) {
-        baseUrl = "https://script.google.com/macros/s/AKfycbz6l6gUuVhoXde_zYZNNGchQLnvzZHE8_kkk2RcvQyk55tpitg2N8ZQHVo_DV7FO71Gzw/exec";
+        baseUrl = "https://script.google.com/macros/s/AKfycbx9GSOgBy9dLdd4vn2JLu3piAOVxTj-5AfKZ3NeomK5mMgbSVDrzd_ny8qI1k4Bf6vq_Q/exec";
       }
       const gasRes = await axios.get(`${baseUrl}?action=getAdminData&role=admin`);
       const users = gasRes.data.data?.users || gasRes.data.users || [];

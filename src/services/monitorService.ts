@@ -2,14 +2,45 @@ import { detectAlerts } from "../utils/alertLogic";
 import { executeGasRequest } from "./gasService";
 import axios from "axios";
 
+// Memory caches to prevent continuous reads/writes of identical records
+const processedOOSKeys = new Set<string>();
+let isOOSCacheInitialized = false;
+
+const existingAlertsCache = new Map<string, any>();
+let isAlertsCacheInitialized = false;
+
+// Cache for config and tokens
+let cachedConfig: any = {};
+let cachedTokensData: any[] = [];
+let lastConfigTokenFetchTime = 0;
+
 export async function runMonitorTick(db: any, messaging: any) {
   try {
     console.log(`[Monitor] Tick started...`);
     
-    // 1. Fetch System Config & FCM Tokens
-    console.log(`[Monitor DEBUG] Using Database ID: ${db.id || 'Unknown'}`);
-    const configDoc = await db.collection('system').doc('config').get();
-    const config = configDoc.exists ? configDoc.data() : {};
+    if (!isOOSCacheInitialized) {
+      console.log(`[Monitor] Initializing OOS memory cache from Firebase...`);
+      const oosSnap = await db.collection("oos_history").select().get(); // select() only gets document IDs to save bandwidth
+      oosSnap.docs.forEach((d: any) => processedOOSKeys.add(d.id));
+      isOOSCacheInitialized = true;
+      console.log(`[Monitor] Loaded ${processedOOSKeys.size} existing OOS keys into memory.`);
+    }
+    
+    // Refresh config and tokens every 5 minutes instead of every minute (saves massive quota limit)
+    const nowTime = Date.now();
+    if (nowTime - lastConfigTokenFetchTime > 5 * 60 * 1000) {
+      console.log(`[Monitor DEBUG] Refreshing config and fcm_tokens from Firebase...`);
+      const configDoc = await db.collection('system').doc('config').get();
+      cachedConfig = configDoc.exists ? configDoc.data() : {};
+      
+      const tokensSnap = await db.collection('fcm_tokens').get();
+      cachedTokensData = tokensSnap.docs.map((doc: any) => ({ ...doc.data(), ref: doc.ref }));
+      
+      lastConfigTokenFetchTime = nowTime;
+    }
+    
+    const config = cachedConfig;
+    const allTokensData = cachedTokensData;
     
     const escalationRules = (config.escalationRules || []).filter((r: any) => r.isActive);
     const scheduledThreshold = config.scheduledThreshold || 30;
@@ -19,11 +50,7 @@ export async function runMonitorTick(db: any, messaging: any) {
       runningSlot: config.scheduledRunningSlot
     };
 
-    console.log(`[Monitor DEBUG] Config exists: ${configDoc.exists}, Rules count: ${escalationRules.length}`);
-
-    // Fetch Tokens Early (to use in OOS, new alerts, and escalations)
-    const tokensSnap = await db.collection('fcm_tokens').get();
-    const allTokensData = tokensSnap.docs.map((doc: any) => ({ ...doc.data(), ref: doc.ref }));
+    console.log(`[Monitor DEBUG] Config exists: ${!!config.escalationRules}, Rules count: ${escalationRules.length}`);
 
     // Helper for sending notifications with role-based filtering
     const sendFilteredNotification = async (payload: { title: string, body: string, data: any, image?: string }, alertStoreId: string, alertRegion: string, isEscalation: boolean, isOOS?: boolean) => {
@@ -86,7 +113,7 @@ export async function runMonitorTick(db: any, messaging: any) {
     // 2. Fetch Matrix Data & Admin Data from GAS via common service
     let baseUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
     // V2 GAS URL added
-    const FALLBACK_V2_GAS_URL = "https://script.google.com/macros/s/AKfycbz6l6gUuVhoXde_zYZNNGchQLnvzZHE8_kkk2RcvQyk55tpitg2N8ZQHVo_DV7FO71Gzw/exec";
+    const FALLBACK_V2_GAS_URL = "https://script.google.com/macros/s/AKfycbx9GSOgBy9dLdd4vn2JLu3piAOVxTj-5AfKZ3NeomK5mMgbSVDrzd_ny8qI1k4Bf6vq_Q/exec";
     const FALLBACK_V1_GAS_URL = "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec";
     const v2Url = (process.env.V2_GAS_URL || process.env.VITE_V2_GAS_URL || FALLBACK_V2_GAS_URL).trim();
     
@@ -265,9 +292,11 @@ export async function runMonitorTick(db: any, messaging: any) {
           // Unique key for OOS entry
           const oosKey = `${orderId}_${sku}`.replace(/\//g, '_');
           
-          const docSnap = await db.collection('oos_history').doc(oosKey).get();
-          const isNewOOS = !docSnap.exists;
-
+          // If we already saw this specific OOS instance, skip entirely to save Firebase quota
+          if (processedOOSKeys.has(oosKey)) {
+            continue;
+          }
+          
           await db.collection('oos_history').doc(oosKey).set({
             orderId,
             sku,
@@ -283,33 +312,36 @@ export async function runMonitorTick(db: any, messaging: any) {
             photoUrl: item.photo_url || "",
             pickerName: item.picker_name || item.picked_by || item.user_name || "System Detected",
             updatedAt: new Date()
-          }, { merge: true });
+          });
 
           // Send Push Notification if this is a newly detected OOS and pushes are enabled
-          if (isNewOOS && oosPushEnabled) {
-            // Find store's region if possible
-            const storeRegionObj = regions.find((r: any) => 
-               Array.isArray(r.stores) && r.stores.includes(storeId)
-            );
-            const storeRegion = storeRegionObj ? storeRegionObj.name : "";
+          if (oosPushEnabled) {
+              // Find store's region if possible
+              const storeRegionObj = regions.find((r: any) => 
+                 Array.isArray(r.stores) && r.stores.includes(storeId)
+              );
+              const storeRegion = storeRegionObj ? storeRegionObj.name : "";
 
-            const getSmallThumbnailUrl = (url: string) => {
-              if (!url) return "";
-              const str = String(url);
-              if (str.includes("drive.google.com")) {
-                const id = str.split("id=")[1] || str.split("/d/")[1]?.split("/")[0];
-                if (id) return `https://lh3.googleusercontent.com/d/${id}=s200`;
-              }
-              return str;
-            };
+              const getSmallThumbnailUrl = (url: string) => {
+                if (!url) return "";
+                const str = String(url);
+                if (str.includes("drive.google.com")) {
+                  const id = str.split("id=")[1] || str.split("/d/")[1]?.split("/")[0];
+                  if (id) return `https://lh3.googleusercontent.com/d/${id}=s200`;
+                }
+                return str;
+              };
 
-            await sendFilteredNotification({
-              title: `⚠️ OUT OF STOCK DETECTED`,
-              body: `Item ${item.item_name} (SKU: ${sku}) marked returning OOS at Store ${storeId}.`,
-              data: { orderId, type: "oos", storeId },
-              ...(item.photo_url ? { image: getSmallThumbnailUrl(item.photo_url) } : {})
-            }, storeId, storeRegion, false, true);
-          }
+              await sendFilteredNotification({
+                title: `⚠️ OUT OF STOCK DETECTED`,
+                body: `Item ${item.item_name} (SKU: ${sku}) marked returning OOS at Store ${storeId}.`,
+                data: { orderId, type: "oos", storeId },
+                ...(item.photo_url ? { image: getSmallThumbnailUrl(item.photo_url) } : {})
+              }, storeId, storeRegion, false, true);
+            }
+          
+          // Register in memory so we don't query/write again this session
+          processedOOSKeys.add(oosKey);
         }
       }
     }
@@ -320,31 +352,43 @@ export async function runMonitorTick(db: any, messaging: any) {
     const oneHourAgo = new Date(Date.now() - 1 * 60 * 60 * 1000);
     const oneHourAgoISO = oneHourAgo.toISOString();
     
-    // Cleanup: Delete alerts older than 1 hour
-    const oldAlertsSnap = await db.collection('alerts')
-      .where('timestamp', '<', oneHourAgoISO)
-      .get();
-    
-    if (!oldAlertsSnap.empty) {
-      console.log(`[Monitor DEBUG] Cleaning up ${oldAlertsSnap.size} old alerts...`);
-      const batch = db.batch();
-      oldAlertsSnap.docs.forEach((doc: any) => batch.delete(doc.ref));
-      await batch.commit();
+    // Cleanup: Delete alerts older than 1 hour (Run occasionally to save quota)
+    if (Math.random() < 0.05) {
+      const oldAlertsSnap = await db.collection('alerts')
+        .where('timestamp', '<', oneHourAgoISO)
+        .limit(200)
+        .get();
+      
+      if (!oldAlertsSnap.empty) {
+        console.log(`[Monitor DEBUG] Cleaning up ${oldAlertsSnap.size} old alerts from Firebase...`);
+        const batch = db.batch();
+        oldAlertsSnap.docs.forEach((doc: any) => batch.delete(doc.ref));
+        await batch.commit();
+      }
     }
 
-    const lookbackISO = oneHourAgoISO;
-    const existingAlertsSnap = await db.collection('alerts')
-      .where('timestamp', '>=', lookbackISO)
-      .get();
+    if (!isAlertsCacheInitialized) {
+      const existingAlertsSnap = await db.collection('alerts')
+        .where('timestamp', '>=', oneHourAgoISO)
+        .get();
 
-    const existingAlertsMap = new Map<string, any>();
-    existingAlertsSnap.docs.forEach((doc: any) => {
-      const d = doc.data();
-      const key = (d.alertKey || doc.id).toLowerCase().trim();
-      existingAlertsMap.set(key, d);
-    });
+      existingAlertsSnap.docs.forEach((doc: any) => {
+        const d = doc.data();
+        const key = (d.alertKey || doc.id).toLowerCase().trim();
+        existingAlertsCache.set(key, d);
+      });
+      isAlertsCacheInitialized = true;
+      console.log(`[Monitor DEBUG] Initialized alerts cache with size: ${existingAlertsCache.size}`);
+    }
 
-    const existingAlertIds = new Set<string>(existingAlertsMap.keys());
+    // Cleanup memory trace of old alerts
+    for (const [k, v] of existingAlertsCache.entries()) {
+      if (v.timestamp && v.timestamp < oneHourAgoISO) {
+        existingAlertsCache.delete(k);
+      }
+    }
+
+    const existingAlertIds = new Set<string>(existingAlertsCache.keys());
     console.log(`[Monitor DEBUG] Dedup memory size: ${existingAlertIds.size} (1h lookback)`);
 
     // Function relocated.
@@ -362,7 +406,7 @@ export async function runMonitorTick(db: any, messaging: any) {
     
     for (const alert of activeAlertsDetected) {
       const alertId = alert.alertKey;
-      const existing = existingAlertsMap.get(alertId);
+      const existing = existingAlertsCache.get(alertId);
       
       const alertStoreId = String(alert.item.storeID || "").trim();
       const alertRegion = storeToRegion[alertStoreId] || "";
@@ -383,7 +427,7 @@ export async function runMonitorTick(db: any, messaging: any) {
       }
 
       if (shouldWrite) {
-        await db.collection('alerts').doc(alertId).set({
+        const alertData = {
           timestamp: now,
           orderId: alert.item.orderID || "",
           eventType: 'trigger',
@@ -399,7 +443,10 @@ export async function runMonitorTick(db: any, messaging: any) {
           statusTrigger: alert.statusTrigger || "",
           triggeredAt: now,
           updatedAt: new Date()
-        }, { merge: true });
+        };
+
+        await db.collection('alerts').doc(alertId).set(alertData, { merge: true });
+        existingAlertsCache.set(alertId, alertData);
 
         // Sync to GAS Legacy Logs
         try {
@@ -439,25 +486,31 @@ export async function runMonitorTick(db: any, messaging: any) {
     }
 
     // 7. Auto-Escalation Logic (3-minute cooldown)
-    const nowTime = Date.now();
-    for (const doc of existingAlertsSnap.docs) {
-      const data = doc.data();
+    const currentEscalationTime = Date.now();
+    for (const [alertId, data] of existingAlertsCache.entries()) {
       if (data.status === "Pending" && data.escalation !== "TRUE") {
         const triggeredAt = data.triggeredAt ? new Date(data.triggeredAt).getTime() : 0;
-        const ageMins = (nowTime - triggeredAt) / (1000 * 60);
+        const ageMins = (currentEscalationTime - triggeredAt) / (1000 * 60);
         
         if (ageMins >= 3) {
-          console.log(`[Monitor] Auto-escalating alert: ${doc.id}`);
-          await doc.ref.update({
+          console.log(`[Monitor] Auto-escalating alert: ${alertId}`);
+          
+          const updateData = {
             escalation: "TRUE",
             updatedAt: new Date()
-          });
+          };
+          await db.collection('alerts').doc(alertId).update(updateData);
+          
+          // Update memory cache
+          data.escalation = "TRUE";
+          data.updatedAt = updateData.updatedAt;
+          existingAlertsCache.set(alertId, data);
           
           // Sync escalation to GAS Legacy Logs
           try {
             const syncParams = new URLSearchParams();
             syncParams.append('action', 'logalertv2');
-            syncParams.append('id', doc.id);
+            syncParams.append('id', alertId);
             syncParams.append('timestamp', new Date().toISOString());
             syncParams.append('orderId', data.orderId || "");
             syncParams.append('eventType', 'escalate');
@@ -473,27 +526,29 @@ export async function runMonitorTick(db: any, messaging: any) {
             syncParams.append('orderCreatedAt', data.orderCreatedAt || "");
             syncParams.append('statusTrigger', data.statusTrigger || "");
 
-            console.log(`[Monitor] Syncing escalation to GAS: ${doc.id}`);
+            console.log(`[Monitor] Syncing escalation to GAS: ${alertId}`);
             await axios.post(baseUrl, syncParams.toString(), {
               headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
               timeout: 30000
             });
           } catch (syncErr: any) {
-            console.error(`[Monitor] GAS escalation sync failed for ${doc.id}:`, syncErr.message);
+            console.error(`[Monitor] GAS escalation sync failed for ${alertId}:`, syncErr.message);
           }
 
           // Notify Level 2 (Manager/Supervisor/Admin)
           await sendFilteredNotification({
             title: `🔥 ESCALATED: ${data.statusTrigger}`,
             body: `CRITICAL: Order ${data.orderId} at Store ${data.storeId} is still pending after 3 mins!`,
-            data: { orderId: data.orderId, type: "alert", alertId: doc.id }
+            data: { orderId: data.orderId, type: "alert", alertId: alertId }
           }, data.storeId, data.region, true);
         }
       }
     }
     
-    // Automatically archive old OOS records older than 24 hours to keep free tier clean
-    await archiveOldOOS(db);
+    // Automatically archive old OOS records older than 24 hours to keep free tier clean (5% chance per min ~ approx once per 20 mins)
+    if (Math.random() < 0.05) {    
+      await archiveOldOOS(db);
+    }
     
     console.log("[Monitor] Tick completed.");
   } catch (error) {
@@ -515,7 +570,7 @@ async function archiveOldOOS(db: any) {
     const docs = snap.docs;
     const archiveData = docs.map((d: any) => ({ ...d.data(), id: d.id }));
     
-    let baseUrl = (process.env.V2_GAS_URL || process.env.VITE_V2_GAS_URL || process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "https://script.google.com/macros/s/AKfycbz6l6gUuVhoXde_zYZNNGchQLnvzZHE8_kkk2RcvQyk55tpitg2N8ZQHVo_DV7FO71Gzw/exec").trim();
+    let baseUrl = (process.env.V2_GAS_URL || process.env.VITE_V2_GAS_URL || process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "https://script.google.com/macros/s/AKfycbx9GSOgBy9dLdd4vn2JLu3piAOVxTj-5AfKZ3NeomK5mMgbSVDrzd_ny8qI1k4Bf6vq_Q/exec").trim();
     
     try {
       await axios.post(baseUrl, 
