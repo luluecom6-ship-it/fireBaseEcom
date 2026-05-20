@@ -280,43 +280,9 @@ export const getTimeSlotBucket = (slotFrom: string, region?: string): string => 
 
   let hour = date.getUTCHours();
 
-  // Apply region-based offset to show local time
-  // User reported a 4-hour shift (e.g., 4pm showing as 12pm), suggesting GST (UTC+4)
-  if (region) {
-    const reg = region.toUpperCase();
-    if (
-      reg.includes('UAE') || 
-      reg.includes('DUBAI') || 
-      reg.includes('SHARJAH') || 
-      reg.includes('ABU DHABI') || 
-      reg.includes('AD') ||
-      reg.includes('OMAN') || 
-      reg.includes('MUSCAT') ||
-      reg.includes('INP') || // Based on user report for INP1/INP orders
-      reg.includes('GST')
-    ) {
-      hour = (hour + 4) % 24;
-    } else if (
-      reg.includes('KSA') || 
-      reg.includes('SAUDI') || 
-      reg.includes('RIYADH') || 
-      reg.includes('JEDDAH') || 
-      reg.includes('QATAR') || 
-      reg.includes('KUWAIT') || 
-      reg.includes('BAHRAIN') ||
-      reg.includes('AST')
-    ) {
-      hour = (hour + 3) % 24;
-    } else if (
-      reg.includes('IND') || 
-      reg.includes('INDIA') || 
-      reg.includes('IST')
-    ) {
-      // India is UTC+5.5. We'll round down to 5 for the hour bucket or handle half hours if needed.
-      // Most buckets are 2-hour blocks, so a 5-hour shift is usually enough.
-      hour = (hour + 5) % 24;
-    }
-  }
+  // Apply KSA offset (+3) as default/primary timezone as requested
+  // We formerly had complex region mapping, but now prioritizing KSA for all logic.
+  hour = (hour + 3) % 24;
 
   if (hour >= 8 && hour < 10) return '8:00 AM - 9:59 AM';
   if (hour >= 10 && hour < 12) return '10:00 AM - 11:59 AM';

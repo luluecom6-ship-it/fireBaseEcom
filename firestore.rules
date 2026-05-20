@@ -96,6 +96,14 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // OOS History
+    match /oos_history/{document} {
+      allow read, write: if true;
+    }
+    match /oos_history/{document=**} {
+      allow read, write: if true;
+    }
+
     // User Presence/Heartbeats
     match /presence/{userId} {
       allow read: if isSupervisor();

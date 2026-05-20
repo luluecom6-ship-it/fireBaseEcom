@@ -36,6 +36,8 @@ interface AdminProps {
   systemSoundEnabled: boolean;
   setSystemSoundEnabled: (val: boolean) => void;
   setSoundAlertsEnabled: (val: boolean, targetUserId?: string) => void;
+  oosPushEnabled?: boolean;
+  setOosPushEnabled?: (val: boolean) => void;
   staffStatus: any[];
   scheduledThreshold: number;
   setScheduledThreshold: (num: number) => void;
@@ -85,6 +87,8 @@ export const Admin: React.FC<AdminProps> = ({
   systemSoundEnabled,
   setSystemSoundEnabled,
   setSoundAlertsEnabled,
+  oosPushEnabled,
+  setOosPushEnabled,
   staffStatus
 }) => {
   const getTodayStr = () => {
@@ -1079,6 +1083,42 @@ export const Admin: React.FC<AdminProps> = ({
                   systemSoundEnabled ? "right-1" : "left-1"
                 )}></div>
               </button>
+            </div>
+
+            {/* OOS Push Toggle */}
+            <div className="p-4 sm:p-6 bg-purple-50/50 border-t border-purple-100/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-800">OOS Push Notifications</p>
+                <p className="text-[9px] font-bold text-slate-400 mt-0.5">Toggle push notifications when items are marked OOS</p>
+              </div>
+              <div className="flex items-center gap-4">
+                <button 
+                  onClick={async () => {
+                    try {
+                      const res = await fetch("/api/admin/test-oos-push", { method: "POST" });
+                      const data = await res.json();
+                      if (showToast) showToast(data.successCount ? `Sample sent to ${data.successCount} devices.` : "No device found", data.successCount ? "success" : undefined);
+                    } catch (e) {
+                      if (showToast) showToast("Send failed", "error");
+                    }
+                  }}
+                  className="px-3 py-1.5 bg-purple-100 text-purple-700 text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-purple-200 transition-colors"
+                >
+                  Send Sample
+                </button>
+                <button 
+                  onClick={() => setOosPushEnabled && setOosPushEnabled(!oosPushEnabled)}
+                  className={cn(
+                    "h-6 w-10 sm:h-7 sm:w-12 rounded-full relative transition-all",
+                    oosPushEnabled ? "bg-purple-600" : "bg-slate-300"
+                  )}
+                >
+                  <div className={cn(
+                    "absolute top-1 h-4 w-4 sm:h-5 sm:w-5 bg-white rounded-full transition-all shadow-sm",
+                    oosPushEnabled ? "right-1" : "left-1"
+                  )}></div>
+                </button>
+              </div>
             </div>
           </div>
 

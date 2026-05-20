@@ -5,7 +5,7 @@ import { API_URL } from '../constants';
 import { robustFetch } from '../utils/api';
 
 // V2 GAS URL added to proxy options
-const FALLBACK_V2_GAS_URL = "https://script.google.com/macros/s/AKfycbzIVMXK29x1t1YUrNPjyKt2v231WNcosaQJCW8bN4ZfTBMjUKK6GtIW4dRftri02z_gQw/exec";
+const FALLBACK_V2_GAS_URL = "https://script.google.com/macros/s/AKfycbx9GSOgBy9dLdd4vn2JLu3piAOVxTj-5AfKZ3NeomK5mMgbSVDrzd_ny8qI1k4Bf6vq_Q/exec";
 const V2_GAS_URL = import.meta.env.VITE_V2_GAS_URL || FALLBACK_V2_GAS_URL;
 
 interface UseApiDataReturn {
@@ -30,19 +30,29 @@ export function useApiDataV2(): UseApiDataReturn {
       setError(null);
 
       // Use the proxy instead of direct GAS call to avoid CORS issues
-      const proxyUrl = `${API_URL}?gasUrl=${encodeURIComponent(V2_GAS_URL)}&action=getMatrixData&_t=${Date.now()}&_skipCache=true`;
-      const response = await robustFetch(proxyUrl);
+      // Adding x-use-v2-gas header as an extra hint for the proxy mapping
+      // Using action=getMatrixDataV2 to help the proxy distinguish from V1 matrix requests
+      const proxyUrl = `${API_URL}?gasUrl=${encodeURIComponent(V2_GAS_URL)}&action=getMatrixDataV2&_t=${Date.now()}&_skipCache=true`;
+      const response = await robustFetch(proxyUrl, {
+        headers: {
+          'x-use-v2-gas': 'true'
+        }
+      });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      const text = await response.text();
+      const trimmed = text.trim();
+      const isJson = trimmed.startsWith('{') || trimmed.startsWith('[');
+      
+      if (!isJson) {
+        console.warn('[useApiDataV2] API returned non-JSON response:', trimmed.substring(0, 500));
+        throw new Error("Invalid response format from GAS (HTML detected)");
       }
 
-      const result = await response.json();
+      const result = JSON.parse(trimmed);
       console.log('[useApiDataV2] API Response received:', {
+        status: result.status,
         type: typeof result,
-        isArray: Array.isArray(result),
-        size: JSON.stringify(result).length,
-        preview: JSON.stringify(result).substring(0, 200)
+        isArray: Array.isArray(result)
       });
 
       // Handle the new JSON format - could be direct array or wrapped in object

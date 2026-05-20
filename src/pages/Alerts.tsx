@@ -20,7 +20,7 @@ export const Alerts: React.FC<AlertsProps> = ({
   navigateTo,
   user
 }) => {
-  const [filterDate, setFilterDate] = useState(new Date().toISOString().split("T")[0]);
+  const [filterDate, setFilterDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = async () => {
@@ -40,21 +40,11 @@ export const Alerts: React.FC<AlertsProps> = ({
   const filteredLogs = alertLogs.filter(log => {
     if (!log.timestamp) return false;
     
-    const tsStr = String(log.timestamp);
-    // Robust date matching: either string include or Date parity
-    let matchesDate = tsStr.startsWith(filterDate) || tsStr.includes(filterDate);
+    const d = parseServerDate(log.timestamp);
+    if (isNaN(d.getTime())) return false;
     
-    if (!matchesDate) {
-      try {
-        const d = new Date(log.timestamp);
-        if (!isNaN(d.getTime())) {
-          const dStr = d.getFullYear() + '-' + 
-                       String(d.getMonth() + 1).padStart(2, '0') + '-' + 
-                       String(d.getDate()).padStart(2, '0');
-          matchesDate = dStr === filterDate;
-        }
-      } catch (e) {}
-    }
+    // Compare local date strings (YYYY-MM-DD)
+    const matchesDate = d.toLocaleDateString('en-CA') === filterDate;
     
     if (!matchesDate) return false;
 

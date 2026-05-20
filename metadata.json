@@ -1,6 +1,6 @@
 {
   "name": "Matrix Intelligence",
-  "description": "v7.2: Unified logistics intelligence platform with critical recovery fixes, regional mapping, and timezone-aware scheduling.",
+  "description": "v7.3: Legacy stability & routing integrity. Enhanced connectivity, V1/V2 URL separation, and OOS History tracking.",
   "requestFramePermissions": ["camera", "notifications"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -1,5 +1,5 @@
-import { MatrixData, EscalationRule, MatrixItem, AlertLog } from '../types.js';
-import { AGE_BUCKETS } from '../constants.js';
+import { MatrixData, EscalationRule, MatrixItem, AlertLog } from '../types';
+import { AGE_BUCKETS } from '../constants';
 
 export const PREP_STATUSES = [
   "PICKING",
@@ -71,21 +71,31 @@ export const getLocalInfo = (region: string) => {
   const OFFSETS: Record<string, number> = {
     'DUBAI': 240,    // UTC+4
     'UAE': 240,
+    'DXB': 240,
     'SHARJAH': 240,
     'ABUDHABI': 240,
+    'AUH': 240,
     'KSA': 180,      // UTC+3
     'SAUDI': 180,
     'RIYADH': 180,
+    'RUH': 180,
     'JEDDAH': 180,
+    'JED': 180,
     'QATAR': 180,
     'DOHA': 180,
+    'DOH': 180,
     'KUWAIT': 180,
+    'KWI': 180,
     'BAHRAIN': 180,
+    'BAH': 180,
     'OMAN': 240,     // UTC+4
     'MUSCAT': 240,
+    'MCT': 240,
     'JORDAN': 180,   // UTC+3
+    'AMM': 180,
     'EGYPT': 120,    // UTC+2
     'CAIRO': 120,
+    'CAI': 120,
     'INDIA': 330,    // UTC+5:30
     'MUMBAI': 330,
     'DELHI': 330,
@@ -139,11 +149,15 @@ export const parseTime = (t: string, offsetMins: number = 0) => {
     
     if (period === 'PM' && hrs !== 12) hrs += 12;
     if (period === 'AM' && hrs === 12) hrs = 0;
+    
+    // Convert local time back to UTC-equivalent minutes so it can be compared with nowMins correctly
+    // or just return the abstract minutes if they are meant to be mapped against local nowMins.
+    // Given our getLocalInfo returns local's nowMins, we just return the raw minutes.
     return hrs * 60 + mins;
   }
 
   // 3. Try 24h format HH:MM or HH
-  const h24Match = cleaned.match(/(\d{1,2})(?::(\d{2}))?/);
+  const h24Match = cleaned.match(/^(\d{1,2})(?::(\d{2}))?$/);
   if (h24Match) {
     const hrs = parseInt(h24Match[1], 10);
     const mins = h24Match[2] ? parseInt(h24Match[2], 10) : 0;
@@ -211,8 +225,8 @@ export function detectAlerts(
       const status = normalize(item.status);
       const bucket = normalize(item.bucket);
       const itemBucketIndex = getBucketIndex(item.bucket);
-      const itemStoreId = String(item.storeID || "").trim();
-      const itemRegion = normalize(storeToRegion[itemStoreId] || "");
+      const itemStoreId = String(item.storeID || "").trim().toUpperCase();
+      const itemRegion = normalize(storeToRegion[itemStoreId] || 'KSA');
       
       if (idx < 5) {
         console.log(`[AlertLogic DEBUG] Checking Quick Order ${item.orderID}: Status=${status}, Bucket=${bucket} (Idx ${itemBucketIndex}), Region=${itemRegion}`);
@@ -251,87 +265,94 @@ export function detectAlerts(
     });
   }
 
-  // 2. Scheduled Commerce Alerts
-  (matrixData.schedule || []).forEach((item, idx) => {
-    const itemStoreId = String(item.storeID || "").trim();
-    const itemRegion = normalize(storeToRegion[itemStoreId] || "");
-    const localInfo = getLocalInfo(itemRegion);
-    const nowMins = localInfo.nowMins;
-    const offsetMins = localInfo.offsetMins;
-    const status = (item.status || "").toUpperCase().trim();
+    // --- Scheduled Commerce Alerts ---
+    const schedule = matrixData.schedule || [];
+    schedule.forEach((item, idx) => {
+      const itemStoreId = String(item.storeID || "").trim().toUpperCase();
+      // Map region for rule matching, but use KSA for actual time calculations as requested
+      const itemRegion = normalize(storeToRegion[itemStoreId] || 'KSA');
+      const localInfo = getLocalInfo('KSA'); // Force KSA timing
+      const nowMins = localInfo.nowMins;
+      const offsetMins = localInfo.offsetMins;
+      const status = (item.status || "").toUpperCase().trim();
 
-    if (idx < 5) {
-      console.log(`[AlertLogic DEBUG] Checking Sched Order ${item.orderID}: Status=${status}, Slot=${item.slot}, NowMins=${nowMins}, Region=${itemRegion}, LocalDate=${localInfo.dateStr}`);
-    }
-
-    // Check if slot contains a date and if it's today
-    if (item.slot) {
-      const dateMatch = item.slot.match(/([A-Za-z]{3}\s\d{1,2},\s\d{4})/);
-      if (dateMatch) {
-        const d = new Date(dateMatch[1]);
-        if (!isNaN(d.getTime())) {
-          // Compare using local date of the region
-          const slotDateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-          if (slotDateStr !== localInfo.dateStr) return; // Skip if not today in that region
-        }
-      }
-    }
-
-    const slotInfo = parseSlot(item.slot, offsetMins);
-    if (!slotInfo) return;
-
-
-    let shouldTrigger = false;
-    let triggerType: 'PAST' | 'RUNNING' | null = null;
-
-    if (nowMins >= slotInfo.end) {
-      shouldTrigger = true;
-      triggerType = 'PAST';
-    } else if (nowMins >= slotInfo.start) {
-      if (PREP_STATUSES.includes(status)) {
-        shouldTrigger = true;
-        triggerType = 'RUNNING';
-      } else if (DELIVERY_STATUSES.includes(status) && nowMins >= slotInfo.end - scheduledThreshold) {
-        shouldTrigger = true;
-        triggerType = 'RUNNING';
-      }
-    }
-
-    // Apply Scheduled Configuration Toggles and Regions
-    if (shouldTrigger && triggerType && scheduledConfig) {
-      const config = triggerType === 'PAST' ? scheduledConfig.pastSlot : scheduledConfig.runningSlot;
-      if (config) {
-        // Condition 1: Check if Active
-        if (config.isActive === false) shouldTrigger = false;
-        
-        // Condition 2: Check Region
-        if (shouldTrigger && config.regions && config.regions.length > 0) {
-          const normalizedTargetRegions = config.regions.map((r: string) => normalize(r));
-          const matchesRegion = normalizedTargetRegions.includes('ALL') || normalizedTargetRegions.includes(itemRegion);
-          if (!matchesRegion) shouldTrigger = false;
-        }
-      }
-    } else if (shouldTrigger && triggerType && !scheduledConfig) {
-      // Default behavior if config is missing: allow PAST alerts but maybe restrict RUNNING
-      // For now, if config is missing, we follow the default logic (which might be too aggressive)
-      // but we MUST check dedup regardless.
-    }
-
-    if (shouldTrigger) {
-      const displaySlot = formatSlotDisplay(item.slot, offsetMins);
-      const alertKey = `SCHED|${item.orderID}|${status}|${normalize(item.slot)}`.toLowerCase().trim();
+      const activeThreshold = scheduledThreshold || 30;
+      const isTargetOrder = item.orderID === 'Lulu-323797157187INP1' || item.orderID === 'Lulu-323927258518INP1';
       
-      if (!existingAlertIds.has(alertKey)) {
-        results.push({
-          alertKey,
-          item,
-          statusTrigger: `Stage: ${item.status || status} - ${displaySlot}`,
-          bucket: displaySlot,
-          type: 'SCHED'
-        });
+      if (isTargetOrder) {
+        console.log(`[AlertLogic TARGET] ${item.orderID}: Status=${status}, Slot=${item.slot}, Region=${itemRegion}, nowMins=${nowMins}, threshold=${activeThreshold}`);
       }
-    }
-  });
+
+      // Check if slot contains a date and if it's today
+      if (item.slot) {
+        const dateMatch = item.slot.match(/([A-Za-z]{3}\s\d{1,2},\s\d{4})/);
+        if (dateMatch) {
+          const d = new Date(dateMatch[1]);
+          if (!isNaN(d.getTime())) {
+            const slotDateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+            if (slotDateStr !== localInfo.dateStr) {
+               if (isTargetOrder) console.log(`[AlertLogic TARGET] Skipping: Date mismatch (${slotDateStr} vs ${localInfo.dateStr})`);
+               return;
+            }
+          }
+        }
+      }
+
+      const slotInfo = parseSlot(item.slot, offsetMins);
+      if (!slotInfo || (slotInfo.start === 0 && slotInfo.end === 0)) {
+        if (isTargetOrder) console.log(`[AlertLogic TARGET] Skipping: Invalid slot parsing.`);
+        return;
+      }
+
+      let shouldTrigger = false;
+      let triggerType: 'PAST' | 'RUNNING' | null = null;
+
+      if (nowMins >= slotInfo.end) {
+        shouldTrigger = true;
+        triggerType = 'PAST';
+      } else if (nowMins >= (slotInfo.start - activeThreshold)) {
+        if (PREP_STATUSES.includes(status)) {
+          shouldTrigger = true;
+          triggerType = 'RUNNING';
+        } else if (DELIVERY_STATUSES.includes(status) && nowMins >= (slotInfo.end - activeThreshold)) {
+          shouldTrigger = true;
+          triggerType = 'RUNNING';
+        }
+      }
+
+      if (isTargetOrder) {
+        console.log(`[AlertLogic TARGET] Trigger Check: Start=${slotInfo.start}, End=${slotInfo.end}, Threshold=${activeThreshold} -> Result=${shouldTrigger} (${triggerType})`);
+      }
+
+      // Apply Scheduled Configuration
+      if (shouldTrigger && triggerType && scheduledConfig) {
+        const config = triggerType === 'PAST' ? scheduledConfig.pastSlot : scheduledConfig.runningSlot;
+        if (config) {
+          if (config.isActive === false) shouldTrigger = false;
+          if (shouldTrigger && config.regions && config.regions.length > 0) {
+            const normalizedTargetRegions = config.regions.map((r: string) => normalize(r));
+            const matchesRegion = normalizedTargetRegions.includes('ALL') || normalizedTargetRegions.includes(itemRegion);
+            if (!matchesRegion) shouldTrigger = false;
+          }
+        }
+      }
+
+      if (shouldTrigger) {
+        const displaySlot = formatSlotDisplay(item.slot, offsetMins);
+        const alertKey = `SCHED|${item.orderID}|${status}|${normalize(item.slot)}`.toLowerCase().trim();
+        
+        if (!existingAlertIds.has(alertKey)) {
+          if (isTargetOrder) console.log(`[AlertLogic TARGET] ADDING ALERT!`);
+          results.push({
+            alertKey,
+            item,
+            statusTrigger: `Stage: ${item.status || status} - ${displaySlot}`,
+            bucket: displaySlot,
+            type: 'SCHED'
+          });
+        }
+      }
+    });
 
   return results;
 }

@@ -21,6 +21,7 @@ import { useAlerts } from "./hooks/useAlerts";
 import { useSystemConfig } from "./hooks/useSystemConfig";
 import { useAttendance } from "./hooks/useAttendance";
 import { useStaffStatus } from "./hooks/useStaffStatus";
+import { useOOSHistory } from "./hooks/useOOSHistory";
 import { useToast } from "./hooks/useToast";
 import { usePWA } from "./hooks/usePWA";
 
@@ -47,11 +48,12 @@ import { Alerts } from "./pages/Alerts";
 import { AttendanceHistory } from "./pages/AttendanceHistory";
 import { RosterDashboard } from "./pages/RosterDashboard";
 import { AttendanceIntelligence } from "./pages/AttendanceDashboard2";
+import { OOSHistory } from "./pages/OOSHistory";
 import MatrixV2 from "./pages/MatrixV2";
 
 export default function App() {
   // Navigation
-  const [page, setPage] = useState<"login" | "dashboard" | "upload" | "attendance" | "admin" | "search" | "matrix" | "analytics" | "alerts" | "attendance-history" | "roster" | "attendance-v2" | "matrix-v2">("login");
+  const [page, setPage] = useState<"login" | "dashboard" | "upload" | "attendance" | "admin" | "search" | "matrix" | "analytics" | "alerts" | "attendance-history" | "roster" | "attendance-v2" | "matrix-v2" | "oos-history">("login");
   
   // Auth Hook
   const { 
@@ -118,10 +120,13 @@ export default function App() {
     scheduledPastSlotRegions, setScheduledPastSlotRegions,
     scheduledRunningSlotRegions, setScheduledRunningSlotRegions,
     soundAlertsEnabled, setSoundAlertsEnabled,
+    oosPushEnabled, setOosPushEnabled,
     saveSystemConfig, isSavingConfig 
   } = useSystemConfig(user, showToast, isFirebaseAuthenticated);
 
   const { staffStatus } = useStaffStatus(user, isFirebaseAuthenticated);
+
+  const { oosItems, loading: oosLoading, refetch: refetchOOS } = useOOSHistory(user, page === "oos-history");
 
   const { 
     attendanceStatus, hoursWorked, isShiftComplete, 
@@ -139,6 +144,29 @@ export default function App() {
     const unsubscribe = onForegroundMessage((payload: any) => {
       if (payload.notification) {
         showToast(`${payload.notification.title}: ${payload.notification.body}`, "info");
+        
+        // Also show native OS notification if they are in another window/app but tab is open
+        if ("Notification" in window && Notification.permission === "granted") {
+          try {
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.ready.then(registration => {
+                registration.showNotification(payload.notification.title || "Matrix Alert", {
+                  body: payload.notification.body,
+                  icon: payload.notification.image || '/icon-192x192.png',
+                  image: payload.notification.image,
+                } as any).catch(e => console.error("SW notification failed", e));
+              });
+            } else {
+              new Notification(payload.notification.title || "Matrix Alert", {
+                body: payload.notification.body,
+                icon: payload.notification.image || '/icon-192x192.png',
+                image: payload.notification.image,
+              } as any);
+            }
+          } catch (e) {
+            console.error("Foreground native notification failed", e);
+          }
+        }
       }
     });
 
@@ -504,6 +532,8 @@ export default function App() {
             systemSoundEnabled={soundAlertsEnabled}
             setSystemSoundEnabled={handleToggleGlobalSound}
             setSoundAlertsEnabled={handleToggleSound}
+            oosPushEnabled={oosPushEnabled}
+            setOosPushEnabled={setOosPushEnabled}
             staffStatus={staffStatus}
             scheduledThreshold={scheduledThreshold}
             setScheduledThreshold={setScheduledThreshold}
@@ -540,6 +570,18 @@ export default function App() {
             onViewImage={setFullImage}
             onRefetch={fetchAdminData}
             isLoading={loading}
+          />
+        );
+      case "oos-history":
+        return (
+          <OOSHistory 
+            oosItems={oosItems}
+            loading={oosLoading}
+            onRefresh={refetchOOS}
+            onViewImage={setFullImage}
+            navigateTo={navigateTo as any}
+            user={user}
+            adminData={adminData}
           />
         );
       case "matrix-v2":
@@ -605,6 +647,7 @@ export default function App() {
             case 'roster':            return 'Roster & Availability';
             case 'attendance-v2': return 'Workforce Intelligence';
             case 'matrix-v2': return 'Matrix Intelligence V2';
+            case 'oos-history': return 'OOS History';
             default: return page.charAt(0).toUpperCase() + page.slice(1).replace("-", " ");
           }
         })()} 

@@ -101,19 +101,171 @@ async function startServer() {
     res.json({ status: "ok", time: new Date().toISOString() });
   });
 
+  app.post("/api/admin/test-oos-push", async (req, res) => {
+    try {
+      if (!db || !messaging) return res.status(500).json({ error: "Missing Firebase features" });
+      const tokensSnap = await db.collection('fcm_tokens').where('role', 'in', ['admin', 'supervisor']).get();
+      const tokens = tokensSnap.docs.map(d => d.data().token).filter(Boolean);
+      if (tokens.length === 0) return res.json({ status: "No admin tokens found" });
+      
+      const payload = {
+          title: `🧪 TEST OUT OF STOCK DETECTED`,
+          body: `Test Item Strawberry (SKU: 99999) marked returning OOS at Store TEST.`,
+          image: 'https://placehold.co/200x200.png?text=OOS+TEST',
+          data: { orderId: 'test-order-123', type: "oos", storeId: 'TEST' }
+      };
+
+      const message = {
+          notification: { title: payload.title, body: payload.body, image: payload.image },
+          data: payload.data,
+          tokens: tokens
+      };
+      const response = await messaging.sendEachForMulticast(message);
+      res.json({ status: "success", successCount: response.successCount });
+    } catch(e: any) {
+      console.error("[test-oos-push] Error:", e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/admin/send-oos-push", async (req, res) => {
+    try {
+      if (!db || !messaging) return res.status(500).json({ error: "Missing Firebase features" });
+      
+      const { item, requesterRole } = req.body;
+      if (!item || (requesterRole !== 'admin' && requesterRole !== 'supervisor')) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      // Fetch region mapping
+      let alertRegion = "";
+      try {
+        const adminSnap = await db.collection("app_config").doc("admin_control").get();
+        if (adminSnap.exists) {
+           const adminData = adminSnap.data() || {};
+           const regions = adminData.regions || [];
+           
+           // Try format 1: { stores: [...], name: "..." }
+           const storeRegionObj = regions.find((r: any) => Array.isArray(r.stores) && r.stores.includes(item.storeId));
+           if (storeRegionObj && storeRegionObj.name) {
+             alertRegion = storeRegionObj.name;
+           } else {
+             // Try format 2: { storeId: "...", region: "..." }
+             const storeRegionMapping = regions.find((r: any) => String(r.storeId || r.StoreID || "").trim() === String(item.storeId).trim());
+             if (storeRegionMapping && (storeRegionMapping.region || storeRegionMapping.Region)) {
+               alertRegion = storeRegionMapping.region || storeRegionMapping.Region;
+             }
+           }
+        }
+      } catch (e) {
+         console.warn("Could not fetch admin_control for region mapping", e);
+      }
+      
+      const alertStoreId = String(item.storeId || "").trim();
+
+      const tokensSnap = await db.collection('fcm_tokens').get();
+      const tokens = tokensSnap.docs
+        .map(d => d.data())
+        .filter(data => {
+            if (!data.token) return false;
+            const userRole = String(data.role || "").toLowerCase().trim();
+            const userStoreId = String(data.storeId || "").trim();
+            const userRegion = String(data.region || "").trim();
+            
+            if (userRole === 'admin') return true;
+            if (userRole === 'supervisor') return userRegion && alertRegion && userRegion === alertRegion;
+            if (userRole === 'manager' || userRole === 'store' || userRole === 'picker' || userRole === 'driver') {
+               return userStoreId === alertStoreId;
+            }
+            return false;
+        })
+        .map(data => data.token);
+        
+      if (tokens.length === 0) return res.json({ status: "No appropriate devices found" });
+      
+      const getSmallThumbnailUrl = (url: string) => {
+        if (!url) return "";
+        const str = String(url);
+        if (str.includes("drive.google.com")) {
+          const id = str.split("id=")[1] || str.split("/d/")[1]?.split("/")[0];
+          if (id) return `https://lh3.googleusercontent.com/d/${id}=s200`;
+        }
+        return str;
+      };
+
+      const payload = {
+          title: `⚠️ OUT OF STOCK DETECTED`,
+          body: `Item ${item.itemName} (SKU: ${item.sku}) marked returning OOS at Store ${item.storeId}.`,
+          image: getSmallThumbnailUrl(item.photoUrl),
+          data: { orderId: item.orderId, type: "oos", storeId: item.storeId }
+      };
+
+      const message = {
+          notification: { title: payload.title, body: payload.body, ...(payload.image ? { image: payload.image } : {}) },
+          data: payload.data,
+          tokens: tokens
+      };
+      
+      const response = await messaging.sendEachForMulticast(message);
+      res.json({ status: "success", successCount: response.successCount });
+    } catch(e: any) {
+      console.error("[send-oos-push] Error:", e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/oos-history", async (req, res) => {
+    try {
+      if (!db) return res.status(500).json({ error: "No DB" });
+      const limitParam = parseInt((req.query.limit as string) || "500", 10);
+      const snap = await db.collection("oos_history").limit(limitParam).get();
+      const items = snap.docs.map(d => ({
+        id: d.id,
+        ...d.data()
+      }));
+      res.json({ status: "success", data: items });
+    } catch(e: any) {
+      console.error("[oos-history] Error:", e);
+      res.status(500).json({ status: "error", message: e.message });
+    }
+  });
+
+  app.get("/api/oos-trigger", async (req, res) => {
+    try {
+      if (!admin.apps.length) return res.status(500).json({ error: "No DB" });
+      await runMonitorTick(getFirestore(), null);
+      res.json({ status: "Tick completed" });
+    } catch(e: any) {
+      console.error(e);
+      res.status(500).json({ error: e.stack || e.message });
+    }
+  });
+
   // GAS Proxy Route
     app.all("/api/proxy-gas", async (req, res) => {
     const start = Date.now();
     const action = req.query.action || "unknown";
     try {
       console.log(`[Proxy] >>> START ${req.method} action=${action}`);
-      let rawUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
-      const queryGasUrl = req.query.gasUrl;
-      if (queryGasUrl) rawUrl = String(queryGasUrl).trim();
+      const V2_FALLBACK = "https://script.google.com/macros/s/AKfycbx9GSOgBy9dLdd4vn2JLu3piAOVxTj-5AfKZ3NeomK5mMgbSVDrzd_ny8qI1k4Bf6vq_Q/exec";
+      const V1_FALLBACK = "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec";
+
+      // Precise identification of the target GAS URL
+      let rawUrl = (typeof req.query.gasUrl === 'string' ? req.query.gasUrl : "").trim();
       
-      // Consistent fallback across all environments
+      // If no URL passed in query, determine based on environment and action
       if (!rawUrl || rawUrl === "undefined" || !rawUrl.startsWith("http")) {
-        rawUrl = "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec";
+        // Specifically route Matrix V2 actions to V2 if not specified
+        if (action === "getMatrixDataV2" || req.headers['x-use-v2-gas'] === 'true') {
+          rawUrl = (process.env.V2_GAS_URL || process.env.VITE_V2_GAS_URL || V2_FALLBACK).trim();
+        } else {
+          rawUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || V1_FALLBACK).trim();
+        }
+      }
+      
+      // Final sanity check
+      if (!rawUrl || rawUrl === "undefined" || !rawUrl.startsWith("http")) {
+        rawUrl = V1_FALLBACK;
       }
 
       let urlObj: URL;
@@ -180,11 +332,16 @@ async function startServer() {
 
       // Detect common GAS error indicators in the raw response
       if (typeof response.data === 'string') {
-        if (response.data.includes('goog-script-error') || response.data.includes('Rate exceeded')) {
+        const isHtml = response.data.includes('<!DOCTYPE html>') || response.data.includes('<html');
+        const isError = response.data.includes('goog-script-error') || response.data.includes('Rate exceeded');
+        
+        if (isError || (isHtml && !response.data.includes('JSON'))) {
+          console.error(`[Proxy] Detected INVALID Response from GAS for action=${action}: ${isHtml ? 'HTML' : 'Error Page'}`);
           const isRate = response.data.includes('Rate exceeded');
           return res.status(isRate ? 429 : 502).json({ 
             status: "error", 
-            message: isRate ? "Rate limit reached" : "GAS Error",
+            message: isRate ? "Rate limit reached" : (isHtml ? "GAS returned HTML (Login or Deployment issue?)" : "GAS Error"),
+            debug: response.data.substring(0, 100)
           });
         }
       }
@@ -239,9 +396,9 @@ async function startServer() {
   // Helper for one-way sync to GAS
   const syncUserToGas = async (user: any, action: 'upsert' | 'delete') => {
     try {
-      let baseUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
+      let baseUrl = (process.env.V2_GAS_URL || process.env.VITE_V2_GAS_URL || process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
       if (!baseUrl || baseUrl === "undefined" || !baseUrl.startsWith("http")) {
-        baseUrl = "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec";
+        baseUrl = "https://script.google.com/macros/s/AKfycbx9GSOgBy9dLdd4vn2JLu3piAOVxTj-5AfKZ3NeomK5mMgbSVDrzd_ny8qI1k4Bf6vq_Q/exec";
       }
     const params = new URLSearchParams();
     params.append('action', 'syncUser');
@@ -272,7 +429,7 @@ async function startServer() {
       console.log(`[Sync] Triggering GAS sync for ${user.username} (${action})...`);
       await axios.post(baseUrl, params.toString(), {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        timeout: 10000 // 10 second timeout
+        timeout: 30000 // 30 second timeout
       });
       console.log(`[Sync] GAS sync completed for ${user.username}`);
     } catch (e: any) {
@@ -471,10 +628,10 @@ async function startServer() {
   // 4. One-time Migration Utility
   app.get("/api/admin/migrate-users", async (req, res) => {
     try {
-      // 1. Fetch users from GAS
-      let baseUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
+      // 1. Fetch users from GAS (V2 Preferred)
+      let baseUrl = (process.env.V2_GAS_URL || process.env.VITE_V2_GAS_URL || process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
       if (!baseUrl || baseUrl === "undefined" || !baseUrl.startsWith("http")) {
-        baseUrl = "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec";
+        baseUrl = "https://script.google.com/macros/s/AKfycbx9GSOgBy9dLdd4vn2JLu3piAOVxTj-5AfKZ3NeomK5mMgbSVDrzd_ny8qI1k4Bf6vq_Q/exec";
       }
       const gasRes = await axios.get(`${baseUrl}?action=getAdminData&role=admin`);
       const users = gasRes.data.data?.users || gasRes.data.users || [];

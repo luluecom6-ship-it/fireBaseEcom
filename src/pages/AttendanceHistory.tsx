@@ -22,7 +22,7 @@ export const AttendanceHistory: React.FC<AttendanceHistoryProps> = ({
 }) => {
   const [history, setHistory] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterMonth, setFilterMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
+  const [filterMonth, setFilterMonth] = useState(new Date().toLocaleDateString('en-CA').slice(0, 7)); // YYYY-MM
   const [selectedRecord, setSelectedRecord] = useState<AttendanceRecord | null>(null);
 
   const fetchHistory = async () => {
@@ -40,7 +40,17 @@ export const AttendanceHistory: React.FC<AttendanceHistoryProps> = ({
       urlObj.searchParams.set('_t', Date.now().toString());
       
       const res = await robustFetch(urlObj.toString());
-      const response = await res.json();
+      const text = await res.text();
+      const trimmed = text.trim();
+      const isJson = trimmed.startsWith('{') || trimmed.startsWith('[');
+      
+      if (!isJson) {
+        console.error("Failed to fetch attendance history (Not JSON):", trimmed.substring(0, 500));
+        setLoading(false);
+        return;
+      }
+
+      const response = JSON.parse(trimmed);
       let data = response.status === "success" ? response.data : response;
       
       // Handle different response formats
@@ -71,12 +81,12 @@ export const AttendanceHistory: React.FC<AttendanceHistoryProps> = ({
   const groupedHistory = history
     .filter(r => {
       const date = parseServerDate(r.timestamp);
-      const monthStr = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+      const monthStr = date.toLocaleDateString('en-CA').slice(0, 7);
       return monthStr === filterMonth;
     })
     .reduce((acc, record) => {
       const dateObj = parseServerDate(record.timestamp);
-      const date = dateObj.toISOString().split('T')[0];
+      const date = dateObj.toLocaleDateString('en-CA');
       if (!acc[date]) acc[date] = { in: null, out: null };
       if (record.type === 'In') acc[date].in = record;
       else if (record.type === 'Out') acc[date].out = record;

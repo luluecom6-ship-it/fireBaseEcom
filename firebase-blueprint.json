@@ -85,6 +85,26 @@
         "lastSeen": { "type": "object" },
         "updatedAt": { "type": "string", "format": "date-time" }
       }
+    },
+    "OOSHistory": {
+      "title": "OOS History Record",
+      "description": "Records of items removed from orders (Out of Stock).",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string" },
+        "sku": { "type": "string" },
+        "itemName": { "type": "string" },
+        "storeId": { "type": "string" },
+        "quantity": { "type": "number" },
+        "foundQty": { "type": "number" },
+        "location": { "type": "string" },
+        "slot": { "type": "string" },
+        "status": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "orderCreatedAt": { "type": "string" },
+        "updatedAt": { "type": "object" }
+      }
     }
   },
   "firestore": {
@@ -99,6 +119,10 @@
     "/alerts/{alertId}": {
       "schema": "Alert",
       "description": "Collection of active alerts synchronized across all devices."
+    },
+    "/oos_history/{historyId}": {
+      "schema": "OOSHistory",
+      "description": "Records of items that were removed from orders due to being out of stock."
     },
     "/push_queue/{notificationId}": {
       "schema": "PushQueueItem",

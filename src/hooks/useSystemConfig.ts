@@ -18,6 +18,7 @@ export function useSystemConfig(
   const [scheduledPastSlotRegions, setScheduledPastSlotRegions] = useState<string[]>(['All']);
   const [scheduledRunningSlotRegions, setScheduledRunningSlotRegions] = useState<string[]>(['All']);
   const [soundAlertsEnabled, setSoundAlertsEnabled] = useState(true);
+  const [oosPushEnabled, setOosPushEnabled] = useState(true);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   // Use Firestore for real-time config
@@ -49,6 +50,9 @@ export function useSystemConfig(
         if (typeof data.soundAlertsEnabled === 'boolean') {
           setSoundAlertsEnabled(data.soundAlertsEnabled);
         }
+        if (typeof data.oosPushEnabled === 'boolean') {
+          setOosPushEnabled(data.oosPushEnabled);
+        }
       } else {
         // Default rules if nothing in Firestore yet
         const defaultRules = [
@@ -63,6 +67,7 @@ export function useSystemConfig(
         setScheduledPastSlotRegions(['All']);
         setScheduledRunningSlotRegions(['All']);
         setSoundAlertsEnabled(true);
+        setOosPushEnabled(true);
       }
     }, (error) => {
       console.error("Firestore config error:", error);
@@ -94,8 +99,9 @@ export function useSystemConfig(
           regions: scheduledRunningSlotRegions
         },
         soundAlertsEnabled,
+        oosPushEnabled,
         updatedAt: new Date().toISOString()
-      });
+      }, { merge: true }); // Use merge: true to avoid clobbering unseen config keys
       
       if (showToast) showToast("System Configuration Saved to Firebase", "success");
       return { success: true };
@@ -128,6 +134,7 @@ export function useSystemConfig(
     scheduledRunningSlotActive, 
     scheduledRunningSlotRegions, 
     soundAlertsEnabled,
+    oosPushEnabled,
     showToast, 
     user
   ]);
@@ -149,6 +156,8 @@ export function useSystemConfig(
     setScheduledRunningSlotRegions,
     soundAlertsEnabled,
     setSoundAlertsEnabled,
+    oosPushEnabled,
+    setOosPushEnabled,
     isSavingConfig, 
     saveSystemConfig 
   };

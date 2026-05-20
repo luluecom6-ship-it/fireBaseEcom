@@ -155,3 +155,20 @@ export interface MatrixDetail {
   key: string;
   orders: MatrixItem[];
 }
+
+export interface OOSRecord {
+  id: string;
+  orderId: string;
+  sku: string;
+  itemName: string;
+  storeId: string;
+  quantity: number;
+  foundQty: number;
+  location: string;
+  slot: string;
+  status: string;
+  photoUrl: string;
+  timestamp: string;
+  orderCreatedAt: string;
+  updatedAt?: any;
+}

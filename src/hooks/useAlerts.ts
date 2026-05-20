@@ -106,7 +106,16 @@ export function useAlerts(
       urlObj.searchParams.set('_t', Date.now().toString());
       
       const res = await robustFetch(urlObj.toString());
-      const response = await res.json();
+      const text = await res.text();
+      const trimmed = text.trim();
+      const isJson = trimmed.startsWith('{') || trimmed.startsWith('[');
+      
+      if (!isJson) {
+        console.error("Failed to parse legacy alert history (Not JSON):", trimmed.substring(0, 500));
+        return;
+      }
+
+      const response = JSON.parse(trimmed);
       let data = response.status === "success" ? response.data : response;
       
       if (data && !Array.isArray(data) && data.alerts) {

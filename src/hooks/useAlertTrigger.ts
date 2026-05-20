@@ -53,6 +53,10 @@ export function useAlertTrigger(
       scheduledConfig
     );
 
+    if (newAlerts.length > 0) {
+      console.log(`[useAlertTrigger] DETECTED ${newAlerts.length} NEW ALERTS!`);
+    }
+
     newAlerts.forEach(alert => {
       triggeredAlertsRef.current.add(alert.alertKey);
       logAlertAction({

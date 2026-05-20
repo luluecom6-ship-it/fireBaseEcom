@@ -42,7 +42,7 @@ async function syncUserToGas(user: any, action: 'upsert' | 'delete') {
   try {
     let gasUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
     if (!gasUrl || gasUrl === "undefined" || !gasUrl.startsWith("http")) {
-      gasUrl = "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec";
+      gasUrl = "https://script.google.com/macros/s/AKfycbz6l6gUuVhoXde_zYZNNGchQLnvzZHE8_kkk2RcvQyk55tpitg2N8ZQHVo_DV7FO71Gzw/exec";
     }
     const params = new URLSearchParams();
     params.append('action', 'syncUser');
@@ -73,7 +73,7 @@ async function syncUserToGas(user: any, action: 'upsert' | 'delete') {
     console.log(`[Vercel Admin] Syncing ${user.username} to GAS...`);
     await axios.post(gasUrl, params.toString(), {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      timeout: 10000 
+      timeout: 30000 
     });
   } catch (err: any) {
     console.error("[Vercel Admin] GAS Sync failed:", err.message);

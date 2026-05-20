@@ -59,7 +59,7 @@ function normalizeDay(day: string): string {
 
 function toYMD(ts: any): string {
   try {
-    return parseServerDate(ts).toISOString().split('T')[0];
+    return parseServerDate(ts).toLocaleDateString('en-CA');
   } catch { return ''; }
 }
 
@@ -138,7 +138,7 @@ const MatrixV2: React.FC<MatrixV2Props> = ({
   }, [user, storeToRegion]);
 
   const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
+  const todayStr = today.toLocaleDateString('en-CA');
   const todayDayName = DAYS_OF_WEEK[today.getDay()];
 
   // Show data source indicator
@@ -311,14 +311,7 @@ const MatrixV2: React.FC<MatrixV2Props> = ({
             </div>
             <div className="time-info">
               {showDataSourceBadge && (
-                <div className="data-source-wrapper">
-                  <span className="data-source-badge fallback">Demo Data</span>
-                  {error && (
-                    <div className="api-diagnostic-tooltip" title={error}>
-                      <AlertCircle size={12} />
-                    </div>
-                  )}
-                </div>
+                <span className="data-source-badge fallback">Demo Data</span>
               )}
               <span className="sync-time">Sync: {syncTime}</span>
               <span className="last-updated">Updated: {currentTime}</span>
@@ -327,13 +320,6 @@ const MatrixV2: React.FC<MatrixV2Props> = ({
               </button>
             </div>
           </div>
-
-          {showDataSourceBadge && error && (
-            <div className="api-error-banner">
-              <AlertCircle size={14} className="text-amber-500" />
-              <span>API connectivity issue detected. Showing local fallback data. Details: <code className="text-[10px] bg-amber-100 px-1 rounded">{error}</code></span>
-            </div>
-          )}
 
           {loading && apiData.length === 0 ? (
             <div className="loading-container">

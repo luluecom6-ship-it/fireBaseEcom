@@ -91,9 +91,9 @@ export function useAttendance(
         
         const isDifferentDay = inDate.toDateString() !== now.toDateString();
         
-        // Thresholds: 20 hours total, OR 12 hours if it's a different day.
-        // This handles night shifts (e.g. 10pm to 6am = 8 hours, isDifferentDay=true, diffHrs=8 < 12 => OK)
-        if (diffHrs >= 20 || (isDifferentDay && diffHrs >= 12)) {
+        // Thresholds: 22 hours total, OR 16 hours if it's a different day.
+        // This handles night shifts (e.g. 10pm to 6am = 8 hours, isDifferentDay=true, diffHrs=8 < 16 => OK)
+        if (diffHrs >= 22 || (isDifferentDay && diffHrs >= 16)) {
           setAttendanceStatus({
             inTime: null,
             outTime: null,

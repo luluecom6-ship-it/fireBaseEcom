@@ -109,6 +109,31 @@ async function startServer() {
     });
   });
 
+  app.get("/api/oos-debug", async (req, res) => {
+    try {
+      if (!admin.apps.length) return res.status(500).json({ error: "No DB" });
+      const snap = await getFirestore().collection("oos_history").get();
+      res.json({ count: snap.size, data: snap.docs.map(d => d.data()) });
+    } catch(e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/oos-history", async (req, res) => {
+    try {
+      if (!db) return res.status(500).json({ error: "No DB" });
+      const limitParam = parseInt((req.query.limit as string) || "500", 10);
+      const snap = await db.collection("oos_history").limit(limitParam).get();
+      const items = snap.docs.map(d => ({
+        id: d.id,
+        ...d.data()
+      }));
+      res.json({ status: "success", data: items });
+    } catch(e: any) {
+      res.status(500).json({ status: "error", error: e.message });
+    }
+  });
+
   // GAS Proxy Route
     app.all(["/api/proxy-gas", "/proxy-gas"], async (req, res) => {
     const start = Date.now();
@@ -118,14 +143,23 @@ async function startServer() {
       console.log(`[Proxy] >>> START ${req.method} action=${action}`);
       
       // Hierarchy: 1. Specialized V2 env (PRIORITY), 2. query param, 3. general GAS env, 4. Hardcoded fallback
-      let rawUrl = (process.env.V2_GAS_URL || process.env.VITE_V2_GAS_URL || req.query.gasUrl || process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
+      const V1_FALLBACK = "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec";
+      const V2_FALLBACK = "https://script.google.com/macros/s/AKfycbz6l6gUuVhoXde_zYZNNGchQLnvzZHE8_kkk2RcvQyk55tpitg2N8ZQHVo_DV7FO71Gzw/exec";
       
-      // Specifically check if this is likely a V2 request (by action or by client indication)
-      // but the above hierarchy already covers it.
+      let rawUrl = (typeof req.query.gasUrl === 'string' ? req.query.gasUrl : "").trim();
       
-      // Consistent fallback across all environments
+      // Automatic routing logic if no specific gasUrl provided
       if (!rawUrl || rawUrl === "undefined" || !rawUrl.startsWith("http")) {
-        rawUrl = "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec";
+        if (action === "getMatrixDataV2" || req.headers['x-use-v2-gas'] === 'true') {
+           rawUrl = (process.env.V2_GAS_URL || process.env.VITE_V2_GAS_URL || V2_FALLBACK).trim();
+        } else {
+           rawUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || V1_FALLBACK).trim();
+        }
+      }
+      
+      // Final sanity check
+      if (!rawUrl || rawUrl === "undefined" || !rawUrl.startsWith("http")) {
+        rawUrl = V1_FALLBACK;
       }
 
       let urlObj: URL;
@@ -200,7 +234,7 @@ async function startServer() {
           const isRate = response.data.includes('Rate exceeded');
           return res.status(isRate ? 429 : 502).json({ 
             status: "error", 
-            message: isRate ? "Rate limit reached" : (isHtml ? "GAS returned HTML (Login required?)" : "GAS Error"),
+            message: isRate ? "Rate limit reached" : (isHtml ? "GAS returned HTML (Login or Deployment issue?)" : "GAS Error"),
             debug: response.data.substring(0, 100)
           });
         }
@@ -303,7 +337,7 @@ async function startServer() {
       console.log(`[Sync] Triggering GAS sync for ${user.username} (${action})...`);
       await axios.post(baseUrl, params.toString(), {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        timeout: 10000 // 10 second timeout
+        timeout: 30000 // 30 second timeout
       });
       console.log(`[Sync] GAS sync completed for ${user.username}`);
     } catch (e: any) {

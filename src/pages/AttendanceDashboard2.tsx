@@ -90,7 +90,7 @@ function fmtDur(hrs: number | null): string {
 
 function toYMD(ts: any): string {
   try {
-    return parseServerDate(ts).toISOString().split('T')[0];
+    return parseServerDate(ts).toLocaleDateString('en-CA');
   } catch { return ''; }
 }
 
@@ -188,7 +188,7 @@ export const AttendanceIntelligence: React.FC<AttendanceDashboardProps> = ({
   const [selectedStaff, setSelectedStaff] = useState<StaffSummary | null>(null);
   const [firestoreUsers, setFirestoreUsers] = useState<User[]>([]);
 
-  const todayStr = today.toISOString().split('T')[0];
+  const todayStr = today.toLocaleDateString('en-CA');
 
   // Subscribe to real-time users from Firestore for the most accurate staff list
   useEffect(() => {

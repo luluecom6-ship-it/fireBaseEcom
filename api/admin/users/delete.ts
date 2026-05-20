@@ -75,7 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 3. Sync to GAS (Delete)
     try {
-      const gasUrl = (process.env.GAS_API_URL || "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec").trim();
+      const gasUrl = (process.env.GAS_API_URL || "https://script.google.com/macros/s/AKfycbz6l6gUuVhoXde_zYZNNGchQLnvzZHE8_kkk2RcvQyk55tpitg2N8ZQHVo_DV7FO71Gzw/exec").trim();
       const params = new URLSearchParams();
       params.append('action', 'syncUser');
       params.append('syncAction', 'delete');
@@ -83,7 +83,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       params.append('username', String(username || ""));
       await axios.post(gasUrl, params.toString(), {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        timeout: 10000 
+        timeout: 30000 
       });
     } catch (err: any) {
       console.error("[Vercel Admin] GAS Delete failed:", err.message);
