@@ -119,6 +119,21 @@ async function startServer() {
     }
   });
 
+  app.get("/api/oos-history", async (req, res) => {
+    try {
+      if (!db) return res.status(500).json({ error: "No DB" });
+      const limitParam = parseInt((req.query.limit as string) || "500", 10);
+      const snap = await db.collection("oos_history").limit(limitParam).get();
+      const items = snap.docs.map(d => ({
+        id: d.id,
+        ...d.data()
+      }));
+      res.json({ status: "success", data: items });
+    } catch(e: any) {
+      res.status(500).json({ status: "error", error: e.message });
+    }
+  });
+
   // GAS Proxy Route
     app.all(["/api/proxy-gas", "/proxy-gas"], async (req, res) => {
     const start = Date.now();

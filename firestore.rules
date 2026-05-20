@@ -97,6 +97,9 @@ service cloud.firestore {
     }
 
     // OOS History
+    match /oos_history/{document} {
+      allow read, write: if true;
+    }
     match /oos_history/{document=**} {
       allow read, write: if true;
     }

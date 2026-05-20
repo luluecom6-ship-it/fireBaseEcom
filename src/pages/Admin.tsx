@@ -1097,7 +1097,7 @@ export const Admin: React.FC<AdminProps> = ({
                     try {
                       const res = await fetch("/api/admin/test-oos-push", { method: "POST" });
                       const data = await res.json();
-                      if (showToast) showToast(data.successCount ? `Sample sent to ${data.successCount} devices.` : "No device found", data.successCount ? "success" : "info");
+                      if (showToast) showToast(data.successCount ? `Sample sent to ${data.successCount} devices.` : "No device found", data.successCount ? "success" : undefined);
                     } catch (e) {
                       if (showToast) showToast("Send failed", "error");
                     }

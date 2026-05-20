@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { collection, query, limit, getDocs } from 'firebase/firestore';
-import { db } from '../firebase';
+import axios from 'axios';
 import { OOSRecord, User } from '../types';
 
 export const useOOSHistory = (user: User | null, isEnabled: boolean) => {
@@ -15,28 +14,21 @@ export const useOOSHistory = (user: User | null, isEnabled: boolean) => {
     }
 
     try {
-      if (!db) {
-        throw new Error("Firestore not initialized");
-      }
-      
-      const q = query(collection(db, 'oos_history'), limit(500));
-      const snap = await getDocs(q);
-      
-      const items = snap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as OOSRecord[];
-      
-      // Memory sort by timestamp desc
-      items.sort((a, b) => {
-        const tA = new Date(a.timestamp || 0).getTime();
-        const tB = new Date(b.timestamp || 0).getTime();
-        return tB - tA;
-      });
+      const res = await axios.get('/api/oos-history');
+      if (res.data?.status === "success") {
+        const items = res.data.data as OOSRecord[];
+        
+        // Memory sort by timestamp desc
+        items.sort((a, b) => {
+          const tA = new Date(a.timestamp || 0).getTime();
+          const tB = new Date(b.timestamp || 0).getTime();
+          return tB - tA;
+        });
 
-      setOosItems(items);
+        setOosItems(items);
+      }
     } catch (error) {
-      console.error("[useOOSHistory] Error fetching from Firestore:", error);
+      console.error("[useOOSHistory] Error fetching over REST:", error);
     } finally {
       setLoading(false);
     }

@@ -154,14 +154,14 @@ export default function App() {
                   body: payload.notification.body,
                   icon: payload.notification.image || '/icon-192x192.png',
                   image: payload.notification.image,
-                }).catch(e => console.error("SW notification failed", e));
+                } as any).catch(e => console.error("SW notification failed", e));
               });
             } else {
               new Notification(payload.notification.title || "Matrix Alert", {
                 body: payload.notification.body,
                 icon: payload.notification.image || '/icon-192x192.png',
                 image: payload.notification.image,
-              });
+              } as any);
             }
           } catch (e) {
             console.error("Foreground native notification failed", e);
