@@ -133,16 +133,22 @@ async function startServer() {
           data: { orderId: 'test-order-123', type: "oos", storeId: 'TEST' }
       };
 
-      const message = {
-          notification: { title: payload.title, body: payload.body, ...(payload.image ? { imageUrl: payload.image } : {}) },
-          data: payload.data,
-          tokens: tokens
-      };
-      const response = await messaging.sendEachForMulticast(message);
-      res.json({ status: "success", successCount: response.successCount });
+      const MAX_TOKENS = 500;
+      let successCount = 0;
+      for (let i = 0; i < tokens.length; i += MAX_TOKENS) {
+        const tokenBatch = tokens.slice(i, i + MAX_TOKENS);
+        const message = {
+            notification: { title: payload.title, body: payload.body, ...(payload.image ? { imageUrl: payload.image } : {}) },
+            data: payload.data,
+            tokens: tokenBatch
+        };
+        const response = await messaging.sendEachForMulticast(message);
+        successCount += response.successCount;
+      }
+      res.json({ status: "success", successCount });
     } catch(e: any) {
       console.error("[test-oos-push] Error:", e);
-      res.status(500).json({ error: e.message });
+      res.json({ status: "error", error: e.message || "Unknown error occurred" });
     }
   });
 
@@ -215,20 +221,27 @@ async function startServer() {
           title: `⚠️ OUT OF STOCK DETECTED`,
           body: `Item ${item.itemName} (SKU: ${item.sku}) marked returning OOS at Store ${item.storeId}.`,
           image: getSmallThumbnailUrl(item.photoUrl),
-          data: { orderId: item.orderId, type: "oos", storeId: item.storeId }
+          data: { orderId: String(item.orderId || ""), type: "oos", storeId: String(item.storeId || "") }
       };
 
-      const message = {
-          notification: { title: payload.title, body: payload.body, ...(payload.image ? { imageUrl: payload.image } : {}) },
-          data: payload.data,
-          tokens: tokens
-      };
+      // FCM has a 500 token limit per call
+      const MAX_TOKENS = 500;
+      let successCount = 0;
+      for (let i = 0; i < tokens.length; i += MAX_TOKENS) {
+        const tokenBatch = tokens.slice(i, i + MAX_TOKENS);
+        const message = {
+            notification: { title: payload.title, body: payload.body, ...(payload.image ? { imageUrl: payload.image } : {}) },
+            data: payload.data,
+            tokens: tokenBatch
+        };
+        const response = await messaging.sendEachForMulticast(message);
+        successCount += response.successCount;
+      }
       
-      const response = await messaging.sendEachForMulticast(message);
-      res.json({ status: "success", successCount: response.successCount });
+      res.json({ status: "success", successCount: successCount });
     } catch(e: any) {
       console.error("[send-oos-push] Error:", e);
-      res.status(500).json({ error: e.message });
+      res.json({ status: "error", error: e.message || "Unknown error occurred" });
     }
   });
   app.get("/api/oos-history", async (req, res) => {

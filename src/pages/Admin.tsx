@@ -1097,9 +1097,13 @@ export const Admin: React.FC<AdminProps> = ({
                     try {
                       const res = await fetch("/api/admin/test-oos-push", { method: "POST" });
                       const data = await res.json();
-                      if (showToast) showToast(data.successCount ? `Sample sent to ${data.successCount} devices.` : "No device found", data.successCount ? "success" : undefined);
-                    } catch (e) {
-                      if (showToast) showToast("Send failed", "error");
+                      if (data.status === "error") {
+                        if (showToast) showToast(`Failed: ${data.error}`, "error");
+                      } else {
+                        if (showToast) showToast(data.successCount ? `Sample sent to ${data.successCount} devices.` : "No device found", data.successCount ? "success" : undefined);
+                      }
+                    } catch (e: any) {
+                      if (showToast) showToast("Send failed: " + e.message, "error");
                     }
                   }}
                   className="px-3 py-1.5 bg-purple-100 text-purple-700 text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-purple-200 transition-colors"
