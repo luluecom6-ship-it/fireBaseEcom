@@ -186,9 +186,17 @@ async function startServer() {
       
       const alertStoreId = String(item.storeId || "").trim();
 
-      const tokensSnap = await db.collection('fcm_tokens').get();
-      const tokens = tokensSnap.docs
-        .map(d => d.data())
+      // Optimize queries: don't fetch all fcm_tokens to avoid Vercel 500 timeouts/memory hit
+      const [adminSuperSnap, storeSnap] = await Promise.all([
+         db.collection('fcm_tokens').where('role', 'in', ['admin', 'supervisor']).get(),
+         db.collection('fcm_tokens').where('storeId', '==', alertStoreId).get()
+      ]);
+
+      const allData = new Map();
+      adminSuperSnap.docs.forEach(d => allData.set(d.id, d.data()));
+      storeSnap.docs.forEach(d => allData.set(d.id, d.data()));
+
+      const tokens = Array.from(allData.values())
         .filter(data => {
             if (!data.token) return false;
             const userRole = String(data.role || "").toLowerCase().trim();
