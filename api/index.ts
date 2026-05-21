@@ -778,18 +778,18 @@ if (typeof process !== 'undefined' && (!process.env.VERCEL || process.env.NODE_E
       console.log(`[Server] Running on port ${PORT}`);
       
       // Start background monitor logic
-      if (db && messaging) {
-        const runTick = async () => {
-          try {
-            await runMonitorTick(db, messaging);
-          } catch (e) {
-            console.error("[Monitor] Tick failed:", e);
-          } finally {
-            setTimeout(runTick, 60000);
-          }
-        };
-        setTimeout(runTick, 10000);
-      }
+      // if (db && messaging) {
+      //   const runTick = async () => {
+      //     try {
+      //       await runMonitorTick(db, messaging);
+      //     } catch (e) {
+      //       console.error("[Monitor] Tick failed:", e);
+      //     } finally {
+      //       setTimeout(runTick, 60000);
+      //     }
+      //   };
+      //   setTimeout(runTick, 10000);
+      // }
     });
   }).catch(err => {
     console.error("[Server] Startup failed:", err);
