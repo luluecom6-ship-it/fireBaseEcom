@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
-import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -732,6 +731,8 @@ async function startServer() {
   // Vite
 
   if (process.env.NODE_ENV !== "production") {
+    // Dynamically import Vite to avoid bundling it in Vercel production functions
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
     app.use(vite.middlewares);
   } else {

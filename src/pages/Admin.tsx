@@ -1096,7 +1096,13 @@ export const Admin: React.FC<AdminProps> = ({
                   onClick={async () => {
                     try {
                       const res = await fetch("/api/admin/test-oos-push", { method: "POST" });
-                      const data = await res.json();
+                      const text = await res.text();
+                      let data;
+                      try {
+                        data = JSON.parse(text);
+                      } catch(e) {
+                         throw new Error(`Non-JSON response (${res.status}): ${text.substring(0,50)}`);
+                      }
                       if (data.status === "error") {
                         if (showToast) showToast(`Failed: ${data.error}`, "error");
                       } else {
