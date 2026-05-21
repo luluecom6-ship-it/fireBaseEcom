@@ -29,9 +29,15 @@ export const requestForToken = async () => {
 
   // Proactively request permission if it's currently "default"
   if (Notification.permission === "default") {
-    console.log("[Firebase] Requesting notification permission...");
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") return null;
+    if (!localStorage.getItem('notificationRequested')) {
+      localStorage.setItem('notificationRequested', 'true');
+      console.log("[Firebase] Requesting notification permission...");
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") return null;
+    } else {
+      console.log("[Firebase] Notification permission was previously requested and not granted. Skipping.");
+      return null;
+    }
   }
 
   if (Notification.permission === "denied") {

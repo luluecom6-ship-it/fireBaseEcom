@@ -174,8 +174,11 @@ export default function App() {
     
     const handleFirstInteraction = async () => {
       if ("Notification" in window && Notification.permission === "default") {
-        console.log("[App] First interaction detected, requesting notification permission...");
-        await requestNotificationPermission();
+        if (!localStorage.getItem('notificationRequested')) {
+          localStorage.setItem('notificationRequested', 'true');
+          console.log("[App] First interaction detected, requesting notification permission...");
+          await requestNotificationPermission();
+        }
       }
       // Remove listener after first attempt
       window.removeEventListener('click', handleFirstInteraction);
