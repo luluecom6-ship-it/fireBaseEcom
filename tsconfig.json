@@ -20,6 +20,6 @@
       "@/*": ["./*"]
     }
   },
-  "include": ["src", "server.ts"],
+  "include": ["src", "server.ts", "api"],
   "exclude": ["node_modules", "dist"]
 }
