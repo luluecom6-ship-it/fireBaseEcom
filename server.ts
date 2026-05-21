@@ -105,7 +105,7 @@ async function startServer() {
       if (!db || !messaging) return res.status(500).json({ error: "Missing Firebase features" });
       const tokensSnap = await db.collection('fcm_tokens').where('role', 'in', ['admin', 'supervisor']).get();
       const tokens = tokensSnap.docs.map(d => d.data().token).filter(Boolean);
-      if (tokens.length === 0) return res.json({ status: "No admin tokens found" });
+      if (tokens.length === 0) return res.json({ status: "success", successCount: 0 });
       
       const payload = {
           title: `🧪 TEST OUT OF STOCK DETECTED`,
@@ -194,7 +194,7 @@ async function startServer() {
         })
         .map(data => data.token);
         
-      if (tokens.length === 0) return res.json({ status: "No appropriate devices found" });
+      if (tokens.length === 0) return res.json({ status: "success", successCount: 0 });
       
       const getSmallThumbnailUrl = (url: string) => {
         if (!url) return "";
