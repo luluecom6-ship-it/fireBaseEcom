@@ -111,7 +111,7 @@ async function startServer() {
           title: `🧪 TEST OUT OF STOCK DETECTED`,
           body: `Test Item Strawberry (SKU: 99999) marked returning OOS at Store TEST.`,
           image: 'https://placehold.co/200x200.png?text=OOS+TEST',
-          data: { orderId: 'test-order-123', type: "oos", storeId: 'TEST' }
+          data: { orderId: 'test-order-123', type: "oos", storeId: 'TEST', image: 'https://placehold.co/200x200.png?text=OOS+TEST' }
       };
 
       const MAX_TOKENS = 500;
@@ -119,7 +119,12 @@ async function startServer() {
       for (let i = 0; i < tokens.length; i += MAX_TOKENS) {
         const tokenBatch = tokens.slice(i, i + MAX_TOKENS);
         const message = {
-            notification: { title: payload.title, body: payload.body, ...(payload.image ? { imageUrl: payload.image } : {}) },
+            notification: { title: payload.title, body: payload.body },
+            webpush: {
+                notification: {
+                    icon: payload.data.image || 'https://placehold.co/192x192.png?text=OOS'
+                }
+            },
             data: payload.data,
             tokens: tokenBatch
         };
@@ -210,7 +215,7 @@ async function startServer() {
           title: `⚠️ OUT OF STOCK DETECTED`,
           body: `Item ${item.itemName} (SKU: ${item.sku}) marked returning OOS at Store ${item.storeId}.`,
           image: getSmallThumbnailUrl(item.photoUrl),
-          data: { orderId: String(item.orderId || ""), type: "oos", storeId: String(item.storeId || "") }
+          data: { orderId: String(item.orderId || ""), type: "oos", storeId: String(item.storeId || ""), image: getSmallThumbnailUrl(item.photoUrl) }
       };
 
       // FCM has a 500 token limit per call
@@ -219,7 +224,12 @@ async function startServer() {
       for (let i = 0; i < tokens.length; i += MAX_TOKENS) {
         const tokenBatch = tokens.slice(i, i + MAX_TOKENS);
         const message = {
-            notification: { title: payload.title, body: payload.body, ...(payload.image ? { imageUrl: payload.image } : {}) },
+            notification: { title: payload.title, body: payload.body },
+            webpush: {
+                notification: {
+                    icon: payload.data.image || 'https://placehold.co/192x192.png?text=OOS'
+                }
+            },
             data: payload.data,
             tokens: tokenBatch
         };

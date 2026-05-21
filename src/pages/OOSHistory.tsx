@@ -50,7 +50,7 @@ export const OOSHistory: React.FC<OOSHistoryProps> = ({
       // Strip potentially massive base64 payloads to avoid Vercel 4.5MB request limits
       const safeItem = { ...item };
       if (safeItem.photoUrl && safeItem.photoUrl.startsWith("data:")) {
-        safeItem.photoUrl = "";
+        safeItem.photoUrl = null; // Strip base64 payloads but keep drive URLs
       }
 
       const res = await fetch("/api/admin/send-oos-push", {
