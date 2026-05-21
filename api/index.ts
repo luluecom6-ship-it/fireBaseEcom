@@ -9,8 +9,8 @@ import cors from "cors";
 import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import fs from "fs";
-import { executeGasRequest } from "../src/services/gasService";
-import { runMonitorTick } from "../src/services/monitorService";
+//import { executeGasRequest } from "../src/services/gasService";
+//import { runMonitorTick } from "../src/services/monitorService";
 
 const FIRESTORE_DB_ID = process.env.FIREBASE_DATABASE_ID || 'ai-studio-589cf723-ab60-4b6f-a2cd-f84f8c8c1b48';
 
