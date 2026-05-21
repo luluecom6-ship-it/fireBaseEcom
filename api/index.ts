@@ -134,7 +134,7 @@ async function startServer() {
       };
 
       const message = {
-          notification: { title: payload.title, body: payload.body, image: payload.image },
+          notification: { title: payload.title, body: payload.body, ...(payload.image ? { imageUrl: payload.image } : {}) },
           data: payload.data,
           tokens: tokens
       };
@@ -219,7 +219,7 @@ async function startServer() {
       };
 
       const message = {
-          notification: { title: payload.title, body: payload.body, ...(payload.image ? { image: payload.image } : {}) },
+          notification: { title: payload.title, body: payload.body, ...(payload.image ? { imageUrl: payload.image } : {}) },
           data: payload.data,
           tokens: tokens
       };
