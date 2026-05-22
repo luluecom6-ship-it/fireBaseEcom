@@ -1,5 +1,5 @@
-import { detectAlerts } from "../utils/alertLogic";
-import { executeGasRequest } from "./gasService";
+import { detectAlerts } from "../utils/alertLogic.js";
+import { executeGasRequest } from "./gasService.js";
 import axios from "axios";
 
 // Memory caches to prevent continuous reads/writes of identical records

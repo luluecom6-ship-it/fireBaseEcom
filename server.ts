@@ -9,8 +9,8 @@ import cors from "cors";
 import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import fs from "fs";
-import { executeGasRequest } from "./src/services/gasService";
-import { runMonitorTick } from "./src/services/monitorService";
+import { executeGasRequest } from "./src/services/gasService.js";
+import { runMonitorTick } from "./src/services/monitorService.js";
 
 const FIRESTORE_DB_ID = process.env.FIREBASE_DATABASE_ID || 'ai-studio-589cf723-ab60-4b6f-a2cd-f84f8c8c1b48';
 
@@ -155,11 +155,35 @@ async function startServer() {
           console.log("[FCM] Failure:", response.failureCount);
 
           if (response.failureCount > 0) {
+            const badTokens: string[] = [];
             response.responses.forEach((r, idx) => {
               if (!r.success) {
                 console.error("[FCM TOKEN ERROR]", tokenBatch[idx], r.error);
+                const errCode = r.error?.code;
+                if (errCode === 'messaging/registration-token-not-registered' || errCode === 'messaging/invalid-registration-token') {
+                  badTokens.push(tokenBatch[idx]);
+                }
               }
             });
+
+            if (badTokens.length > 0) {
+              console.log("[FCM CleanUp] Cleaning up invalid tokens:", badTokens.length);
+              for (const token of badTokens) {
+                try {
+                  const snap = await db.collection('fcm_tokens').where('token', '==', token).get();
+                  if (!snap.empty) {
+                    const cleanupBatch = db.batch();
+                    snap.docs.forEach(doc => {
+                      console.log(`[FCM CleanUp] Deleting unregistered token: ${doc.id}`);
+                      cleanupBatch.delete(doc.ref);
+                    });
+                    await cleanupBatch.commit();
+                  }
+                } catch (cleanupErr) {
+                  console.error("[FCM CleanUp ERROR]", cleanupErr);
+                }
+              }
+            }
           }
         } catch (fcmErr: any) {
           console.error("[FCM FATAL ERROR]", fcmErr);
@@ -309,11 +333,35 @@ async function startServer() {
           console.log("[FCM] Failure:", response.failureCount);
 
           if (response.failureCount > 0) {
+            const badTokens: string[] = [];
             response.responses.forEach((r, idx) => {
               if (!r.success) {
                 console.error("[FCM TOKEN ERROR]", tokenBatch[idx], r.error);
+                const errCode = r.error?.code;
+                if (errCode === 'messaging/registration-token-not-registered' || errCode === 'messaging/invalid-registration-token') {
+                  badTokens.push(tokenBatch[idx]);
+                }
               }
             });
+
+            if (badTokens.length > 0) {
+              console.log("[FCM CleanUp] Cleaning up invalid tokens:", badTokens.length);
+              for (const token of badTokens) {
+                try {
+                  const snap = await db.collection('fcm_tokens').where('token', '==', token).get();
+                  if (!snap.empty) {
+                    const cleanupBatch = db.batch();
+                    snap.docs.forEach(doc => {
+                      console.log(`[FCM CleanUp] Deleting unregistered token: ${doc.id}`);
+                      cleanupBatch.delete(doc.ref);
+                    });
+                    await cleanupBatch.commit();
+                  }
+                } catch (cleanupErr) {
+                  console.error("[FCM CleanUp ERROR]", cleanupErr);
+                }
+              }
+            }
           }
         } catch (fcmErr: any) {
           console.error("[FCM FATAL ERROR]", fcmErr);
