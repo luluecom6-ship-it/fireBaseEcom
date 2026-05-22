@@ -14,6 +14,23 @@ let cachedConfig: any = {};
 let cachedTokensData: any[] = [];
 let lastConfigTokenFetchTime = 0;
 
+const normalizeStoreId = (id: string | number | null | undefined): string => {
+  if (id === null || id === undefined) return "";
+  const s = String(id).trim().toLowerCase();
+  if (/^0+[1-9]\d*$/.test(s)) {
+    return s.replace(/^0+/, "");
+  }
+  return s;
+};
+
+const normalizeRole = (role: string | null | undefined): string => {
+  return String(role || "").toLowerCase().trim();
+};
+
+const normalizeRegion = (region: string | null | undefined): string => {
+  return String(region || "").toLowerCase().trim();
+};
+
 export async function runMonitorTick(db: any, messaging: any) {
   try {
     console.log(`[Monitor] Tick started...`);
@@ -56,28 +73,39 @@ export async function runMonitorTick(db: any, messaging: any) {
     const sendFilteredNotification = async (payload: { title: string, body: string, data: any, icon?: string, image?: string }, alertStoreId: string, alertRegion: string, isEscalation: boolean, isOOS?: boolean) => {
       const validDocs = allTokensData.filter((data: any) => {
         if (!data.token) return false;
-        const userRole = String(data.role || "").toLowerCase().trim();
-        const userStoreId = String(data.storeId || "").trim();
-        const userRegion = String(data.region || "").trim();
+        const userRole = normalizeRole(data.role);
+        const userStoreId = normalizeStoreId(data.storeId);
+        const userRegion = normalizeRegion(data.region);
+
+        const targetStoreId = normalizeStoreId(alertStoreId);
+        const targetRegion = normalizeRegion(alertRegion);
 
         if (isOOS) {
           if (userRole === 'admin') return true;
-          if (userRole === 'supervisor') return userRegion && alertRegion && userRegion === alertRegion;
-          if (userRole === 'manager' || userRole === 'store') return userStoreId === alertStoreId;
+          if (userRole === 'supervisor') {
+            return userRegion !== "" && targetRegion !== "" && userRegion === targetRegion;
+          }
+          if (['manager', 'store', 'picker', 'driver', 'staff', 'operator'].includes(userRole)) {
+            return userStoreId !== "" && targetStoreId !== "" && userStoreId === targetStoreId;
+          }
           return false;
         }
 
         // Level 2 (Escalation): Manager, Supervisor, Admin
         if (isEscalation) {
           if (userRole === 'admin') return true;
-          if (userRole === 'supervisor') return userRegion && alertRegion && userRegion === alertRegion;
-          if (userRole === 'manager') return userStoreId === alertStoreId;
+          if (userRole === 'supervisor') {
+            return userRegion !== "" && targetRegion !== "" && userRegion === targetRegion;
+          }
+          if (userRole === 'manager') {
+            return userStoreId !== "" && targetStoreId !== "" && userStoreId === targetStoreId;
+          }
           return false;
         } 
         
         // Level 1 (Initial): Picker, Store
-        if (['picker', 'store'].includes(userRole)) {
-          return userStoreId === alertStoreId;
+        if (['picker', 'store', 'staff', 'operator'].includes(userRole)) {
+          return userStoreId !== "" && targetStoreId !== "" && userStoreId === targetStoreId;
         }
 
         return false;

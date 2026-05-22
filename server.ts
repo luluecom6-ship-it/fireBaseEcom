@@ -87,6 +87,22 @@ async function startServer() {
   const db = admin.apps.length ? getFirestore(admin.app(), FIRESTORE_DB_ID) : null;
   const messaging = admin.apps.length ? admin.messaging() : null;
 
+  const normalizeStoreId = (id: string | number | null | undefined): string => {
+    if (id === null || id === undefined) return "";
+    const s = String(id).trim().toLowerCase();
+    if (/^0+[1-9]\d*$/.test(s)) {
+      return s.replace(/^0+/, "");
+    }
+    return s;
+  };
+
+  const normalizeRole = (role: string | null | undefined): string => {
+    return String(role || "").toLowerCase().trim();
+  };
+
+  const normalizeRegion = (region: string | null | undefined): string => {
+    return String(region || "").toLowerCase().trim();
+  };
 
   const app = express();
   const PORT = 3000;
@@ -236,27 +252,26 @@ async function startServer() {
       
       const alertStoreId = String(item.storeId || "").trim();
 
-      // Optimize queries: don't fetch all fcm_tokens to avoid Vercel 500 timeouts/memory hit
-      const [adminSuperSnap, storeSnap] = await Promise.all([
-         db.collection('fcm_tokens').where('role', 'in', ['admin', 'supervisor']).get(),
-         db.collection('fcm_tokens').where('storeId', '==', alertStoreId).get()
-      ]);
+      // Retrieve all tokens to prevent strict case-sensitive Firestore 'where' exclusions
+      const tokensSnap = await db.collection('fcm_tokens').get();
+      const allTokensData = tokensSnap.docs.map((doc: any) => doc.data());
 
-      const allData = new Map();
-      adminSuperSnap.docs.forEach(d => allData.set(d.id, d.data()));
-      storeSnap.docs.forEach(d => allData.set(d.id, d.data()));
-
-      const tokens = Array.from(allData.values())
+      const tokens = allTokensData
         .filter(data => {
             if (!data.token) return false;
-            const userRole = String(data.role || "").toLowerCase().trim();
-            const userStoreId = String(data.storeId || "").trim();
-            const userRegion = String(data.region || "").trim();
-            
+            const userRole = normalizeRole(data.role);
+            const userStoreId = normalizeStoreId(data.storeId);
+            const userRegion = normalizeRegion(data.region);
+
+            const targetStoreId = normalizeStoreId(alertStoreId);
+            const targetRegion = normalizeRegion(alertRegion);
+
             if (userRole === 'admin') return true;
-            if (userRole === 'supervisor') return userRegion && alertRegion && userRegion === alertRegion;
-            if (userRole === 'manager' || userRole === 'store' || userRole === 'picker' || userRole === 'driver') {
-               return userStoreId === alertStoreId;
+            if (userRole === 'supervisor') {
+              return userRegion !== "" && targetRegion !== "" && userRegion === targetRegion;
+            }
+            if (['manager', 'store', 'picker', 'driver', 'staff', 'operator'].includes(userRole)) {
+              return userStoreId !== "" && targetStoreId !== "" && userStoreId === targetStoreId;
             }
             return false;
         })

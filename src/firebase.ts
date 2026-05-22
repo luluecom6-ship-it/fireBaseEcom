@@ -47,7 +47,7 @@ export const requestForToken = async () => {
 
   try {
     // Get the consolidated service worker registration
-    const registration = await navigator.serviceWorker.getRegistration('/sw.js');
+    const registration = await navigator.serviceWorker.ready;
     
     const currentToken = await getToken(messaging, { 
       vapidKey: VAPID_KEY,
