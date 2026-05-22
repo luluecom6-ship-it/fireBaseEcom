@@ -350,6 +350,7 @@ export function useAlerts(
     if (Notification.permission === "granted") return true;
     if (Notification.permission === "denied") return false;
     try {
+      localStorage.setItem('notificationRequested', 'true');
       const permission = await Notification.requestPermission();
       return permission === "granted";
     } catch (error) {

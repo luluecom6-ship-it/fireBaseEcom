@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
-import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -10,8 +9,137 @@ import cors from "cors";
 import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import fs from "fs";
-//import { executeGasRequest } from "../src/services/gasService";
-//import { runMonitorTick } from "../src/services/monitorService";
+
+// Optimized Cache for GAS Proxy (Inlined for standalone serverless function deployment)
+const gasCache = new Map<string, { data: any, headers: any, status: number, expiry: number }>();
+const LOGS_TTL = 30000; // 30 seconds for logs
+const CACHE_TTL = 120000; // 2 Minutes for Matrix/Admin data
+const REGIONS_TTL = 3600000; // 1 Hour for regions
+
+// Request Queue for GAS Proxy with Limited Concurrency
+let activeRequests = 0;
+const MAX_CONCURRENT = 40; // Increased to 40 to prevent queue clogging and Failed to fetch errors while loading multiple tabs/resources
+let backoffMultiplier = 1;
+const gasQueue: { config: any, resolve: any, reject: any, skipCache?: boolean, startTime: number }[] = [];
+
+// Coalescing map for in-flight requests to same action
+const inFlightRequests = new Map<string, Promise<any>>();
+
+async function processGasQueue() {
+  if (gasQueue.length === 0 || activeRequests >= MAX_CONCURRENT) return;
+
+  const item = gasQueue.shift();
+  if (!item) return;
+
+  // Check if item has been in queue too long (e.g. 5 minutes)
+  if (Date.now() - item.startTime > 300000) {
+    item.reject(new Error("Request timed out in queue"));
+    processGasQueue();
+    return;
+  }
+
+  activeRequests++;
+  const { config, resolve, reject } = item;
+
+  try {
+    let action = "unknown";
+    try {
+      const urlObj = new URL(config.url);
+      action = urlObj.searchParams.get('action') || "no-action";
+    } catch (e) {}
+
+    console.log(`[GAS Queue] Executing [${config.method}] ${action} (${activeRequests}/${MAX_CONCURRENT}) QSize: ${gasQueue.length}`);
+    
+    // Enforce a strict timeout at the axios level
+    const response = await axios({
+      ...config,
+      timeout: 45000 // 45s timeout to avoid keeping connection slots occupied indefinitely
+    });
+    
+    const dataStr = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+    if (dataStr.includes('Rate exceeded')) {
+      console.warn("[GAS Queue] Rate limit detected at GAS level, increasing backoff.");
+      backoffMultiplier = Math.min(backoffMultiplier * 1.5, 5);
+    } else {
+      backoffMultiplier = Math.max(1, backoffMultiplier * 0.9);
+    }
+
+    resolve(response);
+  } catch (err: any) {
+    console.error(`[GAS Queue] Request failed: ${err.message} [URL: ${config.url.substring(0, 70)}...]`);
+    reject(err);
+  } finally {
+    activeRequests--;
+    
+    // Enhanced delay to avoid overwhelming GAS, scaled aggressively by backoff
+    const delay = Math.floor(500 * backoffMultiplier);
+    if (delay > 0) {
+      await new Promise(r => setTimeout(r, delay));
+    }
+    
+    // Always trigger next check
+    processGasQueue();
+  }
+}
+
+async function executeGasRequest(config: any, options: { skipCache?: boolean, cacheKey?: string } = {}) {
+  const { skipCache = false, cacheKey } = options;
+
+  // Cache Lookup (success responses ONLY)
+  if (!skipCache && cacheKey) {
+    const cached = gasCache.get(cacheKey);
+    if (cached && cached.expiry > Date.now()) {
+      return { data: cached.data, headers: cached.headers, status: cached.status, fromCache: true };
+    }
+  }
+
+  // Request Coalescing: Only for GET requests with same action
+  const method = config.method || 'GET';
+  const urlObj = new URL(config.url);
+  const action = urlObj.searchParams.get('action') || 'default';
+  const coalescingKey = `${method}:${action}:${JSON.stringify(config.data || "")}`;
+
+  if (method === 'GET' && inFlightRequests.has(coalescingKey)) {
+    console.log(`[GAS Queue] Coalescing request for action=${action}`);
+    return inFlightRequests.get(coalescingKey);
+  }
+
+  const requestPromise = new Promise((resolve, reject) => {
+    gasQueue.push({ config, resolve, reject, skipCache, startTime: Date.now() });
+    processGasQueue();
+  }).then((response: any) => {
+    // Populate Cache
+    if (!skipCache && cacheKey && response.status === 200) {
+      const dataStr = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+      if (!dataStr.includes('error') && !dataStr.includes('Rate exceeded')) {
+        // Use longer TTL for regions or logs
+        const urlLower = config.url.toLowerCase();
+        let ttl = CACHE_TTL;
+        if (urlLower.includes('action=getregions')) {
+          ttl = REGIONS_TTL;
+        } else if (urlLower.includes('action=getalertlogs')) {
+          ttl = LOGS_TTL;
+        }
+        
+        gasCache.set(cacheKey, {
+          data: response.data,
+          headers: response.headers,
+          status: response.status,
+          expiry: Date.now() + ttl
+        });
+      }
+    }
+    return response;
+  }).finally(() => {
+    inFlightRequests.delete(coalescingKey);
+  });
+
+  if (method === 'GET') {
+    inFlightRequests.set(coalescingKey, requestPromise);
+  }
+
+  return requestPromise;
+}
 
 const FIRESTORE_DB_ID = process.env.FIREBASE_DATABASE_ID || 'ai-studio-589cf723-ab60-4b6f-a2cd-f84f8c8c1b48';
 
@@ -119,6 +247,201 @@ async function startServer() {
     }
   });
 
+  app.post("/api/admin/test-oos-push", async (req, res) => {
+    try {
+      if (!db || !messaging) return res.status(500).json({ error: "Missing Firebase features" });
+      const tokensSnap = await db.collection('fcm_tokens').where('role', 'in', ['admin', 'supervisor']).get();
+      const tokens = tokensSnap.docs.map(d => d.data().token).filter(Boolean);
+      if (tokens.length === 0) return res.json({ status: "success", successCount: 0 });
+      
+      const payload = {
+          title: `🧪 TEST OUT OF STOCK DETECTED`,
+          body: `Test Item Strawberry (SKU: 99999) marked returning OOS at Store TEST.`,
+          image: 'https://placehold.co/200x200.png?text=OOS+TEST',
+          data: { orderId: 'test-order-123', type: "oos", storeId: 'TEST', image: 'https://placehold.co/200x200.png?text=OOS+TEST' }
+      };
+
+      const MAX_TOKENS = 500;
+      let successCount = 0;
+      for (let i = 0; i < tokens.length; i += MAX_TOKENS) {
+        const tokenBatch = tokens.slice(i, i + MAX_TOKENS);
+        const message = {
+            notification: { title: payload.title, body: payload.body },
+            webpush: {
+                notification: {
+                    icon: payload.data.image || 'https://placehold.co/192x192.png?text=OOS'
+                }
+            },
+            data: {
+              orderId: String(payload.data.orderId || ""),
+              type: String(payload.data.type || ""),
+              storeId: String(payload.data.storeId || ""),
+              image: String(payload.data.image || "")
+            },
+            tokens: tokenBatch
+        };
+
+        let response;
+        try {
+          console.log("[FCM] Sending batch:", tokenBatch.length);
+          response = await messaging.sendEachForMulticast(message);
+          console.log("[FCM] Success:", response.successCount);
+          console.log("[FCM] Failure:", response.failureCount);
+
+          if (response.failureCount > 0) {
+            response.responses.forEach((r, idx) => {
+              if (!r.success) {
+                console.error("[FCM TOKEN ERROR]", tokenBatch[idx], r.error);
+              }
+            });
+          }
+        } catch (fcmErr: any) {
+          console.error("[FCM FATAL ERROR]", fcmErr);
+          return res.status(500).json({
+            status: "error",
+            error: fcmErr.message || "FCM send failed"
+          });
+        }
+        successCount += response.successCount;
+      }
+      res.json({ status: "success", successCount });
+    } catch(e: any) {
+      console.error("[test-oos-push] Error:", e);
+      res.json({ status: "error", error: e.message || "Unknown error occurred" });
+    }
+  });
+
+  app.post("/api/admin/send-oos-push", async (req, res) => {
+    try {
+      if (!db || !messaging) return res.status(500).json({ error: "Missing Firebase features" });
+      
+      const { item, requesterRole } = req.body;
+      if (!item || (requesterRole !== 'admin' && requesterRole !== 'supervisor')) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      // Fetch region mapping
+      let alertRegion = "";
+      try {
+        const adminSnap = await db.collection("app_config").doc("admin_control").get();
+        if (adminSnap.exists) {
+           const adminData = adminSnap.data() || {};
+           const regions = adminData.regions || [];
+           
+           // Try format 1: { stores: [...], name: "..." }
+           const storeRegionObj = regions.find((r: any) => Array.isArray(r.stores) && r.stores.includes(item.storeId));
+           if (storeRegionObj && storeRegionObj.name) {
+             alertRegion = storeRegionObj.name;
+           } else {
+             // Try format 2: { storeId: "...", region: "..." }
+             const storeRegionMapping = regions.find((r: any) => String(r.storeId || r.StoreID || "").trim() === String(item.storeId).trim());
+             if (storeRegionMapping && (storeRegionMapping.region || storeRegionMapping.Region)) {
+               alertRegion = storeRegionMapping.region || storeRegionMapping.Region;
+             }
+           }
+        }
+      } catch (e) {
+         console.warn("Could not fetch admin_control for region mapping", e);
+      }
+      
+      const alertStoreId = String(item.storeId || "").trim();
+
+      // Optimize queries: don't fetch all fcm_tokens to avoid Vercel 500 timeouts/memory hit
+      const [adminSuperSnap, storeSnap] = await Promise.all([
+         db.collection('fcm_tokens').where('role', 'in', ['admin', 'supervisor']).get(),
+         db.collection('fcm_tokens').where('storeId', '==', alertStoreId).get()
+      ]);
+
+      const allData = new Map();
+      adminSuperSnap.docs.forEach(d => allData.set(d.id, d.data()));
+      storeSnap.docs.forEach(d => allData.set(d.id, d.data()));
+
+      const tokens = Array.from(allData.values())
+        .filter(data => {
+            if (!data.token) return false;
+            const userRole = String(data.role || "").toLowerCase().trim();
+            const userStoreId = String(data.storeId || "").trim();
+            const userRegion = String(data.region || "").trim();
+            
+            if (userRole === 'admin') return true;
+            if (userRole === 'supervisor') return userRegion && alertRegion && userRegion === alertRegion;
+            if (userRole === 'manager' || userRole === 'store' || userRole === 'picker' || userRole === 'driver') {
+               return userStoreId === alertStoreId;
+            }
+            return false;
+        })
+        .map(data => data.token);
+        
+      if (tokens.length === 0) return res.json({ status: "success", successCount: 0 });
+      
+      const getSmallThumbnailUrl = (url: string) => {
+        if (!url) return "";
+        const str = String(url);
+        if (str.includes("drive.google.com")) {
+          const id = str.split("id=")[1] || str.split("/d/")[1]?.split("/")[0];
+          if (id) return `https://lh3.googleusercontent.com/d/${id}=s200`;
+        }
+        return str;
+      };
+
+      const payload = {
+          title: `⚠️ OUT OF STOCK DETECTED`,
+          body: `Item ${item.itemName} (SKU: ${item.sku}) marked returning OOS at Store ${item.storeId}.`,
+          image: getSmallThumbnailUrl(item.photoUrl),
+          data: { orderId: String(item.orderId || ""), type: "oos", storeId: String(item.storeId || ""), image: getSmallThumbnailUrl(item.photoUrl) }
+      };
+
+      // FCM has a 500 token limit per call
+      const MAX_TOKENS = 500;
+      let successCount = 0;
+      for (let i = 0; i < tokens.length; i += MAX_TOKENS) {
+        const tokenBatch = tokens.slice(i, i + MAX_TOKENS);
+        const message = {
+            notification: { title: payload.title, body: payload.body },
+            webpush: {
+                notification: {
+                    icon: payload.data.image || 'https://placehold.co/192x192.png?text=OOS'
+                }
+            },
+            data: {
+              orderId: String(payload.data.orderId || ""),
+              type: String(payload.data.type || ""),
+              storeId: String(payload.data.storeId || ""),
+              image: String(payload.data.image || "")
+            },
+            tokens: tokenBatch
+        };
+
+        let response;
+        try {
+          console.log("[FCM] Sending batch:", tokenBatch.length);
+          response = await messaging.sendEachForMulticast(message);
+          console.log("[FCM] Success:", response.successCount);
+          console.log("[FCM] Failure:", response.failureCount);
+
+          if (response.failureCount > 0) {
+            response.responses.forEach((r, idx) => {
+              if (!r.success) {
+                console.error("[FCM TOKEN ERROR]", tokenBatch[idx], r.error);
+              }
+            });
+          }
+        } catch (fcmErr: any) {
+          console.error("[FCM FATAL ERROR]", fcmErr);
+          return res.status(500).json({
+            status: "error",
+            error: fcmErr.message || "FCM send failed"
+          });
+        }
+        successCount += response.successCount;
+      }
+      
+      res.json({ status: "success", successCount: successCount });
+    } catch(e: any) {
+      console.error("[send-oos-push] Error:", e);
+      res.json({ status: "error", error: e.message || "Unknown error occurred" });
+    }
+  });
   app.get("/api/oos-history", async (req, res) => {
     try {
       if (!db) return res.status(500).json({ error: "No DB" });
@@ -183,7 +506,7 @@ async function startServer() {
       const config: any = {
         method: req.method,
         url: urlObj.toString(),
-        timeout: 120000,
+        timeout: 45000,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36',
           'Accept': 'application/json, text/plain, */*',
@@ -607,6 +930,8 @@ async function startServer() {
   // Vite
 
   if (process.env.NODE_ENV !== "production") {
+    // Dynamically import Vite to avoid bundling it in Vercel production functions
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
     app.use(vite.middlewares);
   } else {
@@ -633,19 +958,7 @@ if (typeof process !== 'undefined' && (!process.env.VERCEL || process.env.NODE_E
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`[Server] Running on port ${PORT}`);
       
-      // Start background monitor logic
-      // if (db && messaging) {
-      //   const runTick = async () => {
-      //     try {
-      //       await runMonitorTick(db, messaging);
-      //     } catch (e) {
-      //       console.error("[Monitor] Tick failed:", e);
-      //     } finally {
-      //       setTimeout(runTick, 60000);
-      //     }
-        };
-        setTimeout(runTick, 10000);
-      }
+      // Background monitor logic disabled for standalone API function deployment
     });
   }).catch(err => {
     console.error("[Server] Startup failed:", err);

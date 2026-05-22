@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
-import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -106,22 +105,59 @@ async function startServer() {
       if (!db || !messaging) return res.status(500).json({ error: "Missing Firebase features" });
       const tokensSnap = await db.collection('fcm_tokens').where('role', 'in', ['admin', 'supervisor']).get();
       const tokens = tokensSnap.docs.map(d => d.data().token).filter(Boolean);
-      if (tokens.length === 0) return res.json({ status: "No admin tokens found" });
+      if (tokens.length === 0) return res.json({ status: "success", successCount: 0 });
       
       const payload = {
           title: `🧪 TEST OUT OF STOCK DETECTED`,
           body: `Test Item Strawberry (SKU: 99999) marked returning OOS at Store TEST.`,
           image: 'https://placehold.co/200x200.png?text=OOS+TEST',
-          data: { orderId: 'test-order-123', type: "oos", storeId: 'TEST' }
+          data: { orderId: 'test-order-123', type: "oos", storeId: 'TEST', image: 'https://placehold.co/200x200.png?text=OOS+TEST' }
       };
 
-      const message = {
-          notification: { title: payload.title, body: payload.body, image: payload.image },
-          data: payload.data,
-          tokens: tokens
-      };
-      const response = await messaging.sendEachForMulticast(message);
-      res.json({ status: "success", successCount: response.successCount });
+      const MAX_TOKENS = 500;
+      let successCount = 0;
+      for (let i = 0; i < tokens.length; i += MAX_TOKENS) {
+        const tokenBatch = tokens.slice(i, i + MAX_TOKENS);
+        const message = {
+            notification: { title: payload.title, body: payload.body },
+            webpush: {
+                notification: {
+                    icon: payload.data.image || 'https://placehold.co/192x192.png?text=OOS'
+                }
+            },
+            data: {
+              orderId: String(payload.data.orderId || ""),
+              type: String(payload.data.type || ""),
+              storeId: String(payload.data.storeId || ""),
+              image: String(payload.data.image || "")
+            },
+            tokens: tokenBatch
+        };
+
+        let response;
+        try {
+          console.log("[FCM] Sending batch:", tokenBatch.length);
+          response = await messaging.sendEachForMulticast(message);
+          console.log("[FCM] Success:", response.successCount);
+          console.log("[FCM] Failure:", response.failureCount);
+
+          if (response.failureCount > 0) {
+            response.responses.forEach((r, idx) => {
+              if (!r.success) {
+                console.error("[FCM TOKEN ERROR]", tokenBatch[idx], r.error);
+              }
+            });
+          }
+        } catch (fcmErr: any) {
+          console.error("[FCM FATAL ERROR]", fcmErr);
+          return res.status(500).json({
+            status: "error",
+            error: fcmErr.message || "FCM send failed"
+          });
+        }
+        successCount += response.successCount;
+      }
+      res.json({ status: "success", successCount });
     } catch(e: any) {
       console.error("[test-oos-push] Error:", e);
       res.status(500).json({ error: e.message });
@@ -163,9 +199,17 @@ async function startServer() {
       
       const alertStoreId = String(item.storeId || "").trim();
 
-      const tokensSnap = await db.collection('fcm_tokens').get();
-      const tokens = tokensSnap.docs
-        .map(d => d.data())
+      // Optimize queries: don't fetch all fcm_tokens to avoid Vercel 500 timeouts/memory hit
+      const [adminSuperSnap, storeSnap] = await Promise.all([
+         db.collection('fcm_tokens').where('role', 'in', ['admin', 'supervisor']).get(),
+         db.collection('fcm_tokens').where('storeId', '==', alertStoreId).get()
+      ]);
+
+      const allData = new Map();
+      adminSuperSnap.docs.forEach(d => allData.set(d.id, d.data()));
+      storeSnap.docs.forEach(d => allData.set(d.id, d.data()));
+
+      const tokens = Array.from(allData.values())
         .filter(data => {
             if (!data.token) return false;
             const userRole = String(data.role || "").toLowerCase().trim();
@@ -181,7 +225,7 @@ async function startServer() {
         })
         .map(data => data.token);
         
-      if (tokens.length === 0) return res.json({ status: "No appropriate devices found" });
+      if (tokens.length === 0) return res.json({ status: "success", successCount: 0 });
       
       const getSmallThumbnailUrl = (url: string) => {
         if (!url) return "";
@@ -197,17 +241,55 @@ async function startServer() {
           title: `⚠️ OUT OF STOCK DETECTED`,
           body: `Item ${item.itemName} (SKU: ${item.sku}) marked returning OOS at Store ${item.storeId}.`,
           image: getSmallThumbnailUrl(item.photoUrl),
-          data: { orderId: item.orderId, type: "oos", storeId: item.storeId }
+          data: { orderId: String(item.orderId || ""), type: "oos", storeId: String(item.storeId || ""), image: getSmallThumbnailUrl(item.photoUrl) }
       };
 
-      const message = {
-          notification: { title: payload.title, body: payload.body, ...(payload.image ? { image: payload.image } : {}) },
-          data: payload.data,
-          tokens: tokens
-      };
+      // FCM has a 500 token limit per call
+      const MAX_TOKENS = 500;
+      let successCount = 0;
+      for (let i = 0; i < tokens.length; i += MAX_TOKENS) {
+        const tokenBatch = tokens.slice(i, i + MAX_TOKENS);
+        const message = {
+            notification: { title: payload.title, body: payload.body },
+            webpush: {
+                notification: {
+                    icon: payload.data.image || 'https://placehold.co/192x192.png?text=OOS'
+                }
+            },
+            data: {
+              orderId: String(payload.data.orderId || ""),
+              type: String(payload.data.type || ""),
+              storeId: String(payload.data.storeId || ""),
+              image: String(payload.data.image || "")
+            },
+            tokens: tokenBatch
+        };
+
+        let response;
+        try {
+          console.log("[FCM] Sending batch:", tokenBatch.length);
+          response = await messaging.sendEachForMulticast(message);
+          console.log("[FCM] Success:", response.successCount);
+          console.log("[FCM] Failure:", response.failureCount);
+
+          if (response.failureCount > 0) {
+            response.responses.forEach((r, idx) => {
+              if (!r.success) {
+                console.error("[FCM TOKEN ERROR]", tokenBatch[idx], r.error);
+              }
+            });
+          }
+        } catch (fcmErr: any) {
+          console.error("[FCM FATAL ERROR]", fcmErr);
+          return res.status(500).json({
+            status: "error",
+            error: fcmErr.message || "FCM send failed"
+          });
+        }
+        successCount += response.successCount;
+      }
       
-      const response = await messaging.sendEachForMulticast(message);
-      res.json({ status: "success", successCount: response.successCount });
+      res.json({ status: "success", successCount: successCount });
     } catch(e: any) {
       console.error("[send-oos-push] Error:", e);
       res.status(500).json({ error: e.message });
@@ -289,7 +371,7 @@ async function startServer() {
       const config: any = {
         method: req.method,
         url: urlObj.toString(),
-        timeout: 120000,
+        timeout: 45000,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36',
           'Accept': 'application/json, text/plain, */*',
@@ -699,6 +781,7 @@ async function startServer() {
   // Vite
 
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
     app.use(vite.middlewares);
   } else {

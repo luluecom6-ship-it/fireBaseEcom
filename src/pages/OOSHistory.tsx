@@ -46,12 +46,27 @@ export const OOSHistory: React.FC<OOSHistoryProps> = ({
     if (!user || (!isAdminOrSuper)) return;
     try {
       setPushingId(item.id);
+      
+      // Strip potentially massive base64 payloads to avoid Vercel 4.5MB request limits
+      const safeItem = { ...item };
+      if (safeItem.photoUrl && safeItem.photoUrl.startsWith("data:")) {
+        safeItem.photoUrl = ""; // Strip base64 payloads but keep drive URLs
+      }
+
       const res = await fetch("/api/admin/send-oos-push", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ item, requesterRole: user.role.toLowerCase() })
+        body: JSON.stringify({ item: safeItem, requesterRole: user.role.toLowerCase() })
       });
-      const data = await res.json();
+      let data;
+      const textResponse = await res.text();
+      try {
+        data = JSON.parse(textResponse);
+      } catch (e) {
+        console.error("Non-JSON Server Output:", textResponse);
+        throw new Error(`Server returned a non-JSON response (${res.status}): ${textResponse.substring(0, 100)}`);
+      }
+      
       if (res.ok && data.status === "success") {
         alert(data.successCount ? `Push sent successfully to ${data.successCount} users.` : "No appropriate devices found.");
       } else {

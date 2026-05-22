@@ -148,19 +148,18 @@ export default function App() {
         // Also show native OS notification if they are in another window/app but tab is open
         if ("Notification" in window && Notification.permission === "granted") {
           try {
+            const iconUrl = payload.data?.image || 'https://placehold.co/192x192.png?text=OOS';
             if ('serviceWorker' in navigator) {
               navigator.serviceWorker.ready.then(registration => {
                 registration.showNotification(payload.notification.title || "Matrix Alert", {
                   body: payload.notification.body,
-                  icon: payload.notification.image || '/icon-192x192.png',
-                  image: payload.notification.image,
+                  icon: iconUrl,
                 } as any).catch(e => console.error("SW notification failed", e));
               });
             } else {
               new Notification(payload.notification.title || "Matrix Alert", {
                 body: payload.notification.body,
-                icon: payload.notification.image || '/icon-192x192.png',
-                image: payload.notification.image,
+                icon: iconUrl,
               } as any);
             }
           } catch (e) {
@@ -174,8 +173,11 @@ export default function App() {
     
     const handleFirstInteraction = async () => {
       if ("Notification" in window && Notification.permission === "default") {
-        console.log("[App] First interaction detected, requesting notification permission...");
-        await requestNotificationPermission();
+        if (!localStorage.getItem('notificationRequested')) {
+          localStorage.setItem('notificationRequested', 'true');
+          console.log("[App] First interaction detected, requesting notification permission...");
+          await requestNotificationPermission();
+        }
       }
       // Remove listener after first attempt
       window.removeEventListener('click', handleFirstInteraction);
