@@ -125,10 +125,36 @@ async function startServer() {
                     icon: payload.data.image || 'https://placehold.co/192x192.png?text=OOS'
                 }
             },
-            data: payload.data,
+            data: {
+              orderId: String(payload.data.orderId || ""),
+              type: String(payload.data.type || ""),
+              storeId: String(payload.data.storeId || ""),
+              image: String(payload.data.image || "")
+            },
             tokens: tokenBatch
         };
-        const response = await messaging.sendEachForMulticast(message);
+
+        let response;
+        try {
+          console.log("[FCM] Sending batch:", tokenBatch.length);
+          response = await messaging.sendEachForMulticast(message);
+          console.log("[FCM] Success:", response.successCount);
+          console.log("[FCM] Failure:", response.failureCount);
+
+          if (response.failureCount > 0) {
+            response.responses.forEach((r, idx) => {
+              if (!r.success) {
+                console.error("[FCM TOKEN ERROR]", tokenBatch[idx], r.error);
+              }
+            });
+          }
+        } catch (fcmErr: any) {
+          console.error("[FCM FATAL ERROR]", fcmErr);
+          return res.status(500).json({
+            status: "error",
+            error: fcmErr.message || "FCM send failed"
+          });
+        }
         successCount += response.successCount;
       }
       res.json({ status: "success", successCount });
@@ -230,10 +256,36 @@ async function startServer() {
                     icon: payload.data.image || 'https://placehold.co/192x192.png?text=OOS'
                 }
             },
-            data: payload.data,
+            data: {
+              orderId: String(payload.data.orderId || ""),
+              type: String(payload.data.type || ""),
+              storeId: String(payload.data.storeId || ""),
+              image: String(payload.data.image || "")
+            },
             tokens: tokenBatch
         };
-        const response = await messaging.sendEachForMulticast(message);
+
+        let response;
+        try {
+          console.log("[FCM] Sending batch:", tokenBatch.length);
+          response = await messaging.sendEachForMulticast(message);
+          console.log("[FCM] Success:", response.successCount);
+          console.log("[FCM] Failure:", response.failureCount);
+
+          if (response.failureCount > 0) {
+            response.responses.forEach((r, idx) => {
+              if (!r.success) {
+                console.error("[FCM TOKEN ERROR]", tokenBatch[idx], r.error);
+              }
+            });
+          }
+        } catch (fcmErr: any) {
+          console.error("[FCM FATAL ERROR]", fcmErr);
+          return res.status(500).json({
+            status: "error",
+            error: fcmErr.message || "FCM send failed"
+          });
+        }
         successCount += response.successCount;
       }
       
@@ -319,7 +371,7 @@ async function startServer() {
       const config: any = {
         method: req.method,
         url: urlObj.toString(),
-        timeout: 120000,
+        timeout: 45000,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36',
           'Accept': 'application/json, text/plain, */*',

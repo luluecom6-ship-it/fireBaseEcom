@@ -8,7 +8,7 @@ const REGIONS_TTL = 3600000; // 1 Hour for regions
 
 // Request Queue for GAS Proxy with Limited Concurrency
 let activeRequests = 0;
-const MAX_CONCURRENT = 5; // Reduced to 5 to prevent OOM/Overwhelm in small containers
+const MAX_CONCURRENT = 40; // Increased to 40 to prevent queue clogging and Failed to fetch errors while loading multiple tabs/resources
 let backoffMultiplier = 1;
 const gasQueue: { config: any, resolve: any, reject: any, skipCache?: boolean, startTime: number }[] = [];
 
@@ -43,7 +43,7 @@ async function processGasQueue() {
     // Enforce a strict timeout at the axios level
     const response = await axios({
       ...config,
-      timeout: 120000 // 120s timeout for individual GAS requests
+      timeout: 45000 // 45s timeout to avoid keeping connection slots occupied indefinitely
     });
     
     const dataStr = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
