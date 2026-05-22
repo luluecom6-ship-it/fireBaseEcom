@@ -53,7 +53,7 @@ export async function runMonitorTick(db: any, messaging: any) {
     console.log(`[Monitor DEBUG] Config exists: ${!!config.escalationRules}, Rules count: ${escalationRules.length}`);
 
     // Helper for sending notifications with role-based filtering
-    const sendFilteredNotification = async (payload: { title: string, body: string, data: any, image?: string }, alertStoreId: string, alertRegion: string, isEscalation: boolean, isOOS?: boolean) => {
+    const sendFilteredNotification = async (payload: { title: string, body: string, data: any, icon?: string, image?: string }, alertStoreId: string, alertRegion: string, isEscalation: boolean, isOOS?: boolean) => {
       const validDocs = allTokensData.filter((data: any) => {
         if (!data.token) return false;
         const userRole = String(data.role || "").toLowerCase().trim();
@@ -85,11 +85,45 @@ export async function runMonitorTick(db: any, messaging: any) {
 
       const tokens = validDocs.map((data: any) => data.token);
       if (tokens.length > 0) {
-        const message = {
-          notification: payload,
-          data: payload.data,
-          tokens: tokens
-        };
+        let message: any;
+        if (isOOS) {
+          message = {
+            notification: {
+              title: payload.title,
+              body: payload.body,
+              image: payload.image || ""
+            },
+            webpush: {
+              notification: {
+                icon: payload.icon || 'https://placehold.co/192x192.png?text=OOS',
+                image: payload.image || 'https://placehold.co/192x192.png?text=OOS'
+              }
+            },
+            data: {
+              orderId: String(payload.data?.orderId || ""),
+              type: String(payload.data?.type || ""),
+              storeId: String(payload.data?.storeId || ""),
+              icon: String(payload.icon || ""),
+              image: String(payload.image || "")
+            },
+            tokens: tokens
+          };
+        } else {
+          message = {
+            notification: {
+              title: payload.title,
+              body: payload.body,
+              image: payload.image || ""
+            },
+            data: {
+              orderId: String(payload.data?.orderId || ""),
+              type: String(payload.data?.type || "alert"),
+              alertId: String(payload.data?.alertId || "")
+            },
+            tokens: tokens
+          };
+        }
+
         const fcmResponse = await messaging.sendEachForMulticast(message);
         console.log(`[Monitor] FCM Sent (${isOOS ? 'OOS' : (isEscalation ? 'ESC' : 'INIT')}): ${fcmResponse.successCount} success, ${fcmResponse.failureCount} failure`);
 
@@ -332,11 +366,22 @@ export async function runMonitorTick(db: any, messaging: any) {
                 return str;
               };
 
+              const getLargeImageUrl = (url: string) => {
+                if (!url) return "";
+                const str = String(url);
+                if (str.includes("drive.google.com")) {
+                  const id = str.split("id=")[1] || str.split("/d/")[1]?.split("/")[0];
+                  if (id) return `https://lh3.googleusercontent.com/d/${id}=s1000`;
+                }
+                return str;
+              };
+
               await sendFilteredNotification({
                 title: `⚠️ OUT OF STOCK DETECTED`,
                 body: `Item ${item.item_name} (SKU: ${sku}) marked returning OOS at Store ${storeId}.`,
-                data: { orderId, type: "oos", storeId },
-                ...(item.photo_url ? { image: getSmallThumbnailUrl(item.photo_url) } : {})
+                icon: getSmallThumbnailUrl(item.photo_url),
+                image: getLargeImageUrl(item.photo_url),
+                data: { orderId, type: "oos", storeId }
               }, storeId, storeRegion, false, true);
             }
           

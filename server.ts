@@ -350,12 +350,25 @@ async function startServer() {
 
   app.get("/api/oos-trigger", async (req, res) => {
     try {
-      if (!admin.apps.length) return res.status(500).json({ error: "No DB" });
-      await runMonitorTick(getFirestore(), null);
+      if (!db || !messaging) return res.status(500).json({ error: "Missing Firebase features" });
+      await runMonitorTick(db, messaging);
       res.json({ status: "Tick completed" });
     } catch(e: any) {
       console.error(e);
       res.status(500).json({ error: e.stack || e.message });
+    }
+  });
+
+  app.get("/api/monitor", async (req, res) => {
+    try {
+      if (!db || !messaging) return res.status(500).json({ status: "error", message: "Firebase features missing" });
+      const monKey = req.headers["x-monitor-key"] || req.query.key;
+      console.log(`[Monitor Trigger] Hitting monitor manually from Vercel/GAS. Key: ${!!monKey}`);
+      await runMonitorTick(db, messaging);
+      res.json({ status: "success", message: "Monitor tick completed successfully" });
+    } catch (e: any) {
+      console.error("[api/monitor] Error:", e);
+      res.status(500).json({ status: "error", message: e.message });
     }
   });
 

@@ -9,6 +9,7 @@ import cors from "cors";
 import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import fs from "fs";
+import { runMonitorTick } from "../src/services/monitorService";
 
 // Optimized Cache for GAS Proxy (Inlined for standalone serverless function deployment)
 const gasCache = new Map<string, { data: any, headers: any, status: number, expiry: number }>();
@@ -244,6 +245,30 @@ async function startServer() {
       res.json({ count: snap.size, data: snap.docs.map(d => d.data()) });
     } catch(e: any) {
       res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/oos-trigger", async (req, res) => {
+    try {
+      if (!db || !messaging) return res.status(500).json({ error: "Missing Firebase features" });
+      await runMonitorTick(db, messaging);
+      res.json({ status: "Tick completed" });
+    } catch(e: any) {
+      console.error(e);
+      res.status(500).json({ error: e.stack || e.message });
+    }
+  });
+
+  app.get("/api/monitor", async (req, res) => {
+    try {
+      if (!db || !messaging) return res.status(500).json({ status: "error", message: "Firebase features missing" });
+      const monKey = req.headers["x-monitor-key"] || req.query.key;
+      console.log(`[Monitor Trigger] Hitting monitor manually from Vercel/GAS. Key: ${!!monKey}`);
+      await runMonitorTick(db, messaging);
+      res.json({ status: "success", message: "Monitor tick completed successfully" });
+    } catch (e: any) {
+      console.error("[api/monitor] Error:", e);
+      res.status(500).json({ status: "error", message: e.message });
     }
   });
 
