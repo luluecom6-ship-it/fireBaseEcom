@@ -16,7 +16,8 @@ messaging.onBackgroundMessage((payload) => {
   const notificationTitle = payload.notification?.title || 'Matrix Alert';
   const notificationOptions = {
     body: payload.notification?.body || 'New alert triggered',
-    icon: payload.data?.image || 'https://placehold.co/192x192.png?text=OOS'
+    icon: payload.data?.icon || payload.data?.image || 'https://placehold.co/192x192.png?text=OOS',
+    image: payload.data?.image || 'https://placehold.co/192x192.png?text=OOS'
   };
 
   self.registration.showNotification(notificationTitle, notificationOptions);

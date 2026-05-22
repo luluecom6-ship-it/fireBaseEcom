@@ -257,8 +257,15 @@ async function startServer() {
       const payload = {
           title: `🧪 TEST OUT OF STOCK DETECTED`,
           body: `Test Item Strawberry (SKU: 99999) marked returning OOS at Store TEST.`,
-          image: 'https://placehold.co/200x200.png?text=OOS+TEST',
-          data: { orderId: 'test-order-123', type: "oos", storeId: 'TEST', image: 'https://placehold.co/200x200.png?text=OOS+TEST' }
+          icon: 'https://placehold.co/100x100.png?text=OOS+ICON',
+          image: 'https://placehold.co/600x400.png?text=OOS+TEST+IMAGE',
+          data: { 
+            orderId: 'test-order-123', 
+            type: "oos", 
+            storeId: 'TEST', 
+            icon: 'https://placehold.co/100x100.png?text=OOS+ICON', 
+            image: 'https://placehold.co/600x400.png?text=OOS+TEST+IMAGE' 
+          }
       };
 
       const MAX_TOKENS = 500;
@@ -266,16 +273,22 @@ async function startServer() {
       for (let i = 0; i < tokens.length; i += MAX_TOKENS) {
         const tokenBatch = tokens.slice(i, i + MAX_TOKENS);
         const message = {
-            notification: { title: payload.title, body: payload.body },
+            notification: { 
+              title: payload.title, 
+              body: payload.body, 
+              image: payload.image 
+            },
             webpush: {
                 notification: {
-                    icon: payload.data.image || 'https://placehold.co/192x192.png?text=OOS'
+                    icon: payload.data.icon || 'https://placehold.co/192x192.png?text=OOS',
+                    image: payload.data.image || 'https://placehold.co/192x192.png?text=OOS'
                 }
             },
             data: {
               orderId: String(payload.data.orderId || ""),
               type: String(payload.data.type || ""),
               storeId: String(payload.data.storeId || ""),
+              icon: String(payload.data.icon || ""),
               image: String(payload.data.image || "")
             },
             tokens: tokenBatch
@@ -384,11 +397,28 @@ async function startServer() {
         return str;
       };
 
+      const getLargeImageUrl = (url: string) => {
+        if (!url) return "";
+        const str = String(url);
+        if (str.includes("drive.google.com")) {
+          const id = str.split("id=")[1] || str.split("/d/")[1]?.split("/")[0];
+          if (id) return `https://lh3.googleusercontent.com/d/${id}=s1000`;
+        }
+        return str;
+      };
+
       const payload = {
           title: `⚠️ OUT OF STOCK DETECTED`,
           body: `Item ${item.itemName} (SKU: ${item.sku}) marked returning OOS at Store ${item.storeId}.`,
-          image: getSmallThumbnailUrl(item.photoUrl),
-          data: { orderId: String(item.orderId || ""), type: "oos", storeId: String(item.storeId || ""), image: getSmallThumbnailUrl(item.photoUrl) }
+          icon: getSmallThumbnailUrl(item.photoUrl),
+          image: getLargeImageUrl(item.photoUrl),
+          data: { 
+            orderId: String(item.orderId || ""), 
+            type: "oos", 
+            storeId: String(item.storeId || ""), 
+            icon: getSmallThumbnailUrl(item.photoUrl),
+            image: getLargeImageUrl(item.photoUrl) 
+          }
       };
 
       // FCM has a 500 token limit per call
@@ -397,16 +427,22 @@ async function startServer() {
       for (let i = 0; i < tokens.length; i += MAX_TOKENS) {
         const tokenBatch = tokens.slice(i, i + MAX_TOKENS);
         const message = {
-            notification: { title: payload.title, body: payload.body },
+            notification: { 
+              title: payload.title, 
+              body: payload.body, 
+              image: payload.image 
+            },
             webpush: {
                 notification: {
-                    icon: payload.data.image || 'https://placehold.co/192x192.png?text=OOS'
+                    icon: payload.data.icon || 'https://placehold.co/192x192.png?text=OOS',
+                    image: payload.data.image || 'https://placehold.co/192x192.png?text=OOS'
                 }
             },
             data: {
               orderId: String(payload.data.orderId || ""),
               type: String(payload.data.type || ""),
               storeId: String(payload.data.storeId || ""),
+              icon: String(payload.data.icon || ""),
               image: String(payload.data.image || "")
             },
             tokens: tokenBatch
