@@ -31,6 +31,22 @@ const normalizeRegion = (region: string | null | undefined): string => {
   return String(region || "").toLowerCase().trim();
 };
 
+const isStoreMatch = (uStore: string, tStore: string): boolean => {
+  const userStoreId = normalizeStoreId(uStore);
+  const targetStoreId = normalizeStoreId(tStore);
+  if (userStoreId === 'all' || userStoreId === 'all stores' || userStoreId === 'all_stores' || userStoreId === '') return true;
+  if (targetStoreId === 'all' || targetStoreId === 'all stores' || targetStoreId === 'all_stores' || targetStoreId === '') return true;
+  return userStoreId === targetStoreId;
+};
+
+const isRegionMatch = (uRegion: string, tRegion: string): boolean => {
+  const userRegion = normalizeRegion(uRegion);
+  const targetRegion = normalizeRegion(tRegion);
+  if (userRegion === 'all' || userRegion === 'all regions' || userRegion === 'all_regions' || userRegion === '') return true;
+  if (targetRegion === 'all' || targetRegion === 'all regions' || targetRegion === 'all_regions' || targetRegion === '') return true;
+  return userRegion === targetRegion || userRegion.includes(targetRegion) || targetRegion.includes(userRegion);
+};
+
 export async function runMonitorTick(db: any, messaging: any) {
   try {
     console.log(`[Monitor] Tick started...`);
@@ -83,10 +99,10 @@ export async function runMonitorTick(db: any, messaging: any) {
         if (isOOS) {
           if (userRole === 'admin') return true;
           if (userRole === 'supervisor') {
-            return userRegion !== "" && targetRegion !== "" && userRegion === targetRegion;
+            return isRegionMatch(data.region, alertRegion);
           }
           if (['manager', 'store', 'picker', 'driver', 'staff', 'operator'].includes(userRole)) {
-            return userStoreId !== "" && targetStoreId !== "" && userStoreId === targetStoreId;
+            return isStoreMatch(data.storeId, alertStoreId);
           }
           return false;
         }
@@ -95,17 +111,17 @@ export async function runMonitorTick(db: any, messaging: any) {
         if (isEscalation) {
           if (userRole === 'admin') return true;
           if (userRole === 'supervisor') {
-            return userRegion !== "" && targetRegion !== "" && userRegion === targetRegion;
+            return isRegionMatch(data.region, alertRegion);
           }
           if (userRole === 'manager') {
-            return userStoreId !== "" && targetStoreId !== "" && userStoreId === targetStoreId;
+            return isStoreMatch(data.storeId, alertStoreId);
           }
           return false;
         } 
         
         // Level 1 (Initial): Picker, Store
         if (['picker', 'store', 'staff', 'operator'].includes(userRole)) {
-          return userStoreId !== "" && targetStoreId !== "" && userStoreId === targetStoreId;
+          return isStoreMatch(data.storeId, alertStoreId);
         }
 
         return false;
@@ -358,6 +374,14 @@ export async function runMonitorTick(db: any, messaging: any) {
           if (processedOOSKeys.has(oosKey)) {
             continue;
           }
+
+          // Double check database to prevent duplicates from overlapping server instances/triggers
+          const oosDocRef = db.collection('oos_history').doc(oosKey);
+          const oosDocSnap = await oosDocRef.get();
+          if (oosDocSnap.exists) {
+            processedOOSKeys.add(oosKey);
+            continue;
+          }
           
           await db.collection('oos_history').doc(oosKey).set({
             orderId,
@@ -384,6 +408,11 @@ export async function runMonitorTick(db: any, messaging: any) {
               );
               const storeRegion = storeRegionObj ? storeRegionObj.name : "";
 
+              const oosPushRegions = config.oosPushRegions || ['All'];
+              const isRegionAllowed = oosPushRegions.includes('All') || (storeRegion && oosPushRegions.some((cr: string) => cr.toLowerCase() === storeRegion.toLowerCase()));
+
+              if (isRegionAllowed) {
+
               const getSmallThumbnailUrl = (url: string) => {
                 if (!url) return "";
                 const str = String(url);
@@ -406,11 +435,12 @@ export async function runMonitorTick(db: any, messaging: any) {
 
               await sendFilteredNotification({
                 title: `⚠️ OUT OF STOCK DETECTED`,
-                body: `Item ${item.item_name} (SKU: ${sku}) marked returning OOS at Store ${storeId}.`,
+                body: `Item ${item.item_name} (SKU: ${sku}) at Store ${storeId}.`,
                 icon: getSmallThumbnailUrl(item.photo_url),
                 image: getLargeImageUrl(item.photo_url),
                 data: { orderId, type: "oos", storeId }
               }, storeId, storeRegion, false, true);
+              }
             }
           
           // Register in memory so we don't query/write again this session

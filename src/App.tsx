@@ -121,6 +121,7 @@ export default function App() {
     scheduledRunningSlotRegions, setScheduledRunningSlotRegions,
     soundAlertsEnabled, setSoundAlertsEnabled,
     oosPushEnabled, setOosPushEnabled,
+    oosPushRegions, setOosPushRegions,
     saveSystemConfig, isSavingConfig 
   } = useSystemConfig(user, showToast, isFirebaseAuthenticated);
 
@@ -539,6 +540,8 @@ export default function App() {
             setSoundAlertsEnabled={handleToggleSound}
             oosPushEnabled={oosPushEnabled}
             setOosPushEnabled={setOosPushEnabled}
+            oosPushRegions={oosPushRegions}
+            setOosPushRegions={setOosPushRegions}
             staffStatus={staffStatus}
             scheduledThreshold={scheduledThreshold}
             setScheduledThreshold={setScheduledThreshold}

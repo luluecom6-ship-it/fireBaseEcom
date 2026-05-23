@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Clock, RefreshCw, Package, Users, UserCheck, TrendingUp, 
   ShieldCheck, AlertTriangle, History, Save, X, AlertCircle, Send,
-  UserPlus, UserMinus, Key, Trash2, Edit3, Settings, LayoutDashboard, CalendarDays, Activity
+  UserPlus, UserMinus, Key, Trash2, Edit3, Settings, LayoutDashboard, CalendarDays, Activity,
+  Search, MapPin, Box
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -38,6 +39,8 @@ interface AdminProps {
   setSoundAlertsEnabled: (val: boolean, targetUserId?: string) => void;
   oosPushEnabled?: boolean;
   setOosPushEnabled?: (val: boolean) => void;
+  oosPushRegions?: string[];
+  setOosPushRegions?: (val: string[]) => void;
   staffStatus: any[];
   scheduledThreshold: number;
   setScheduledThreshold: (num: number) => void;
@@ -89,6 +92,8 @@ export const Admin: React.FC<AdminProps> = ({
   setSoundAlertsEnabled,
   oosPushEnabled,
   setOosPushEnabled,
+  oosPushRegions = ['All'],
+  setOosPushRegions,
   staffStatus
 }) => {
   const getTodayStr = () => {
@@ -115,6 +120,9 @@ export const Admin: React.FC<AdminProps> = ({
   const [isProcessingUser, setIsProcessingUser] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
   const [userToDelete, setUserToDelete] = useState<any>(null);
+  const [userFilterRegion, setUserFilterRegion] = useState("All");
+  const [userFilterStore, setUserFilterStore] = useState("All");
+  const [userSearchQuery, setUserSearchQuery] = useState("");
   
   // Form State
   const [userForm, setUserForm] = useState({
@@ -199,6 +207,65 @@ export const Admin: React.FC<AdminProps> = ({
     }
     return Array.from(regions).filter(Boolean).sort();
   }, [adminData.regions, adminData.users]);
+
+  const userAvailableStores = React.useMemo(() => {
+    const stores = new Set<string>();
+    if (adminData.regions && Array.isArray(adminData.regions)) {
+      adminData.regions.forEach(r => {
+        const sid = String(r.storeId || "").trim();
+        const reg = String(r.region || "").trim();
+        if (sid) {
+          if (userFilterRegion === "All" || reg.toLowerCase() === userFilterRegion.toLowerCase()) {
+            stores.add(sid);
+          }
+        }
+      });
+    }
+    if (adminData.users && Array.isArray(adminData.users)) {
+      adminData.users.forEach(u => {
+        const sid = String(u.storeId || "").trim();
+        const reg = String(u.region || storeToRegion[sid] || "").trim();
+        if (sid) {
+          if (userFilterRegion === "All" || reg.toLowerCase() === userFilterRegion.toLowerCase()) {
+            stores.add(sid);
+          }
+        }
+      });
+    }
+    return Array.from(stores).filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [adminData.regions, adminData.users, userFilterRegion, storeToRegion]);
+
+  const filteredUsers = React.useMemo(() => {
+    if (!adminData.users || !Array.isArray(adminData.users)) return [];
+    return adminData.users.filter((u: any) => {
+      // Search term
+      const query = userSearchQuery.trim().toLowerCase();
+      if (query) {
+        const nameMatch = String(u.name || "").toLowerCase().includes(query);
+        const usernameMatch = String(u.username || "").toLowerCase().includes(query);
+        const empIdMatch = String(u.empId || "").toLowerCase().includes(query);
+        const storeMatchInput = String(u.storeId || "").toLowerCase().includes(query);
+        if (!nameMatch && !usernameMatch && !empIdMatch && !storeMatchInput) return false;
+      }
+      
+      // Region Filter
+      if (userFilterRegion !== "All") {
+        const storeReg = storeToRegion[String(u.storeId || "").trim()] || "";
+        const userReg = String(u.region || "").trim();
+        const hasRegionMatch = (userReg.toLowerCase() === userFilterRegion.toLowerCase()) || 
+                             (storeReg.toLowerCase() === userFilterRegion.toLowerCase());
+        if (!hasRegionMatch) return false;
+      }
+      
+      // Store Filter
+      if (userFilterStore !== "All") {
+        const hasStoreMatch = String(u.storeId || "").trim() === userFilterStore;
+        if (!hasStoreMatch) return false;
+      }
+
+      return true;
+    });
+  }, [adminData.users, userSearchQuery, userFilterRegion, userFilterStore, storeToRegion]);
 
   const hasFetched = React.useRef(false);
 
@@ -689,6 +756,54 @@ export const Admin: React.FC<AdminProps> = ({
               </button>
             </div>
 
+            {/* User Search & Region/Store Filters */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Search */}
+              <div className="bg-white px-4 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
+                <Search className="text-blue-600 flex-shrink-0" size={18} />
+                <input
+                  type="text"
+                  placeholder="Search name, username, or ID..."
+                  value={userSearchQuery}
+                  onChange={(e) => setUserSearchQuery(e.target.value)}
+                  className="font-bold text-slate-700 outline-none bg-transparent text-xs sm:text-sm w-full placeholder:text-slate-400"
+                />
+              </div>
+
+              {/* Region Filter */}
+              <div className="bg-white px-4 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
+                <MapPin className="text-pink-600 flex-shrink-0" size={18} />
+                <select
+                  value={userFilterRegion}
+                  onChange={(e) => {
+                    setUserFilterRegion(e.target.value);
+                    setUserFilterStore("All");
+                  }}
+                  className="font-black text-slate-700 outline-none bg-transparent text-xs sm:text-sm cursor-pointer w-full"
+                >
+                  <option value="All">All Regions</option>
+                  {availableRegions.map(reg => (
+                    <option key={reg} value={reg}>{reg}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Store Filter */}
+              <div className="bg-white px-4 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
+                <Box className="text-purple-600 flex-shrink-0" size={18} />
+                <select
+                  value={userFilterStore}
+                  onChange={(e) => setUserFilterStore(e.target.value)}
+                  className="font-black text-slate-700 outline-none bg-transparent text-xs sm:text-sm cursor-pointer w-full"
+                >
+                  <option value="All">All Stores</option>
+                  {userAvailableStores.map(store => (
+                    <option key={store} value={store}>Store {store}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-left min-w-[700px]">
@@ -702,7 +817,7 @@ export const Admin: React.FC<AdminProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {adminData.users.map((u: any) => (
+                    {filteredUsers.map((u: any) => (
                       <tr key={u.empId} className="hover:bg-slate-50/50 transition-all group">
                         <td className="p-4">
                           <div className="flex items-center gap-3">
@@ -782,6 +897,13 @@ export const Admin: React.FC<AdminProps> = ({
                         </td>
                       </tr>
                     ))}
+                    {filteredUsers.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest text-[10px]">
+                          No users match your criteria
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1130,6 +1252,54 @@ export const Admin: React.FC<AdminProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* OOS Region Filter Configuration */}
+            {oosPushEnabled && (
+              <div className="p-4 sm:p-6 bg-purple-50/20 border-t border-purple-100/30 flex flex-col gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-purple-800">Target OOS Regions</p>
+                  <p className="text-[9px] font-bold text-slate-400 mt-0.5">Select which regions will trigger automated OOS alerts</p>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  <button
+                    onClick={() => setOosPushRegions && setOosPushRegions(['All'])}
+                    className={cn(
+                      "px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all cursor-pointer",
+                      oosPushRegions.includes('All') 
+                        ? "bg-purple-600 text-white border-purple-600 shadow-sm" 
+                        : "bg-white text-slate-400 border-slate-100 hover:bg-slate-50"
+                    )}
+                  >
+                    All Regions
+                  </button>
+                  {availableRegions.map(reg => (
+                    <button
+                      key={reg}
+                      onClick={() => {
+                        if (setOosPushRegions) {
+                          if (oosPushRegions.includes('All')) {
+                            setOosPushRegions([reg]);
+                          } else if (oosPushRegions.includes(reg)) {
+                            const next = oosPushRegions.filter(r => r !== reg);
+                            setOosPushRegions(next.length === 0 ? ['All'] : next);
+                          } else {
+                            setOosPushRegions([...oosPushRegions, reg]);
+                          }
+                        }
+                      }}
+                      className={cn(
+                        "px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all cursor-pointer",
+                        oosPushRegions.includes(reg) && !oosPushRegions.includes('All')
+                          ? "bg-purple-600 text-white border-purple-600 shadow-sm" 
+                          : "bg-white text-slate-400 border-slate-100 hover:bg-slate-50"
+                      )}
+                    >
+                      {reg}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Staff Presence Column */}

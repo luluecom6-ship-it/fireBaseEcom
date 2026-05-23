@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'motion/react';
-import { PackageX, Clock, RefreshCw, Search, Box, Bell } from 'lucide-react';
+import { PackageX, Clock, RefreshCw, Search, Box, Bell, MapPin } from 'lucide-react';
 import { OOSRecord, User } from '../types';
 import { parseServerDate } from '../utils/api';
 // cn is in lib/utils
@@ -38,7 +38,17 @@ export const OOSHistory: React.FC<OOSHistoryProps> = ({
   );
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStore, setFilterStore] = useState<string>("all");
+  const [filterRegion, setFilterRegion] = useState<string>("all");
   const [pushingId, setPushingId] = useState<string | null>(null);
+
+  const role = String(user?.role || "").toLowerCase().trim();
+  const supervisorRegion = user && role === 'supervisor' ? (user.region || "").trim() : "";
+
+  useEffect(() => {
+    if (role === 'supervisor' && supervisorRegion) {
+      setFilterRegion(supervisorRegion);
+    }
+  }, [role, supervisorRegion]);
 
   const isAdminOrSuper = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'supervisor';
 
@@ -89,15 +99,29 @@ export const OOSHistory: React.FC<OOSHistoryProps> = ({
     });
   }
 
-  const role = String(user?.role || "").toLowerCase().trim();
-  const supervisorRegion = user && role === 'supervisor' ? (user.region || "").trim() : "";
+  // Build unique and sorted list of regions dynamically from adminData
+  const regionsList = useMemo(() => {
+    const s = new Set<string>();
+    if (adminData && Array.isArray(adminData.regions)) {
+      adminData.regions.forEach((r: any) => {
+        const reg = String(r.region || r.Region || "").trim();
+        if (reg) s.add(reg);
+      });
+    }
+    return Array.from(s).sort();
+  }, [adminData]);
 
-  // Unique stores should also only be shown to supervisors if they belong to their region
+  // Unique stores should also only be shown to supervisors if they belong to their region, or filtered by selected region
   let uniqueStores = Array.from(new Set(oosItems.map(item => String(item.storeId || "").toUpperCase()))).filter(Boolean);
   if (role === 'supervisor' && supervisorRegion) {
      uniqueStores = uniqueStores.filter(store => {
          const sr = storeToRegion[store] || "";
-         return sr === supervisorRegion;
+         return sr.toLowerCase() === supervisorRegion.toLowerCase();
+     });
+  } else if (filterRegion !== "all") {
+     uniqueStores = uniqueStores.filter(store => {
+         const sr = storeToRegion[store] || "";
+         return sr.toLowerCase() === filterRegion.toLowerCase();
      });
   }
   uniqueStores = uniqueStores.sort();
@@ -120,18 +144,26 @@ export const OOSHistory: React.FC<OOSHistoryProps> = ({
     
     if (!matchesSearch) return false;
 
-    // 3. Dropdown Store Filter
+    // 3. Region Filter
+    if (filterRegion !== "all") {
+      const itemRegion = storeToRegion[String(item.storeId || "").trim()] || "";
+      if (itemRegion.toLowerCase() !== filterRegion.toLowerCase()) {
+        return false;
+      }
+    }
+
+    // 4. Dropdown Store Filter
     if (filterStore !== "all" && String(item.storeId || "").toUpperCase() !== filterStore) {
       return false;
     }
 
-    // 4. Role/Store Restriction
+    // 5. Role/Store Restriction
     if (user && role !== 'admin') {
       const itemStoreId = String(item.storeId || "").toLowerCase().trim();
       
       if (role === 'supervisor') {
         const itemRegion = storeToRegion[String(item.storeId || "").trim()] || "";
-        if (itemRegion !== supervisorRegion) return false;
+        if (itemRegion.toLowerCase() !== supervisorRegion.toLowerCase()) return false;
       } else {
         // managers, pickers, drivers, etc
         const userStoreId = String(user.storeId || "").toLowerCase().trim();
@@ -176,8 +208,29 @@ export const OOSHistory: React.FC<OOSHistoryProps> = ({
               />
             </div>
 
+            {/* Region Filter */}
+            {(role === 'admin' || role === 'supervisor') && (
+              <div className="bg-white px-4 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
+                <MapPin className="text-pink-600" size={18} />
+                <select
+                  value={filterRegion}
+                  onChange={(e) => {
+                    setFilterRegion(e.target.value);
+                    setFilterStore("all");
+                  }}
+                  disabled={role === 'supervisor' && !!supervisorRegion}
+                  className="font-black text-slate-700 outline-none bg-transparent text-sm cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
+                >
+                  <option value="all">All Regions</option>
+                  {regionsList.map(region => (
+                    <option key={region} value={region}>{region}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Store Filter */}
-            {(user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'supervisor') && (
+            {(role === 'admin' || role === 'supervisor') && (
               <div className="bg-white px-4 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
                 <Box className="text-purple-600" size={18} />
                 <select

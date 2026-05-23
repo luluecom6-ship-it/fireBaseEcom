@@ -19,6 +19,7 @@ export function useSystemConfig(
   const [scheduledRunningSlotRegions, setScheduledRunningSlotRegions] = useState<string[]>(['All']);
   const [soundAlertsEnabled, setSoundAlertsEnabled] = useState(true);
   const [oosPushEnabled, setOosPushEnabled] = useState(true);
+  const [oosPushRegions, setOosPushRegions] = useState<string[]>(['All']);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   // Use Firestore for real-time config
@@ -53,6 +54,9 @@ export function useSystemConfig(
         if (typeof data.oosPushEnabled === 'boolean') {
           setOosPushEnabled(data.oosPushEnabled);
         }
+        if (Array.isArray(data.oosPushRegions)) {
+          setOosPushRegions(data.oosPushRegions);
+        }
       } else {
         // Default rules if nothing in Firestore yet
         const defaultRules = [
@@ -68,6 +72,7 @@ export function useSystemConfig(
         setScheduledRunningSlotRegions(['All']);
         setSoundAlertsEnabled(true);
         setOosPushEnabled(true);
+        setOosPushRegions(['All']);
       }
     }, (error) => {
       console.error("Firestore config error:", error);
@@ -100,6 +105,7 @@ export function useSystemConfig(
         },
         soundAlertsEnabled,
         oosPushEnabled,
+        oosPushRegions,
         updatedAt: new Date().toISOString()
       }, { merge: true }); // Use merge: true to avoid clobbering unseen config keys
       
@@ -135,6 +141,7 @@ export function useSystemConfig(
     scheduledRunningSlotRegions, 
     soundAlertsEnabled,
     oosPushEnabled,
+    oosPushRegions,
     showToast, 
     user
   ]);
@@ -158,6 +165,8 @@ export function useSystemConfig(
     setSoundAlertsEnabled,
     oosPushEnabled,
     setOosPushEnabled,
+    oosPushRegions,
+    setOosPushRegions,
     isSavingConfig, 
     saveSystemConfig 
   };

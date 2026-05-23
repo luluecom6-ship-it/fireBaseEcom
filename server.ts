@@ -104,6 +104,22 @@ async function startServer() {
     return String(region || "").toLowerCase().trim();
   };
 
+  const isStoreMatch = (uStore: string, tStore: string): boolean => {
+    const userStoreId = normalizeStoreId(uStore);
+    const targetStoreId = normalizeStoreId(tStore);
+    if (userStoreId === 'all' || userStoreId === 'all stores' || userStoreId === 'all_stores' || userStoreId === '') return true;
+    if (targetStoreId === 'all' || targetStoreId === 'all stores' || targetStoreId === 'all_stores' || targetStoreId === '') return true;
+    return userStoreId === targetStoreId;
+  };
+
+  const isRegionMatch = (uRegion: string, tRegion: string): boolean => {
+    const userRegion = normalizeRegion(uRegion);
+    const targetRegion = normalizeRegion(tRegion);
+    if (userRegion === 'all' || userRegion === 'all regions' || userRegion === 'all_regions' || userRegion === '') return true;
+    if (targetRegion === 'all' || targetRegion === 'all regions' || targetRegion === 'all_regions' || targetRegion === '') return true;
+    return userRegion === targetRegion || userRegion.includes(targetRegion) || targetRegion.includes(userRegion);
+  };
+
   const app = express();
   const PORT = 3000;
 
@@ -125,7 +141,7 @@ async function startServer() {
       
       const payload = {
           title: `🧪 TEST OUT OF STOCK DETECTED`,
-          body: `Test Item Strawberry (SKU: 99999) marked returning OOS at Store TEST.`,
+          body: `Test Item Strawberry (SKU: 99999) at Store TEST.`,
           icon: 'https://placehold.co/100x100.png?text=OOS+ICON',
           image: 'https://placehold.co/600x400.png?text=OOS+TEST+IMAGE',
           data: { 
@@ -268,10 +284,10 @@ async function startServer() {
 
             if (userRole === 'admin') return true;
             if (userRole === 'supervisor') {
-              return userRegion !== "" && targetRegion !== "" && userRegion === targetRegion;
+              return isRegionMatch(data.region, alertRegion);
             }
             if (['manager', 'store', 'picker', 'driver', 'staff', 'operator'].includes(userRole)) {
-              return userStoreId !== "" && targetStoreId !== "" && userStoreId === targetStoreId;
+              return isStoreMatch(data.storeId, alertStoreId);
             }
             return false;
         })
@@ -301,7 +317,7 @@ async function startServer() {
 
       const payload = {
           title: `⚠️ OUT OF STOCK DETECTED`,
-          body: `Item ${item.itemName} (SKU: ${item.sku}) marked returning OOS at Store ${item.storeId}.`,
+          body: `Item ${item.itemName} (SKU: ${item.sku}) at Store ${item.storeId}.`,
           icon: getSmallThumbnailUrl(item.photoUrl),
           image: getLargeImageUrl(item.photoUrl),
           data: { 
