@@ -232,28 +232,35 @@ const OrderPopup: React.FC<OrderPopupProps> = ({ orders, allOrders, position, he
         </div>
 
         <div className="tooltip-content-matrix">
-          {orders.map((order, idx) => (
-            <div key={idx} className="tooltip-order-row">
-              <div className="tooltip-order-header">
-                <span className="tooltip-job">{order.jobNumber}</span>
-                <span className="tooltip-store-pill">{order.storeCode}</span>
-              </div>
-              
-              <div className="tooltip-order-stats">
-                 <span className="stat-label">SKUs: <span className="stat-value">{order.skuPicked}/{order.skuTotal}</span></span>
-                 <span className="stat-label">Items: <span className="stat-value">{order.itemsPicked}/{order.itemsTotal}</span></span>
-              </div>
+          {orders.map((order, idx) => {
+            const fullOrder = getFullOrder(order.jobNumber);
+            const distance = fullOrder ? getOrderDistance(fullOrder) : null;
+            return (
+              <div key={idx} className="tooltip-order-row">
+                <div className="tooltip-order-header">
+                  <span className="tooltip-job">{order.jobNumber}</span>
+                  <span className="tooltip-store-pill">{order.storeCode}</span>
+                </div>
+                
+                <div className="tooltip-order-stats">
+                   <span className="stat-label">SKUs: <span className="stat-value">{order.skuPicked}/{order.skuTotal}</span></span>
+                   <span className="stat-label">Items: <span className="stat-value">{order.itemsPicked}/{order.itemsTotal}</span></span>
+                   {distance !== null && (
+                     <span className="stat-label">KM: <span className="stat-value">{distance.toFixed(1)} km</span></span>
+                   )}
+                </div>
 
-              {getFullOrder(order.jobNumber) && (
-                <button
-                  className="popup-details-btn-v2"
-                  onClick={() => getFullOrder(order.jobNumber) && handleDetails(getFullOrder(order.jobNumber)!)}
-                >
-                  View Details
-                </button>
-              )}
-            </div>
-          ))}
+                {fullOrder && (
+                  <button
+                    className="popup-details-btn-v2"
+                    onClick={() => handleDetails(fullOrder)}
+                  >
+                    View Details
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
         <div 
           className={`tooltip-arrow ${coords.isFlipped ? 'arrow-flipped' : ''}`}

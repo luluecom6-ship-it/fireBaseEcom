@@ -206,9 +206,21 @@ export async function runMonitorTick(db: any, messaging: any) {
 
     // Using executeGasRequest ensures these requests are queued and cached
     const [matrixRes, adminRes, matrixV2Res] = await Promise.all([
-      executeGasRequest({ method: 'GET', url: `${baseUrl}?action=getMatrixData` }, { skipCache: true, cacheKey: `GET:${baseUrl}:action=getMatrixData` }),
-      executeGasRequest({ method: 'GET', url: `${baseUrl}?action=getAdminData` }, { skipCache: true, cacheKey: `GET:${baseUrl}:action=getAdminData` }),
+      executeGasRequest({ method: 'GET', url: `${baseUrl}?action=getMatrixData` }, { skipCache: true, cacheKey: `GET:${baseUrl}:action=getMatrixData` })
+        .catch((err: any) => {
+          console.error(`[Monitor] matrixRes query failed:`, err.message);
+          return { status: 200, data: { status: "success", data: [] } };
+        }),
+      executeGasRequest({ method: 'GET', url: `${baseUrl}?action=getAdminData` }, { skipCache: true, cacheKey: `GET:${baseUrl}:action=getAdminData` })
+        .catch((err: any) => {
+          console.error(`[Monitor] adminRes query failed:`, err.message);
+          return { status: 200, data: { status: "success", data: { regions: [], users: [], attendance: [], orders: [] } } };
+        }),
       executeGasRequest({ method: 'GET', url: `${v2Url}` }, { skipCache: true, cacheKey: `GET:${v2Url}` })
+        .catch((err: any) => {
+          console.error(`[Monitor] matrixV2Res query failed:`, err.message);
+          return { status: 200, data: { status: "success", data: [] } };
+        })
     ]);
 
     const matrixRaw = matrixRes.data.status === "success" ? matrixRes.data.data : (matrixRes.data.data || matrixRes.data);
