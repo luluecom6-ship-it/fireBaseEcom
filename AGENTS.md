@@ -1,8 +1,22 @@
-# Project Context: Version 7.5 (OOS History & FCM Messaging)
+# Project Context: Version 8.0 (Operator Role & Driver Info Upgrades)
 
-Whenever the user refers to **Version 7.5**, it refers to the application state as of May 19, 2026, with the following enhancements:
+Whenever the user refers to **Version 8.0**, it refers to the application state as of May 29, 2026, with the following enhancements:
 
-## Core Enhancements (v7.5)
+## Core Enhancements (v8.0)
+1. **Operator Role Integration**:
+   - Implemented a brand new full-visibility privileged role `operator`.
+   - Operators possess access levels identical to `admin` across all critical operational pages (MatrixV2, Alerts, Orders, Search, OOS History, and Admin Control tables/dashboards).
+   - Strict privilege boundary added: Operators are explicitly **prohibited** from accessing the `Settings` tab inside Admin Control, preserving system safety and segregation of duties.
+2. **Order Hover Distance Accent (KM)**:
+   - Added automated calculated geographic distance representation (`KM(distance)`) inside the Matrix order details tooltip popups.
+   - Computes distance from geographic coordinate vectors dynamically and exposes it inline next to SKU/Item counts.
+3. **Advanced Driver Timeline Progression**:
+   - Replaced old generic "Driver Start Time (Going to Origin - Actual start)" with concrete granular actual progression parameters:
+     - **Driver Reached Store**: Derived from `goingToOriginEnd`.
+     - **Driver Collected Order**: Derived from `transferToDeliveryEnd`.
+     - **Driver Reach to Customer**: Derived from `goingToDestinationEnd`.
+
+## Previous Enhancements (v7.5 preserved)
 1. **FCM Push Notifications & Service Worker**:
    - Implemented Firebase Cloud Messaging Service Worker (`public/sw.js`) for background native OS notifications.
    - Enhanced backend (`server.ts`) with robust API endpoints (`/api/admin/send-oos-push`) to securely broadcast FCM push alerts based on permissions ('admin', 'supervisor').

@@ -398,8 +398,10 @@ export const Admin: React.FC<AdminProps> = ({
           <div className="flex items-center gap-6 sm:gap-8">
             {[
               { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-              ...(String(user.role || "").toLowerCase().trim() === 'admin' ? [
+              ...((['admin', 'operator'].includes(String(user.role || "").toLowerCase().trim())) ? [
                 { id: 'users', label: 'Users', icon: Users },
+              ] : []),
+              ...(String(user.role || "").toLowerCase().trim() === 'admin' ? [
                 { id: 'settings', label: 'Settings', icon: Settings },
               ] : [])
             ].map(tab => (
@@ -857,6 +859,7 @@ export const Admin: React.FC<AdminProps> = ({
                           <span className={cn(
                             "px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest",
                             u.role === 'admin' ? "bg-purple-100 text-purple-600" :
+                            u.role === 'operator' ? "bg-blue-100 text-blue-600" :
                             u.role === 'supervisor' ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-600"
                           )}>
                             {u.role}
@@ -1552,6 +1555,7 @@ export const Admin: React.FC<AdminProps> = ({
                       <option value="supervisor">Supervisor</option>
                       <option value="manager">Manager</option>
                       <option value="store">Store Admin</option>
+                      <option value="operator">Operator</option>
                     </select>
                   </div>
                   <div className="space-y-1.5">

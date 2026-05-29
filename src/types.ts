@@ -1,7 +1,7 @@
 export interface User {
   empId: string;
   name: string;
-  role: 'picker' | 'supervisor' | 'driver' | 'admin' | 'user' | 'store' | 'manager';
+  role: 'picker' | 'supervisor' | 'driver' | 'admin' | 'user' | 'store' | 'manager' | 'operator';
   storeId: string;
   status: string;
   profileImage?: string;

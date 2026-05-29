@@ -18,10 +18,17 @@ service cloud.firestore {
         );
     }
 
+    function isOperator() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'operator';
+    }
+
     function isSupervisor() {
       return isAuthenticated() &&
         (
           isAdmin() ||
+          isOperator() ||
           (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['supervisor', 'manager', 'store'])
         );
@@ -29,7 +36,7 @@ service cloud.firestore {
 
     function isValidUser(data) {
       return data.name is string && data.name.size() < 100 &&
-             data.role in ['admin', 'supervisor', 'picker', 'user', 'manager', 'store', 'driver'] &&
+             data.role in ['admin', 'operator', 'supervisor', 'picker', 'user', 'manager', 'store', 'driver'] &&
              (!('email' in data) || (data.email is string && data.email.size() < 100)) &&
              (!('storeId' in data) || (data.storeId is string && data.storeId.size() < 20)) &&
              (!('region' in data) || (data.region is string && data.region.size() < 50));
@@ -58,6 +65,7 @@ service cloud.firestore {
       
       allow update: if isAuthenticated() && (
         isAdmin() ||
+        isOperator() ||
         (
           request.auth.uid == userId && 
           (
@@ -86,14 +94,14 @@ service cloud.firestore {
     // Push Notification Queue
     match /push_queue/{notificationId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isOperator();
     }
 
     // Real-time Alerts
     match /alerts/{alertId} {
       allow read: if isAuthenticated();
       allow create, update: if isAuthenticated(); // Restrict creation to authenticated users
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || isOperator();
     }
 
     // OOS History

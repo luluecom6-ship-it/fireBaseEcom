@@ -238,7 +238,7 @@ async function startServer() {
       if (!db || !messaging) return res.status(500).json({ error: "Missing Firebase features" });
       
       const { item, requesterRole } = req.body;
-      if (!item || (requesterRole !== 'admin' && requesterRole !== 'supervisor')) {
+      if (!item || (requesterRole !== 'admin' && requesterRole !== 'operator' && requesterRole !== 'supervisor')) {
         return res.status(403).json({ error: "Unauthorized" });
       }
 
@@ -665,7 +665,8 @@ async function startServer() {
         if (!isAdmin) {
           const adminDoc = await db.collection('users').doc(rId).get();
           const adminData = adminDoc.data();
-          isAdmin = adminDoc.exists && String(adminData?.role || "").toLowerCase() === 'admin';
+          const role = String(adminData?.role || "").toLowerCase().trim();
+          isAdmin = adminDoc.exists && (role === 'admin' || role === 'operator');
           currentRole = adminData?.role || 'Unknown';
         }
 
@@ -752,13 +753,14 @@ async function startServer() {
         if (!isAdmin) {
           const adminDoc = await db.collection('users').doc(rId).get();
           const adminData = adminDoc.data();
-          isAdmin = adminDoc.exists && String(adminData?.role || "").toLowerCase() === 'admin';
+          const role = String(adminData?.role || "").toLowerCase().trim();
+          isAdmin = adminDoc.exists && (role === 'admin' || role === 'operator');
           currentRole = adminData?.role || 'Unknown';
         }
 
         if (!isAdmin) {
           console.warn(`[Admin Check] Access denied for ${rId}. Role found: ${currentRole}`);
-          return res.status(403).json({ error: `Access denied: Only administrators can delete users. Your role is ${currentRole}` });
+          return res.status(403).json({ error: `Access denied: Only administrators and operators can delete users. Your role is ${currentRole}` });
         }
       }
 
@@ -807,13 +809,14 @@ async function startServer() {
         if (!isAdmin) {
           const adminDoc = await db.collection('users').doc(rId).get();
           const adminData = adminDoc.data();
-          isAdmin = adminDoc.exists && String(adminData?.role || "").toLowerCase() === 'admin';
+          const role = String(adminData?.role || "").toLowerCase().trim();
+          isAdmin = adminDoc.exists && (role === 'admin' || role === 'operator');
           currentRole = adminData?.role || 'Unknown';
         }
 
         if (!isAdmin) {
           console.warn(`[Admin Check] Access denied for ${rId}. Role found: ${currentRole}`);
-          return res.status(403).json({ error: `Access denied: Admin role required. Your role is ${currentRole}` });
+          return res.status(403).json({ error: `Access denied: Admin/Operator role required. Your role is ${currentRole}` });
         }
       }
 

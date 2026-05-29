@@ -290,9 +290,9 @@ const MatrixV2: React.FC<MatrixV2Props> = ({
                 className="filter-select"
                 value={filterRegion}
                 onChange={(e) => setFilterRegion(e.target.value)}
-                disabled={user?.role !== 'admin'}
+                disabled={user?.role !== 'admin' && user?.role !== 'operator'}
               >
-                {user?.role === 'admin' && <option>All Regions</option>}
+                {(user?.role === 'admin' || user?.role === 'operator') && <option>All Regions</option>}
                 {availableRegions.map(regionName => (
                   <option key={regionName} value={regionName}>{regionName}</option>
                 ))}
@@ -303,7 +303,7 @@ const MatrixV2: React.FC<MatrixV2Props> = ({
                 onChange={(e) => setFilterStore(e.target.value)}
                 disabled={user?.role === 'picker' || user?.role === 'store' || user?.role === 'manager'}
               >
-                {(user?.role === 'admin' || user?.role === 'supervisor') && <option>All Stores</option>}
+                {(user?.role === 'admin' || user?.role === 'operator' || user?.role === 'supervisor') && <option>All Stores</option>}
                 {stores.map(store => (
                   <option key={store.id} value={store.id}>{store.name}</option>
                 ))}

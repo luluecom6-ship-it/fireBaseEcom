@@ -216,7 +216,7 @@ export async function runMonitorTick(db: any, messaging: any) {
           console.error(`[Monitor] adminRes query failed:`, err.message);
           return { status: 200, data: { status: "success", data: { regions: [], users: [], attendance: [], orders: [] } } };
         }),
-      executeGasRequest({ method: 'GET', url: `${v2Url}` }, { skipCache: true, cacheKey: `GET:${v2Url}` })
+      executeGasRequest({ method: 'GET', url: `${v2Url}${v2Url.includes('?') ? '&' : '?'}action=getMatrixDataV2` }, { skipCache: true, cacheKey: `GET:${v2Url}:action=getMatrixDataV2` })
         .catch((err: any) => {
           console.error(`[Monitor] matrixV2Res query failed:`, err.message);
           return { status: 200, data: { status: "success", data: [] } };

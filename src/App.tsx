@@ -228,7 +228,7 @@ export default function App() {
         console.log("[App] App returned to foreground, triggering refresh (with jitter)...");
         fetchMatrixData();
         const role = String(user.role || "").toLowerCase().trim();
-        if (page === "admin" || role === "admin" || role === "supervisor") {
+        if (page === "admin" || role === "admin" || role === "operator" || role === "supervisor") {
           fetchAdminData();
         }
         fetchStatus(user.empId);
@@ -290,27 +290,27 @@ export default function App() {
   // Navigation Helper
   const navigateTo = useCallback((target: typeof page) => {
     const role = String(user?.role || "").toLowerCase().trim();
-    if (target === "matrix" && role !== "admin") {
-      showToast("Access Denied: Admin Only", "error");
+    if (target === "matrix" && role !== "admin" && role !== "operator") {
+      showToast("Access Denied: Admin or Operator Only", "error");
       return;
     }
-    if (target === "analytics" && role !== "admin") {
-      showToast("Access Denied: Admin Only", "error");
+    if (target === "analytics" && role !== "admin" && role !== "operator") {
+      showToast("Access Denied: Admin or Operator Only", "error");
       return;
     }
-    if (target === "admin" && role !== "admin" && role !== "supervisor") {
-      showToast("Access Denied: Admin or Supervisor Only", "error");
+    if (target === "admin" && role !== "admin" && role !== "operator" && role !== "supervisor") {
+      showToast("Access Denied: Admin, Operator or Supervisor Only", "error");
       return;
     }
-    if (target === "roster" && role !== "admin" && role !== "supervisor" && role !== "manager") {
-      showToast("Access Denied: Admin, Supervisor or Manager only", "error");
+    if (target === "roster" && role !== "admin" && role !== "operator" && role !== "supervisor" && role !== "manager") {
+      showToast("Access Denied: Admin, Operator, Supervisor or Manager only", "error");
       return;
     }
-    if (target === "attendance-v2" && role !== "admin" && role !== "supervisor" && role !== "manager") {
-      showToast("Access Denied: Admin, Supervisor or Manager only", "error");
+    if (target === "attendance-v2" && role !== "admin" && role !== "operator" && role !== "supervisor" && role !== "manager") {
+      showToast("Access Denied: Admin, Operator, Supervisor or Manager only", "error");
       return;
     }
-    if (target === "matrix-v2" && role !== "admin" && role !== "supervisor" && role !== "manager" && role !== "picker" && role !== "store") {
+    if (target === "matrix-v2" && role !== "admin" && role !== "operator" && role !== "supervisor" && role !== "manager" && role !== "picker" && role !== "store") {
       showToast("Access Denied: Restricted access", "error");
       return;
     }
@@ -437,7 +437,7 @@ export default function App() {
           />
         );
       case "matrix":
-        if (user?.role !== 'admin') {
+        if (user?.role !== 'admin' && user?.role !== 'operator') {
           return <Dashboard 
             user={user} 
             onLogout={logout} 
@@ -472,7 +472,7 @@ export default function App() {
           />
         );
       case "analytics":
-        if (user?.role !== 'admin') {
+        if (user?.role !== 'admin' && user?.role !== 'operator') {
           return <Dashboard 
             user={user} 
             onLogout={logout} 

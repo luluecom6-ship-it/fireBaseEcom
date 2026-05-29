@@ -50,7 +50,7 @@ export const OOSHistory: React.FC<OOSHistoryProps> = ({
     }
   }, [role, supervisorRegion]);
 
-  const isAdminOrSuper = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'supervisor';
+  const isAdminOrSuper = ['admin', 'operator', 'supervisor'].includes(user?.role?.toLowerCase() || "");
 
   const handleSendPush = async (item: OOSRecord) => {
     if (!user || (!isAdminOrSuper)) return;
@@ -158,7 +158,7 @@ export const OOSHistory: React.FC<OOSHistoryProps> = ({
     }
 
     // 5. Role/Store Restriction
-    if (user && role !== 'admin') {
+    if (user && role !== 'admin' && role !== 'operator') {
       const itemStoreId = String(item.storeId || "").toLowerCase().trim();
       
       if (role === 'supervisor') {
@@ -209,7 +209,7 @@ export const OOSHistory: React.FC<OOSHistoryProps> = ({
             </div>
 
             {/* Region Filter */}
-            {(role === 'admin' || role === 'supervisor') && (
+            {(role === 'admin' || role === 'operator' || role === 'supervisor') && (
               <div className="bg-white px-4 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
                 <MapPin className="text-pink-600" size={18} />
                 <select
@@ -230,7 +230,7 @@ export const OOSHistory: React.FC<OOSHistoryProps> = ({
             )}
 
             {/* Store Filter */}
-            {(role === 'admin' || role === 'supervisor') && (
+            {(role === 'admin' || role === 'operator' || role === 'supervisor') && (
               <div className="bg-white px-4 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
                 <Box className="text-purple-600" size={18} />
                 <select

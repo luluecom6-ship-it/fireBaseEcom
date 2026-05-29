@@ -67,7 +67,7 @@ export function useAlerts(
       const logStoreId = String(log.storeId || "").trim().toLowerCase();
 
       // Admin and Supervisor see everything. Manager only sees their store.
-      const isPrivileged = role === 'admin' || role === 'supervisor';
+      const isPrivileged = role === 'admin' || role === 'operator' || role === 'supervisor';
       const isAllStore = userStoreId === 'all';
       const isStoreMatch = logStoreId === userStoreId;
 
@@ -564,7 +564,7 @@ export function useAlerts(
 
   const handleAlertAction = useCallback(async (alert: ActiveAlert, action: 'acknowledge' | 'escalate' | 'hide') => {
     if (action === 'hide') {
-      if (user?.role === 'admin') {
+      if (user?.role === 'admin' || user?.role === 'operator') {
         setAdminHiddenAlerts(prev => [...prev, alert.id]);
       } else {
         setMinimizedAlerts(prev => [...prev, alert.id]);
