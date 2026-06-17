@@ -49,11 +49,12 @@ import { AttendanceHistory } from "./pages/AttendanceHistory";
 import { RosterDashboard } from "./pages/RosterDashboard";
 import { AttendanceIntelligence } from "./pages/AttendanceDashboard2";
 import { OOSHistory } from "./pages/OOSHistory";
+import { UsageStats } from "./pages/UsageStats";
 import MatrixV2 from "./pages/MatrixV2";
 
 export default function App() {
   // Navigation
-  const [page, setPage] = useState<"login" | "dashboard" | "upload" | "attendance" | "admin" | "search" | "matrix" | "analytics" | "alerts" | "attendance-history" | "roster" | "attendance-v2" | "matrix-v2" | "oos-history">("login");
+  const [page, setPage] = useState<"login" | "dashboard" | "upload" | "attendance" | "admin" | "search" | "matrix" | "analytics" | "alerts" | "attendance-history" | "roster" | "attendance-v2" | "matrix-v2" | "oos-history" | "usage-stats">("login");
   
   // Auth Hook
   const { 
@@ -571,6 +572,13 @@ export default function App() {
             showToast={showToast}
           />
         );
+      case "usage-stats":
+        return (
+          <UsageStats 
+            user={user}
+            showToast={showToast}
+          />
+        );
       case "matrix-v2":
         return (
           <MatrixV2 
@@ -635,7 +643,8 @@ export default function App() {
             case 'attendance-v2': return 'Workforce Intelligence';
             case 'matrix-v2': return 'Matrix Intelligence V2';
             case 'oos-history': return 'OOS History';
-            default: return page.charAt(0).toUpperCase() + page.slice(1).replace("-", " ");
+            case 'usage-stats': return 'System Usage & Archival';
+            default: return 'Portal';
           }
         })()} 
         showBack={page !== "dashboard" && page !== "login"} 

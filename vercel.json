@@ -13,5 +13,11 @@
       "source": "/((?!api/|sw\\.js|firebase-messaging-sw\\.js|assets/|.*\\..*).*)",
       "destination": "/index.html"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/admin/archive-logs",
+      "schedule": "0 0 * * *"
+    }
   ]
 }

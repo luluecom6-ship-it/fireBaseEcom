@@ -135,7 +135,7 @@ async function startServer() {
   app.post("/api/admin/test-oos-push", async (req, res) => {
     try {
       if (!db || !messaging) return res.status(500).json({ error: "Missing Firebase features" });
-      const tokensSnap = await db.collection('fcm_tokens').where('role', 'in', ['admin', 'supervisor']).get();
+      const tokensSnap = await db.collection('fcm_tokens').where('role', 'in', ['admin', 'supervisor', 'operator', 'manager']).get();
       const tokens = tokensSnap.docs.map(d => d.data().token).filter(Boolean);
       if (tokens.length === 0) return res.json({ status: "success", successCount: 0 });
       
@@ -221,15 +221,122 @@ async function startServer() {
           console.error("[FCM FATAL ERROR]", fcmErr);
           return res.status(500).json({
             status: "error",
+      let fcmResponse = { successCount: 0 };
+      for (let i = 0; i < tokens.length; i += MAX_TOKENS) {
+        const tokenBatch = tokens.slice(i, i + MAX_TOKENS);
+        const message = {
+            notification: { 
+              title: payload.title, 
+              body: payload.body, 
+              image: payload.image 
+            },
+            webpush: {
+                notification: {
+                    icon: payload.data.icon || 'https://placehold.co/192x192.png?text=OOS',
+                    image: payload.data.image || 'https://placehold.co/192x192.png?text=OOS'
+                }
+            },
+            data: {
+              orderId: String(payload.data.orderId || ""),
+              type: String(payload.data.type || ""),
+              storeId: String(payload.data.storeId || ""),
+              icon: String(payload.data.icon || ""),
+              image: String(payload.data.image || "")
+            },
+            tokens: tokenBatch
+        };
+
+        let response;
+        try {
+          console.log("[FCM] Sending batch:", tokenBatch.length);
+          response = await messaging.sendEachForMulticast(message);
+          console.log("[FCM] Success:", response.successCount);
+          console.log("[FCM] Failure:", response.failureCount);
+
+          if (response.failureCount > 0) {
+            const badTokens: string[] = [];
+            response.responses.forEach((r, idx) => {
+              if (!r.success) {
+                console.error("[FCM TOKEN ERROR]", tokenBatch[idx], r.error);
+                const errCode = r.error?.code;
+                if (errCode === 'messaging/registration-token-not-registered' || errCode === 'messaging/invalid-registration-token') {
+                  badTokens.push(tokenBatch[idx]);
+                }
+              }
+            });
+
+            if (badTokens.length > 0) {
+              console.log("[FCM CleanUp] Cleaning up invalid tokens:", badTokens.length);
+              for (const token of badTokens) {
+                try {
+                  const snap = await db.collection('fcm_tokens').where('token', '==', token).get();
+                  if (!snap.empty) {
+                    const cleanupBatch = db.batch();
+                    snap.docs.forEach(doc => {
+                      console.log(`[FCM CleanUp] Deleting unregistered token: ${doc.id}`);
+                      cleanupBatch.delete(doc.ref);
+                    });
+                    await cleanupBatch.commit();
+                  }
+                } catch (cleanupErr) {
+                  console.error("[FCM CleanUp ERROR]", cleanupErr);
+                }
+              }
+            }
+          }
+        } catch (fcmErr: any) {
+          console.error("[FCM FATAL ERROR]", fcmErr);
+          return res.status(500).json({
+            status: "error",
             error: fcmErr.message || "FCM send failed"
           });
         }
         successCount += response.successCount;
+        fcmResponse.successCount = successCount;
       }
-      res.json({ status: "success", successCount });
+      res.json({ status: "success", successCount: fcmResponse.successCount });
     } catch(e: any) {
       console.error("[test-oos-push] Error:", e);
-      res.status(500).json({ error: e.message });
+      res.status(500).json({ status: "error", error: e.message });
+    }
+  });
+
+  app.post("/api/admin/broadcast-push", async (req, res) => {
+    try {
+      if (!db || !messaging) return res.status(500).json({ error: "Missing Firebase features" });
+      
+      const { message, targetRoles } = req.body || {};
+      if (!message) return res.status(400).json({ error: "Missing message" });
+      
+      const roles = Array.isArray(targetRoles) ? targetRoles.map(r => String(r).toLowerCase().trim()) : [];
+      let tokensSnap;
+      
+      if (roles.length > 0) {
+        tokensSnap = await db.collection('fcm_tokens').where('role', 'in', roles).get();
+      } else {
+        tokensSnap = await db.collection('fcm_tokens').get();
+      }
+      
+      const tokens = tokensSnap.docs.map(d => d.data().token).filter(Boolean);
+      if (tokens.length === 0) return res.json({ status: "success", successCount: 0 });
+      
+      const payload = {
+        notification: {
+          title: `📢 SYSTEM BROADCAST`,
+          body: message,
+          image: ""
+        },
+        data: {
+          type: "broadcast"
+        },
+        tokens: tokens
+      };
+
+      const fcmResponse = await messaging.sendEachForMulticast(payload);
+      res.json({ status: "success", successCount: fcmResponse.successCount });
+    } catch(e: any) {
+      console.error("[broadcast-push] Error:", e);
+      res.status(500).json({ status: "error", error: e.message });
     }
   });
 
@@ -448,6 +555,58 @@ async function startServer() {
     } catch (e: any) {
       console.error("[api/monitor] Error:", e);
       res.status(500).json({ status: "error", message: e.message });
+    }
+  });
+
+  app.post("/api/admin/archive-logs", async (req, res) => {
+    try {
+      if (!db) return res.status(500).json({ error: "No DB" });
+
+      // Calculate 48 hours ago
+      const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+      const logsToArchive: any[] = [];
+      
+      // 1. Get old OOS History
+      const oosSnap = await db.collection("oos_history").where("timestamp", "<", fortyEightHoursAgo).get();
+      const oosBatch = db.batch();
+      oosSnap.docs.forEach(doc => {
+        logsToArchive.push({ type: 'oos', id: doc.id, ...doc.data() });
+        oosBatch.delete(doc.ref);
+      });
+
+      // 2. Get old Alerts
+      const alertsSnap = await db.collection("alerts").where("triggeredAt", "<", fortyEightHoursAgo).get();
+      const alertsBatch = db.batch();
+      alertsSnap.docs.forEach(doc => {
+        logsToArchive.push({ type: 'alert', id: doc.id, ...doc.data() });
+        alertsBatch.delete(doc.ref);
+      });
+
+      if (logsToArchive.length === 0) {
+        return res.json({ status: "success", archivedCount: 0, message: "No logs older than 48 hours found." });
+      }
+
+      // 3. Push to Google Sheet V2
+      const V2_FALLBACK = "https://script.google.com/macros/s/AKfycbxGr0rRSmIuutAd80GfkVO4lYZ-ObJ4WY9hr-xfLim1Is_t1gUBKStJ7nb7LoepIEA_IA/exec";
+      const rawUrl = (process.env.V2_GAS_URL || process.env.VITE_V2_GAS_URL || V2_FALLBACK).trim();
+      
+      const syncParams = new URLSearchParams();
+      syncParams.append('action', 'archiveOldLogs');
+      syncParams.append('payload', JSON.stringify(logsToArchive));
+
+      await axios.post(rawUrl, syncParams.toString(), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 60000
+      });
+
+      // 4. Delete from Firestore to save space
+      if (!oosSnap.empty) await oosBatch.commit();
+      if (!alertsSnap.empty) await alertsBatch.commit();
+
+      res.json({ status: "success", archivedCount: logsToArchive.length });
+    } catch (e: any) {
+      console.error("[archive-logs] Error:", e);
+      res.status(500).json({ status: "error", error: e.message });
     }
   });
 
