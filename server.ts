@@ -221,80 +221,12 @@ async function startServer() {
           console.error("[FCM FATAL ERROR]", fcmErr);
           return res.status(500).json({
             status: "error",
-      let fcmResponse = { successCount: 0 };
-      for (let i = 0; i < tokens.length; i += MAX_TOKENS) {
-        const tokenBatch = tokens.slice(i, i + MAX_TOKENS);
-        const message = {
-            notification: { 
-              title: payload.title, 
-              body: payload.body, 
-              image: payload.image 
-            },
-            webpush: {
-                notification: {
-                    icon: payload.data.icon || 'https://placehold.co/192x192.png?text=OOS',
-                    image: payload.data.image || 'https://placehold.co/192x192.png?text=OOS'
-                }
-            },
-            data: {
-              orderId: String(payload.data.orderId || ""),
-              type: String(payload.data.type || ""),
-              storeId: String(payload.data.storeId || ""),
-              icon: String(payload.data.icon || ""),
-              image: String(payload.data.image || "")
-            },
-            tokens: tokenBatch
-        };
-
-        let response;
-        try {
-          console.log("[FCM] Sending batch:", tokenBatch.length);
-          response = await messaging.sendEachForMulticast(message);
-          console.log("[FCM] Success:", response.successCount);
-          console.log("[FCM] Failure:", response.failureCount);
-
-          if (response.failureCount > 0) {
-            const badTokens: string[] = [];
-            response.responses.forEach((r, idx) => {
-              if (!r.success) {
-                console.error("[FCM TOKEN ERROR]", tokenBatch[idx], r.error);
-                const errCode = r.error?.code;
-                if (errCode === 'messaging/registration-token-not-registered' || errCode === 'messaging/invalid-registration-token') {
-                  badTokens.push(tokenBatch[idx]);
-                }
-              }
-            });
-
-            if (badTokens.length > 0) {
-              console.log("[FCM CleanUp] Cleaning up invalid tokens:", badTokens.length);
-              for (const token of badTokens) {
-                try {
-                  const snap = await db.collection('fcm_tokens').where('token', '==', token).get();
-                  if (!snap.empty) {
-                    const cleanupBatch = db.batch();
-                    snap.docs.forEach(doc => {
-                      console.log(`[FCM CleanUp] Deleting unregistered token: ${doc.id}`);
-                      cleanupBatch.delete(doc.ref);
-                    });
-                    await cleanupBatch.commit();
-                  }
-                } catch (cleanupErr) {
-                  console.error("[FCM CleanUp ERROR]", cleanupErr);
-                }
-              }
-            }
-          }
-        } catch (fcmErr: any) {
-          console.error("[FCM FATAL ERROR]", fcmErr);
-          return res.status(500).json({
-            status: "error",
             error: fcmErr.message || "FCM send failed"
           });
         }
         successCount += response.successCount;
-        fcmResponse.successCount = successCount;
       }
-      res.json({ status: "success", successCount: fcmResponse.successCount });
+      res.json({ status: "success", successCount });
     } catch(e: any) {
       console.error("[test-oos-push] Error:", e);
       res.status(500).json({ status: "error", error: e.message });
