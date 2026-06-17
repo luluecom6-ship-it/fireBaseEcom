@@ -307,7 +307,7 @@ async function startServer() {
   app.post("/api/admin/test-oos-push", async (req, res) => {
     try {
       if (!db || !messaging) return res.status(500).json({ error: "Missing Firebase features" });
-      const tokensSnap = await db.collection('fcm_tokens').where('role', 'in', ['admin', 'supervisor']).get();
+      const tokensSnap = await db.collection('fcm_tokens').where('role', 'in', ['admin', 'supervisor', 'operator', 'manager']).get();
       const tokens = tokensSnap.docs.map(d => d.data().token).filter(Boolean);
       if (tokens.length === 0) return res.json({ status: "success", successCount: 0 });
       
@@ -597,6 +597,58 @@ async function startServer() {
     }
   });
 
+  app.post("/api/admin/archive-logs", async (req, res) => {
+    try {
+      if (!db) return res.status(500).json({ error: "No DB" });
+
+      // Calculate 48 hours ago
+      const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+      const logsToArchive: any[] = [];
+      
+      // 1. Get old OOS History
+      const oosSnap = await db.collection("oos_history").where("timestamp", "<", fortyEightHoursAgo).get();
+      const oosBatch = db.batch();
+      oosSnap.docs.forEach(doc => {
+        logsToArchive.push({ type: 'oos', id: doc.id, ...doc.data() });
+        oosBatch.delete(doc.ref);
+      });
+
+      // 2. Get old Alerts
+      const alertsSnap = await db.collection("alerts").where("triggeredAt", "<", fortyEightHoursAgo).get();
+      const alertsBatch = db.batch();
+      alertsSnap.docs.forEach(doc => {
+        logsToArchive.push({ type: 'alert', id: doc.id, ...doc.data() });
+        alertsBatch.delete(doc.ref);
+      });
+
+      if (logsToArchive.length === 0) {
+        return res.json({ status: "success", archivedCount: 0, message: "No logs older than 48 hours found." });
+      }
+
+      // 3. Push to Google Sheet V2
+      const V2_FALLBACK = "https://script.google.com/macros/s/AKfycbxGr0rRSmIuutAd80GfkVO4lYZ-ObJ4WY9hr-xfLim1Is_t1gUBKStJ7nb7LoepIEA_IA/exec";
+      const rawUrl = (process.env.V2_GAS_URL || process.env.VITE_V2_GAS_URL || V2_FALLBACK).trim();
+      
+      const syncParams = new URLSearchParams();
+      syncParams.append('action', 'archiveOldLogs');
+      syncParams.append('payload', JSON.stringify(logsToArchive));
+
+      await axios.post(rawUrl, syncParams.toString(), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 60000
+      });
+
+      // 4. Delete from Firestore to save space
+      if (!oosSnap.empty) await oosBatch.commit();
+      if (!alertsSnap.empty) await alertsBatch.commit();
+
+      res.json({ status: "success", archivedCount: logsToArchive.length });
+    } catch (e: any) {
+      console.error("[archive-logs] Error:", e);
+      res.status(500).json({ status: "error", error: e.message });
+    }
+  });
+
   // GAS Proxy Route
     app.all(["/api/proxy-gas", "/proxy-gas"], async (req, res) => {
     const start = Date.now();
@@ -607,7 +659,7 @@ async function startServer() {
       
       // Hierarchy: 1. Specialized V2 env (PRIORITY), 2. query param, 3. general GAS env, 4. Hardcoded fallback
       const V1_FALLBACK = "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec";
-      const V2_FALLBACK = "https://script.google.com/macros/s/AKfycbz6l6gUuVhoXde_zYZNNGchQLnvzZHE8_kkk2RcvQyk55tpitg2N8ZQHVo_DV7FO71Gzw/exec";
+      const V2_FALLBACK = "https://script.google.com/macros/s/AKfycbxGr0rRSmIuutAd80GfkVO4lYZ-ObJ4WY9hr-xfLim1Is_t1gUBKStJ7nb7LoepIEA_IA/exec";
       
       let rawUrl = (typeof req.query.gasUrl === 'string' ? req.query.gasUrl : "").trim();
       
