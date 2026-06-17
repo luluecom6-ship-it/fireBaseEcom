@@ -454,6 +454,7 @@ export const Admin: React.FC<AdminProps> = ({
               <CalendarDays size={16} />
               <span className="hidden sm:inline text-[10px] font-black uppercase tracking-widest px-1">Roster</span>
             </button>
+            {String(user.role || "").toLowerCase().trim() === 'admin' && (
             <button
               onClick={() => navigateTo('usage-stats')}
               className="bg-amber-500 text-white p-2 rounded-xl shadow-lg shadow-amber-200 hover:bg-amber-600 transition-all flex items-center gap-2"
@@ -462,6 +463,7 @@ export const Admin: React.FC<AdminProps> = ({
               <Database size={16} />
               <span className="hidden sm:inline text-[10px] font-black uppercase tracking-widest px-1">Archival</span>
             </button>
+            )}
             {activeTab === 'users' && (
             <button 
               onClick={() => {
