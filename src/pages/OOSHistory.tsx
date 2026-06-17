@@ -14,6 +14,7 @@ interface OOSHistoryProps {
   loading: boolean;
   onRefresh: () => void;
   adminData?: any;
+  showToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 export const OOSHistory: React.FC<OOSHistoryProps> = ({
@@ -23,7 +24,8 @@ export const OOSHistory: React.FC<OOSHistoryProps> = ({
   user,
   loading,
   onRefresh,
-  adminData
+  adminData,
+  showToast
 }) => {
   // Helper to get local date in YYYY-MM-DD format
   const getLocalDateString = (d: Date) => {
@@ -78,12 +80,15 @@ export const OOSHistory: React.FC<OOSHistoryProps> = ({
       }
       
       if (res.ok && data.status === "success") {
-        alert(data.successCount ? `Push sent successfully to ${data.successCount} users.` : "No appropriate devices found.");
+        const msg = data.successCount ? `Push sent successfully to ${data.successCount} users.` : "No appropriate devices found.";
+        showToast ? showToast(msg, data.successCount ? 'success' : 'info') : alert(msg);
       } else {
-        alert("Failed to send push: " + (data.error || "Unknown error"));
+        const errMsg = "Failed to send push: " + (data.error || "Unknown error");
+        showToast ? showToast(errMsg, 'error') : alert(errMsg);
       }
     } catch (e: any) {
-      alert("Error sending push: " + e.message);
+      const errMsg = "Error sending push: " + e.message;
+      showToast ? showToast(errMsg, 'error') : alert(errMsg);
     } finally {
       setPushingId(null);
     }
