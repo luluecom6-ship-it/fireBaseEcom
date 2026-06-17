@@ -144,32 +144,10 @@ export default function App() {
     // Listen for foreground messages
     const unsubscribe = onForegroundMessage((payload: any) => {
       if (payload.notification) {
+        // Show in-app toast only — native OS notifications for background messages
+        // are already handled by sw.js's onBackgroundMessage handler.
+        // Showing both here was causing duplicate alerts.
         showToast(`${payload.notification.title}: ${payload.notification.body}`, "info");
-        
-        // Also show native OS notification if they are in another window/app but tab is open
-        if ("Notification" in window && Notification.permission === "granted") {
-          try {
-            const iconUrl = payload.data?.icon || payload.data?.image || 'https://placehold.co/192x192.png?text=OOS';
-            const imageUrl = payload.data?.image || 'https://placehold.co/192x192.png?text=OOS';
-            if ('serviceWorker' in navigator) {
-              navigator.serviceWorker.ready.then(registration => {
-                registration.showNotification(payload.notification.title || "Matrix Alert", {
-                  body: payload.notification.body,
-                  icon: iconUrl,
-                  image: imageUrl,
-                } as any).catch(e => console.error("SW notification failed", e));
-              });
-            } else {
-              new Notification(payload.notification.title || "Matrix Alert", {
-                body: payload.notification.body,
-                icon: iconUrl,
-                image: imageUrl,
-              } as any);
-            }
-          } catch (e) {
-            console.error("Foreground native notification failed", e);
-          }
-        }
       }
     });
 
@@ -590,6 +568,7 @@ export default function App() {
             navigateTo={navigateTo as any}
             user={user}
             adminData={adminData}
+            showToast={showToast}
           />
         );
       case "matrix-v2":
