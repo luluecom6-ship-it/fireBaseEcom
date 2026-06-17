@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Clock, RefreshCw, Package, Users, UserCheck, TrendingUp, 
   ShieldCheck, AlertTriangle, History, Save, X, AlertCircle, Send,
-  UserPlus, UserMinus, Key, Trash2, Edit3, Settings, LayoutDashboard, CalendarDays, Activity,
+  UserPlus, UserMinus, Key, Trash2, Edit3, Settings, LayoutDashboard, CalendarDays, Activity, Database,
   Search, MapPin, Box
 } from 'lucide-react';
 import axios from 'axios';
@@ -297,6 +297,22 @@ export const Admin: React.FC<AdminProps> = ({
         status: 'pending',
         sender: user.name
       });
+      
+      // Also send FCM native push via backend
+      try {
+        const res = await fetch("/api/admin/broadcast-push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: broadcastMessage, targetRoles: targetRoles })
+        });
+        const data = await res.json();
+        if (data.status === "error") {
+          console.error("Backend push broadcast failed:", data.error);
+        }
+      } catch (e) {
+        console.error("Network error hitting broadcast-push:", e);
+      }
+
       showToast("Broadcast sent successfully!", "success");
       setBroadcastMessage("");
     } catch (error) {
@@ -437,6 +453,14 @@ export const Admin: React.FC<AdminProps> = ({
             >
               <CalendarDays size={16} />
               <span className="hidden sm:inline text-[10px] font-black uppercase tracking-widest px-1">Roster</span>
+            </button>
+            <button
+              onClick={() => navigateTo('usage-stats')}
+              className="bg-amber-500 text-white p-2 rounded-xl shadow-lg shadow-amber-200 hover:bg-amber-600 transition-all flex items-center gap-2"
+              title="System Usage & Archival"
+            >
+              <Database size={16} />
+              <span className="hidden sm:inline text-[10px] font-black uppercase tracking-widest px-1">Archival</span>
             </button>
             {activeTab === 'users' && (
             <button 

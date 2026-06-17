@@ -274,6 +274,13 @@ export async function runMonitorTick(db: any, messaging: any) {
 
     const regions = adminRaw.regions || [];
 
+    const storeToRegion: Record<string, string> = {};
+    regions.forEach((r: any) => {
+      const sId = String(r.storeId || r.StoreID || "").trim();
+      const reg = String(r.region || r.Region || "").trim();
+      if (sId) storeToRegion[sId] = reg;
+    });
+
     const matrixData = {
       quick: processItems(matrixRaw.quick || []),
       schedule: processItems(matrixRaw.schedule || [])
@@ -290,7 +297,9 @@ export async function runMonitorTick(db: any, messaging: any) {
       const now = Date.now();
       
       matrixV2Raw.forEach((order: any) => {
-        const storeID = String(order.store_name || "").match(/^(\d{4})/) ? order.store_name.match(/^(\d{4})/)[1] : String(order.store_name || "").slice(0, 4);
+        const rawStore = String(order.store_name || "");
+        const sMatch = rawStore.match(/\b(\d{4})\b/);
+        const storeID = sMatch ? sMatch[1] : (rawStore.slice(0, 4) || "UNKNOWN");
         const status = (order.partial_status || "CREATED").toUpperCase();
         
         // Age calculation
@@ -355,7 +364,7 @@ export async function runMonitorTick(db: any, messaging: any) {
         
         const orderId = order.job_number || "";
         const rawStoreName = String(order.store_name || "");
-        const storeMatch = rawStoreName.match(/^(\d{4})/);
+        const storeMatch = rawStoreName.match(/\b(\d{4})\b/);
         const storeId = storeMatch ? storeMatch[1] : (rawStoreName.slice(0, 4) || "UNKNOWN");
         
         const slot = `${order.slot_from || ""} - ${order.slot_to || ""}`.trim();
@@ -415,10 +424,7 @@ export async function runMonitorTick(db: any, messaging: any) {
           // Send Push Notification if this is a newly detected OOS and pushes are enabled
           if (oosPushEnabled) {
               // Find store's region if possible
-              const storeRegionObj = regions.find((r: any) => 
-                 Array.isArray(r.stores) && r.stores.includes(storeId)
-              );
-              const storeRegion = storeRegionObj ? storeRegionObj.name : "";
+              const storeRegion = storeToRegion[storeId] || "";
 
               const oosPushRegions = config.oosPushRegions || ['All'];
               const isRegionAllowed = oosPushRegions.includes('All') || (storeRegion && oosPushRegions.some((cr: string) => cr.toLowerCase() === storeRegion.toLowerCase()));
@@ -509,12 +515,6 @@ export async function runMonitorTick(db: any, messaging: any) {
     // Function relocated.
 
     // 6. Detect New Alerts
-    const storeToRegion: Record<string, string> = {};
-    regions.forEach((r: any) => {
-      const sId = String(r.storeId || r.StoreID || "").trim();
-      const reg = String(r.region || r.Region || "").trim();
-      if (sId) storeToRegion[sId] = reg;
-    });
 
     const activeAlertsDetected = detectAlerts(matrixData, escalationRules as any, existingAlertIds, scheduledThreshold, storeToRegion, scheduledConfig);
     console.log(`[Monitor DEBUG] Detection complete. Potential alerts: ${activeAlertsDetected.length}`);
