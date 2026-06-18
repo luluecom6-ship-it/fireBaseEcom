@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { User } from '../types';
 
@@ -234,17 +234,21 @@ export function useRosterDashboard(currentUser: User | null) {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  // ── Real-time Firestore subscription ────────────────────────────────────
+  // ── Fetch from Firestore once on mount (to save read quota)
   useEffect(() => {
     if (!currentUser) {
       setLoading(false);
       return;
     }
 
-    setLoading(true);
-    const unsub = onSnapshot(
-      collection(db, 'users'),
-      snapshot => {
+    let isMounted = true;
+
+    const fetchUsers = async () => {
+      setLoading(true);
+      try {
+        const snapshot = await getDocs(collection(db, 'users'));
+        if (!isMounted) return;
+
         const users: User[] = [];
         const role = String(currentUser.role || '').toLowerCase().trim();
         const userStore = String(currentUser.storeId || '').trim();
@@ -269,12 +273,12 @@ export function useRosterDashboard(currentUser: User | null) {
             weekOffDay: String(d.weekOffDay || '').trim(),
           } as User);
         });
+
         setRawStaff(users);
         setLastUpdated(new Date());
         setLoading(false);
         setError(null);
-      },
-      err => {
+      } catch (err) {
         console.error('[useRosterDashboard] Firestore error:', err);
         setError('Failed to load staff data from Firestore.');
         setLoading(false);
