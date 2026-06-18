@@ -243,8 +243,8 @@ export default function App() {
       }
     };
 
-    // Pulse every minute
-    const interval = setInterval(updatePresence, 60000);
+    // Pulse every 5 minutes (300000ms) to reduce Firebase writes
+    const interval = setInterval(updatePresence, 300000);
     
     // Also pulse on focus/visibility change for better responsiveness
     const handleFocus = () => {
