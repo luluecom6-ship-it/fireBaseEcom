@@ -280,12 +280,18 @@ export function useRosterDashboard(currentUser: User | null) {
         setError(null);
       } catch (err) {
         console.error('[useRosterDashboard] Firestore error:', err);
-        setError('Failed to load staff data from Firestore.');
-        setLoading(false);
+        if (isMounted) {
+          setError('Failed to load staff data from Firestore.');
+          setLoading(false);
+        }
       }
-    );
+    };
 
-    return () => unsub();
+    fetchUsers();
+
+    return () => {
+      isMounted = false;
+    };
   }, [currentUser]);
 
   // ── Derived data ─────────────────────────────────────────────────────────
