@@ -146,6 +146,7 @@ export const Admin: React.FC<AdminProps> = ({
 
   const [fetchedGroups, setFetchedGroups] = useState<{id: string, subject: string}[]>([]);
   const [isFetchingGroups, setIsFetchingGroups] = useState(false);
+  const [isTestingWhatsapp, setIsTestingWhatsapp] = useState(false);
   
   // Form State
   const [userForm, setUserForm] = useState({
@@ -179,6 +180,33 @@ export const Admin: React.FC<AdminProps> = ({
       if (showToast) showToast(e.message || "Failed to fetch WhatsApp groups", "error");
     } finally {
       setIsFetchingGroups(false);
+    }
+  };
+
+  const handleTestWhatsapp = async () => {
+    const number = window.prompt("Enter phone number (e.g., 919876543210) or Group JID to send a test message:");
+    if (!number) return;
+    
+    setIsTestingWhatsapp(true);
+    try {
+      const response = await fetch('/api/admin/whatsapp/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ number })
+      });
+      const data = await response.json();
+      if (data.key && data.key.id) {
+        if (showToast) showToast("Test message sent successfully!", "success");
+      } else if (data.error) {
+        throw new Error(data.error);
+      } else {
+        if (showToast) showToast("Test message sent, but response format unexpected.", "success");
+      }
+    } catch (e: any) {
+      console.error(e);
+      if (showToast) showToast(e.message || "Failed to send test message", "error");
+    } finally {
+      setIsTestingWhatsapp(false);
     }
   };
 
@@ -1457,18 +1485,32 @@ export const Admin: React.FC<AdminProps> = ({
                           <h5 className="text-xs font-black text-slate-800">Region to WhatsApp Group Mapping</h5>
                           <p className="text-[9px] font-bold text-slate-400 mt-0.5">Map specific regions to WhatsApp Group JIDs (e.g. 120363...@g.us)</p>
                         </div>
-                        <button 
-                          onClick={handleFetchGroups}
-                          disabled={isFetchingGroups || !whatsappApiUrl || !whatsappInstanceName || !whatsappApiKey}
-                          className={cn(
-                            "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
-                            (isFetchingGroups || !whatsappApiUrl || !whatsappInstanceName || !whatsappApiKey) 
-                              ? "bg-slate-200 text-slate-400 cursor-not-allowed" 
-                              : "bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200"
-                          )}
-                        >
-                          <DownloadCloud size={12} /> {isFetchingGroups ? "Fetching..." : "Fetch Groups"}
-                        </button>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={handleTestWhatsapp}
+                            disabled={isTestingWhatsapp || !whatsappApiUrl || !whatsappInstanceName || !whatsappApiKey}
+                            className={cn(
+                              "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
+                              (isTestingWhatsapp || !whatsappApiUrl || !whatsappInstanceName || !whatsappApiKey) 
+                                ? "bg-slate-200 text-slate-400 cursor-not-allowed" 
+                                : "bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-200"
+                            )}
+                          >
+                            <Send size={12} /> {isTestingWhatsapp ? "Testing..." : "Test Message"}
+                          </button>
+                          <button 
+                            onClick={handleFetchGroups}
+                            disabled={isFetchingGroups || !whatsappApiUrl || !whatsappInstanceName || !whatsappApiKey}
+                            className={cn(
+                              "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
+                              (isFetchingGroups || !whatsappApiUrl || !whatsappInstanceName || !whatsappApiKey) 
+                                ? "bg-slate-200 text-slate-400 cursor-not-allowed" 
+                                : "bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200"
+                            )}
+                          >
+                            <DownloadCloud size={12} /> {isFetchingGroups ? "Fetching..." : "Fetch Groups"}
+                          </button>
+                        </div>
                       </div>
                       
                       <div className="space-y-3">
@@ -1481,7 +1523,7 @@ export const Admin: React.FC<AdminProps> = ({
                                 newMappings[idx].region = e.target.value;
                                 setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
                               }}
-                              className="w-full sm:w-1/3 bg-slate-50 border border-slate-100 rounded-lg p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
+                              className="w-full sm:w-1/3 shrink-0 bg-slate-50 border border-slate-100 rounded-lg p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
                             >
                               <option value="">Select Region...</option>
                               {availableRegions.map(reg => <option key={reg} value={reg}>{reg}</option>)}
@@ -1495,7 +1537,7 @@ export const Admin: React.FC<AdminProps> = ({
                                   newMappings[idx].groupJid = e.target.value;
                                   setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
                                 }}
-                                className="flex-1 bg-slate-50 border border-slate-100 rounded-lg p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
+                                className="flex-1 min-w-0 overflow-hidden text-ellipsis bg-slate-50 border border-slate-100 rounded-lg p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
                               >
                                 <option value="">Select a fetched WhatsApp group...</option>
                                 {fetchedGroups.map(g => <option key={g.id} value={g.id}>{g.subject} ({g.id})</option>)}
