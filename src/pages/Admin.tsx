@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Clock, RefreshCw, Package, Users, UserCheck, TrendingUp, 
   ShieldCheck, AlertTriangle, History, Save, X, AlertCircle, Send,
-  UserPlus, UserMinus, Key, Trash2, Edit3, Settings, LayoutDashboard, CalendarDays, Activity
+  UserPlus, UserMinus, Key, Trash2, Edit3, Settings, LayoutDashboard, CalendarDays, Activity, Database,
+  Search, MapPin, Box, MessageSquare, Plus, DownloadCloud
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -38,6 +39,18 @@ interface AdminProps {
   setSoundAlertsEnabled: (val: boolean, targetUserId?: string) => void;
   oosPushEnabled?: boolean;
   setOosPushEnabled?: (val: boolean) => void;
+  oosPushRegions?: string[];
+  setOosPushRegions?: (val: string[]) => void;
+  whatsappOosEnabled?: boolean;
+  setWhatsappOosEnabled?: (val: boolean) => void;
+  whatsappApiUrl?: string;
+  setWhatsappApiUrl?: (val: string) => void;
+  whatsappInstanceName?: string;
+  setWhatsappInstanceName?: (val: string) => void;
+  whatsappApiKey?: string;
+  setWhatsappApiKey?: (val: string) => void;
+  whatsappRegionMappings?: {region: string, groupJid: string}[];
+  setWhatsappRegionMappings?: (val: {region: string, groupJid: string}[]) => void;
   staffStatus: any[];
   scheduledThreshold: number;
   setScheduledThreshold: (num: number) => void;
@@ -89,6 +102,18 @@ export const Admin: React.FC<AdminProps> = ({
   setSoundAlertsEnabled,
   oosPushEnabled,
   setOosPushEnabled,
+  oosPushRegions = ['All'],
+  setOosPushRegions,
+  whatsappOosEnabled,
+  setWhatsappOosEnabled,
+  whatsappApiUrl,
+  setWhatsappApiUrl,
+  whatsappInstanceName,
+  setWhatsappInstanceName,
+  whatsappApiKey,
+  setWhatsappApiKey,
+  whatsappRegionMappings,
+  setWhatsappRegionMappings,
   staffStatus
 }) => {
   const getTodayStr = () => {
@@ -115,6 +140,12 @@ export const Admin: React.FC<AdminProps> = ({
   const [isProcessingUser, setIsProcessingUser] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
   const [userToDelete, setUserToDelete] = useState<any>(null);
+  const [userFilterRegion, setUserFilterRegion] = useState("All");
+  const [userFilterStore, setUserFilterStore] = useState("All");
+  const [userSearchQuery, setUserSearchQuery] = useState("");
+
+  const [fetchedGroups, setFetchedGroups] = useState<{id: string, subject: string}[]>([]);
+  const [isFetchingGroups, setIsFetchingGroups] = useState(false);
   
   // Form State
   const [userForm, setUserForm] = useState({
@@ -131,6 +162,25 @@ export const Admin: React.FC<AdminProps> = ({
     status: 'Active',
     profileImage: '',
   });
+
+  const handleFetchGroups = async () => {
+    setIsFetchingGroups(true);
+    try {
+      const response = await fetch('/api/admin/whatsapp/groups');
+      const data = await response.json();
+      if (data.status === 'success' && Array.isArray(data.groups)) {
+        setFetchedGroups(data.groups);
+        if (showToast) showToast(`Fetched ${data.groups.length} WhatsApp groups successfully.`, 'success');
+      } else {
+        throw new Error(data.error || 'Failed to fetch groups');
+      }
+    } catch (e: any) {
+      console.error(e);
+      if (showToast) showToast(e.message || "Failed to fetch WhatsApp groups", "error");
+    } finally {
+      setIsFetchingGroups(false);
+    }
+  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -200,6 +250,65 @@ export const Admin: React.FC<AdminProps> = ({
     return Array.from(regions).filter(Boolean).sort();
   }, [adminData.regions, adminData.users]);
 
+  const userAvailableStores = React.useMemo(() => {
+    const stores = new Set<string>();
+    if (adminData.regions && Array.isArray(adminData.regions)) {
+      adminData.regions.forEach(r => {
+        const sid = String(r.storeId || "").trim();
+        const reg = String(r.region || "").trim();
+        if (sid) {
+          if (userFilterRegion === "All" || reg.toLowerCase() === userFilterRegion.toLowerCase()) {
+            stores.add(sid);
+          }
+        }
+      });
+    }
+    if (adminData.users && Array.isArray(adminData.users)) {
+      adminData.users.forEach(u => {
+        const sid = String(u.storeId || "").trim();
+        const reg = String(u.region || storeToRegion[sid] || "").trim();
+        if (sid) {
+          if (userFilterRegion === "All" || reg.toLowerCase() === userFilterRegion.toLowerCase()) {
+            stores.add(sid);
+          }
+        }
+      });
+    }
+    return Array.from(stores).filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [adminData.regions, adminData.users, userFilterRegion, storeToRegion]);
+
+  const filteredUsers = React.useMemo(() => {
+    if (!adminData.users || !Array.isArray(adminData.users)) return [];
+    return adminData.users.filter((u: any) => {
+      // Search term
+      const query = userSearchQuery.trim().toLowerCase();
+      if (query) {
+        const nameMatch = String(u.name || "").toLowerCase().includes(query);
+        const usernameMatch = String(u.username || "").toLowerCase().includes(query);
+        const empIdMatch = String(u.empId || "").toLowerCase().includes(query);
+        const storeMatchInput = String(u.storeId || "").toLowerCase().includes(query);
+        if (!nameMatch && !usernameMatch && !empIdMatch && !storeMatchInput) return false;
+      }
+      
+      // Region Filter
+      if (userFilterRegion !== "All") {
+        const storeReg = storeToRegion[String(u.storeId || "").trim()] || "";
+        const userReg = String(u.region || "").trim();
+        const hasRegionMatch = (userReg.toLowerCase() === userFilterRegion.toLowerCase()) || 
+                             (storeReg.toLowerCase() === userFilterRegion.toLowerCase());
+        if (!hasRegionMatch) return false;
+      }
+      
+      // Store Filter
+      if (userFilterStore !== "All") {
+        const hasStoreMatch = String(u.storeId || "").trim() === userFilterStore;
+        if (!hasStoreMatch) return false;
+      }
+
+      return true;
+    });
+  }, [adminData.users, userSearchQuery, userFilterRegion, userFilterStore, storeToRegion]);
+
   const hasFetched = React.useRef(false);
 
   // Initial fetch on mount
@@ -230,6 +339,22 @@ export const Admin: React.FC<AdminProps> = ({
         status: 'pending',
         sender: user.name
       });
+      
+      // Also send FCM native push via backend
+      try {
+        const res = await fetch("/api/admin/broadcast-push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: broadcastMessage, targetRoles: targetRoles })
+        });
+        const data = await res.json();
+        if (data.status === "error") {
+          console.error("Backend push broadcast failed:", data.error);
+        }
+      } catch (e) {
+        console.error("Network error hitting broadcast-push:", e);
+      }
+
       showToast("Broadcast sent successfully!", "success");
       setBroadcastMessage("");
     } catch (error) {
@@ -331,8 +456,10 @@ export const Admin: React.FC<AdminProps> = ({
           <div className="flex items-center gap-6 sm:gap-8">
             {[
               { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-              ...(String(user.role || "").toLowerCase().trim() === 'admin' ? [
+              ...((['admin', 'operator'].includes(String(user.role || "").toLowerCase().trim())) ? [
                 { id: 'users', label: 'Users', icon: Users },
+              ] : []),
+              ...(String(user.role || "").toLowerCase().trim() === 'admin' ? [
                 { id: 'settings', label: 'Settings', icon: Settings },
               ] : [])
             ].map(tab => (
@@ -369,6 +496,16 @@ export const Admin: React.FC<AdminProps> = ({
               <CalendarDays size={16} />
               <span className="hidden sm:inline text-[10px] font-black uppercase tracking-widest px-1">Roster</span>
             </button>
+            {String(user.role || "").toLowerCase().trim() === 'admin' && (
+            <button
+              onClick={() => navigateTo('usage-stats')}
+              className="bg-amber-500 text-white p-2 rounded-xl shadow-lg shadow-amber-200 hover:bg-amber-600 transition-all flex items-center gap-2"
+              title="System Usage & Archival"
+            >
+              <Database size={16} />
+              <span className="hidden sm:inline text-[10px] font-black uppercase tracking-widest px-1">Archival</span>
+            </button>
+            )}
             {activeTab === 'users' && (
             <button 
               onClick={() => {
@@ -689,6 +826,54 @@ export const Admin: React.FC<AdminProps> = ({
               </button>
             </div>
 
+            {/* User Search & Region/Store Filters */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Search */}
+              <div className="bg-white px-4 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
+                <Search className="text-blue-600 flex-shrink-0" size={18} />
+                <input
+                  type="text"
+                  placeholder="Search name, username, or ID..."
+                  value={userSearchQuery}
+                  onChange={(e) => setUserSearchQuery(e.target.value)}
+                  className="font-bold text-slate-700 outline-none bg-transparent text-xs sm:text-sm w-full placeholder:text-slate-400"
+                />
+              </div>
+
+              {/* Region Filter */}
+              <div className="bg-white px-4 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
+                <MapPin className="text-pink-600 flex-shrink-0" size={18} />
+                <select
+                  value={userFilterRegion}
+                  onChange={(e) => {
+                    setUserFilterRegion(e.target.value);
+                    setUserFilterStore("All");
+                  }}
+                  className="font-black text-slate-700 outline-none bg-transparent text-xs sm:text-sm cursor-pointer w-full"
+                >
+                  <option value="All">All Regions</option>
+                  {availableRegions.map(reg => (
+                    <option key={reg} value={reg}>{reg}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Store Filter */}
+              <div className="bg-white px-4 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
+                <Box className="text-purple-600 flex-shrink-0" size={18} />
+                <select
+                  value={userFilterStore}
+                  onChange={(e) => setUserFilterStore(e.target.value)}
+                  className="font-black text-slate-700 outline-none bg-transparent text-xs sm:text-sm cursor-pointer w-full"
+                >
+                  <option value="All">All Stores</option>
+                  {userAvailableStores.map(store => (
+                    <option key={store} value={store}>Store {store}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-left min-w-[700px]">
@@ -702,7 +887,7 @@ export const Admin: React.FC<AdminProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {adminData.users.map((u: any) => (
+                    {filteredUsers.map((u: any) => (
                       <tr key={u.empId} className="hover:bg-slate-50/50 transition-all group">
                         <td className="p-4">
                           <div className="flex items-center gap-3">
@@ -742,6 +927,7 @@ export const Admin: React.FC<AdminProps> = ({
                           <span className={cn(
                             "px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest",
                             u.role === 'admin' ? "bg-purple-100 text-purple-600" :
+                            u.role === 'operator' ? "bg-blue-100 text-blue-600" :
                             u.role === 'supervisor' ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-600"
                           )}>
                             {u.role}
@@ -782,6 +968,13 @@ export const Admin: React.FC<AdminProps> = ({
                         </td>
                       </tr>
                     ))}
+                    {filteredUsers.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest text-[10px]">
+                          No users match your criteria
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1130,9 +1323,228 @@ export const Admin: React.FC<AdminProps> = ({
                 </button>
               </div>
             </div>
-          </div>
 
-          {/* Staff Presence Column */}
+            {/* OOS Region Filter Configuration */}
+            {oosPushEnabled && (
+              <div className="p-4 sm:p-6 bg-purple-50/20 border-t border-purple-100/30 flex flex-col gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-purple-800">Target OOS Regions</p>
+                  <p className="text-[9px] font-bold text-slate-400 mt-0.5">Select which regions will trigger automated OOS alerts</p>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  <button
+                    onClick={() => setOosPushRegions && setOosPushRegions(['All'])}
+                    className={cn(
+                      "px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all cursor-pointer",
+                      oosPushRegions.includes('All') 
+                        ? "bg-purple-600 text-white border-purple-600 shadow-sm" 
+                        : "bg-white text-slate-400 border-slate-100 hover:bg-slate-50"
+                    )}
+                  >
+                    All Regions
+                  </button>
+                  {availableRegions.map(reg => (
+                    <button
+                      key={reg}
+                      onClick={() => {
+                        if (setOosPushRegions) {
+                          if (oosPushRegions.includes('All')) {
+                            setOosPushRegions([reg]);
+                          } else if (oosPushRegions.includes(reg)) {
+                            const next = oosPushRegions.filter(r => r !== reg);
+                            setOosPushRegions(next.length === 0 ? ['All'] : next);
+                          } else {
+                            setOosPushRegions([...oosPushRegions, reg]);
+                          }
+                        }
+                      }}
+                      className={cn(
+                        "px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all cursor-pointer",
+                        oosPushRegions.includes(reg) && !oosPushRegions.includes('All')
+                          ? "bg-purple-600 text-white border-purple-600 shadow-sm" 
+                          : "bg-white text-slate-400 border-slate-100 hover:bg-slate-50"
+                      )}
+                    >
+                      {reg}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+            
+            {/* WhatsApp Evolution API Configuration */}
+            {String(user.role || "").toLowerCase().trim() === 'admin' && (
+              <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden mt-6">
+                <div className="p-4 sm:p-6 bg-green-50/50 border-b border-green-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
+                      <MessageSquare size={18} className="text-green-600 sm:hidden" />
+                      <MessageSquare size={20} className="text-green-600 hidden sm:block" />
+                      WhatsApp OOS Integration
+                    </h4>
+                    <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Automated WhatsApp Messaging via Evolution API</p>
+                  </div>
+                  
+                  {/* Master Toggle */}
+                  <div className="flex items-center gap-3 self-start sm:self-auto">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                      {whatsappOosEnabled ? "Enabled" : "Disabled"}
+                    </p>
+                    <button 
+                      onClick={() => setWhatsappOosEnabled && setWhatsappOosEnabled(!whatsappOosEnabled)}
+                      className={cn(
+                        "w-10 h-5 sm:w-12 sm:h-6 rounded-full relative transition-colors duration-300",
+                        whatsappOosEnabled ? "bg-green-500" : "bg-slate-200"
+                      )}
+                    >
+                      <div className={cn(
+                        "absolute top-1 h-3 w-3 sm:h-4 sm:w-4 bg-white rounded-full transition-all shadow-sm",
+                        whatsappOosEnabled ? "right-1" : "left-1"
+                      )}></div>
+                    </button>
+                    <button 
+                      onClick={onSaveConfig}
+                      disabled={isSavingConfig || !isFirebaseAuthenticated}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ml-2",
+                        (isSavingConfig || !isFirebaseAuthenticated) ? "bg-slate-100 text-slate-400" : "bg-green-600 text-white hover:bg-green-700 shadow-md"
+                      )}
+                    >
+                      <Save size={12} /> {isSavingConfig ? "Saving..." : "Save Config"}
+                    </button>
+                  </div>
+                </div>
+
+                {whatsappOosEnabled && (
+                  <div className="p-4 sm:p-6 bg-slate-50 border-b border-slate-100 flex flex-col gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">API Base URL</label>
+                        <input 
+                          type="text" 
+                          value={whatsappApiUrl || ""}
+                          onChange={(e) => setWhatsappApiUrl && setWhatsappApiUrl(e.target.value)}
+                          placeholder="http://68.233.108.125:8080"
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Instance Name</label>
+                        <input 
+                          type="text" 
+                          value={whatsappInstanceName || ""}
+                          onChange={(e) => setWhatsappInstanceName && setWhatsappInstanceName(e.target.value)}
+                          placeholder="EcomJedWhatsapp"
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Global API Key</label>
+                        <input 
+                          type="password" 
+                          value={whatsappApiKey || ""}
+                          onChange={(e) => setWhatsappApiKey && setWhatsappApiKey(e.target.value)}
+                          placeholder="YOUR_API_KEY_HERE"
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-4 border-t border-slate-200">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
+                        <div>
+                          <h5 className="text-xs font-black text-slate-800">Region to WhatsApp Group Mapping</h5>
+                          <p className="text-[9px] font-bold text-slate-400 mt-0.5">Map specific regions to WhatsApp Group JIDs (e.g. 120363...@g.us)</p>
+                        </div>
+                        <button 
+                          onClick={handleFetchGroups}
+                          disabled={isFetchingGroups || !whatsappApiUrl || !whatsappInstanceName || !whatsappApiKey}
+                          className={cn(
+                            "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
+                            (isFetchingGroups || !whatsappApiUrl || !whatsappInstanceName || !whatsappApiKey) 
+                              ? "bg-slate-200 text-slate-400 cursor-not-allowed" 
+                              : "bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200"
+                          )}
+                        >
+                          <DownloadCloud size={12} /> {isFetchingGroups ? "Fetching..." : "Fetch Groups"}
+                        </button>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        {(whatsappRegionMappings || []).map((mapping, idx) => (
+                          <div key={idx} className="flex flex-col sm:flex-row gap-2 sm:items-center bg-white p-2 rounded-xl border border-slate-100">
+                            <select 
+                              value={mapping.region}
+                              onChange={(e) => {
+                                const newMappings = [...(whatsappRegionMappings || [])];
+                                newMappings[idx].region = e.target.value;
+                                setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                              }}
+                              className="w-full sm:w-1/3 bg-slate-50 border border-slate-100 rounded-lg p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
+                            >
+                              <option value="">Select Region...</option>
+                              {availableRegions.map(reg => <option key={reg} value={reg}>{reg}</option>)}
+                            </select>
+                            
+                            {fetchedGroups.length > 0 ? (
+                              <select
+                                value={mapping.groupJid}
+                                onChange={(e) => {
+                                  const newMappings = [...(whatsappRegionMappings || [])];
+                                  newMappings[idx].groupJid = e.target.value;
+                                  setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                                }}
+                                className="flex-1 bg-slate-50 border border-slate-100 rounded-lg p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
+                              >
+                                <option value="">Select a fetched WhatsApp group...</option>
+                                {fetchedGroups.map(g => <option key={g.id} value={g.id}>{g.subject} ({g.id})</option>)}
+                              </select>
+                            ) : (
+                              <input 
+                                type="text"
+                                value={mapping.groupJid}
+                                onChange={(e) => {
+                                  const newMappings = [...(whatsappRegionMappings || [])];
+                                  newMappings[idx].groupJid = e.target.value;
+                                  setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                                }}
+                                placeholder="120363...Group JID"
+                                className="flex-1 bg-slate-50 border border-slate-100 rounded-lg p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
+                              />
+                            )}
+                            
+                            <button 
+                              onClick={() => {
+                                const newMappings = [...(whatsappRegionMappings || [])];
+                                newMappings.splice(idx, 1);
+                                setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                              }}
+                              className="p-2.5 mt-1 sm:mt-0 text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors flex items-center justify-center"
+                              title="Remove mapping"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+                        ))}
+                        
+                        <button 
+                          onClick={() => {
+                            setWhatsappRegionMappings && setWhatsappRegionMappings([...(whatsappRegionMappings || []), {region: '', groupJid: ''}]);
+                          }}
+                          className="mt-2 w-full sm:w-auto px-4 py-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
+                        >
+                          <Plus size={14} /> Add Mapping
+                        </button>
+                      </div>
+                    </div>
+
+                  </div>
+                )}
+              </div>
+            )}
+  
+            {/* Staff Presence Column */}
           <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
             <div className="p-4 sm:p-6 bg-emerald-50/50 border-b border-emerald-100 flex items-center justify-between">
               <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
@@ -1382,6 +1794,7 @@ export const Admin: React.FC<AdminProps> = ({
                       <option value="supervisor">Supervisor</option>
                       <option value="manager">Manager</option>
                       <option value="store">Store Admin</option>
+                      <option value="operator">Operator</option>
                     </select>
                   </div>
                   <div className="space-y-1.5">

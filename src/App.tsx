@@ -49,11 +49,12 @@ import { AttendanceHistory } from "./pages/AttendanceHistory";
 import { RosterDashboard } from "./pages/RosterDashboard";
 import { AttendanceIntelligence } from "./pages/AttendanceDashboard2";
 import { OOSHistory } from "./pages/OOSHistory";
+import { UsageStats } from "./pages/UsageStats";
 import MatrixV2 from "./pages/MatrixV2";
 
 export default function App() {
   // Navigation
-  const [page, setPage] = useState<"login" | "dashboard" | "upload" | "attendance" | "admin" | "search" | "matrix" | "analytics" | "alerts" | "attendance-history" | "roster" | "attendance-v2" | "matrix-v2" | "oos-history">("login");
+  const [page, setPage] = useState<"login" | "dashboard" | "upload" | "attendance" | "admin" | "search" | "matrix" | "analytics" | "alerts" | "attendance-history" | "roster" | "attendance-v2" | "matrix-v2" | "oos-history" | "usage-stats">("login");
   
   // Auth Hook
   const { 
@@ -121,6 +122,12 @@ export default function App() {
     scheduledRunningSlotRegions, setScheduledRunningSlotRegions,
     soundAlertsEnabled, setSoundAlertsEnabled,
     oosPushEnabled, setOosPushEnabled,
+    oosPushRegions, setOosPushRegions,
+    whatsappOosEnabled, setWhatsappOosEnabled,
+    whatsappApiUrl, setWhatsappApiUrl,
+    whatsappInstanceName, setWhatsappInstanceName,
+    whatsappApiKey, setWhatsappApiKey,
+    whatsappRegionMappings, setWhatsappRegionMappings,
     saveSystemConfig, isSavingConfig 
   } = useSystemConfig(user, showToast, isFirebaseAuthenticated);
 
@@ -143,29 +150,10 @@ export default function App() {
     // Listen for foreground messages
     const unsubscribe = onForegroundMessage((payload: any) => {
       if (payload.notification) {
+        // Show in-app toast only — native OS notifications for background messages
+        // are already handled by sw.js's onBackgroundMessage handler.
+        // Showing both here was causing duplicate alerts.
         showToast(`${payload.notification.title}: ${payload.notification.body}`, "info");
-        
-        // Also show native OS notification if they are in another window/app but tab is open
-        if ("Notification" in window && Notification.permission === "granted") {
-          try {
-            const iconUrl = payload.data?.image || 'https://placehold.co/192x192.png?text=OOS';
-            if ('serviceWorker' in navigator) {
-              navigator.serviceWorker.ready.then(registration => {
-                registration.showNotification(payload.notification.title || "Matrix Alert", {
-                  body: payload.notification.body,
-                  icon: iconUrl,
-                } as any).catch(e => console.error("SW notification failed", e));
-              });
-            } else {
-              new Notification(payload.notification.title || "Matrix Alert", {
-                body: payload.notification.body,
-                icon: iconUrl,
-              } as any);
-            }
-          } catch (e) {
-            console.error("Foreground native notification failed", e);
-          }
-        }
       }
     });
 
@@ -224,7 +212,7 @@ export default function App() {
         console.log("[App] App returned to foreground, triggering refresh (with jitter)...");
         fetchMatrixData();
         const role = String(user.role || "").toLowerCase().trim();
-        if (page === "admin" || role === "admin" || role === "supervisor") {
+        if (page === "admin" || role === "admin" || role === "operator" || role === "supervisor") {
           fetchAdminData();
         }
         fetchStatus(user.empId);
@@ -260,8 +248,8 @@ export default function App() {
       }
     };
 
-    // Pulse every minute
-    const interval = setInterval(updatePresence, 60000);
+    // Pulse every 5 minutes (300000ms) to reduce Firebase writes
+    const interval = setInterval(updatePresence, 300000);
     
     // Also pulse on focus/visibility change for better responsiveness
     const handleFocus = () => {
@@ -286,27 +274,27 @@ export default function App() {
   // Navigation Helper
   const navigateTo = useCallback((target: typeof page) => {
     const role = String(user?.role || "").toLowerCase().trim();
-    if (target === "matrix" && role !== "admin") {
-      showToast("Access Denied: Admin Only", "error");
+    if (target === "matrix" && role !== "admin" && role !== "operator") {
+      showToast("Access Denied: Admin or Operator Only", "error");
       return;
     }
-    if (target === "analytics" && role !== "admin") {
-      showToast("Access Denied: Admin Only", "error");
+    if (target === "analytics" && role !== "admin" && role !== "operator") {
+      showToast("Access Denied: Admin or Operator Only", "error");
       return;
     }
-    if (target === "admin" && role !== "admin" && role !== "supervisor") {
-      showToast("Access Denied: Admin or Supervisor Only", "error");
+    if (target === "admin" && role !== "admin" && role !== "operator" && role !== "supervisor") {
+      showToast("Access Denied: Admin, Operator or Supervisor Only", "error");
       return;
     }
-    if (target === "roster" && role !== "admin" && role !== "supervisor" && role !== "manager") {
-      showToast("Access Denied: Admin, Supervisor or Manager only", "error");
+    if (target === "roster" && role !== "admin" && role !== "operator" && role !== "supervisor" && role !== "manager") {
+      showToast("Access Denied: Admin, Operator, Supervisor or Manager only", "error");
       return;
     }
-    if (target === "attendance-v2" && role !== "admin" && role !== "supervisor" && role !== "manager") {
-      showToast("Access Denied: Admin, Supervisor or Manager only", "error");
+    if (target === "attendance-v2" && role !== "admin" && role !== "operator" && role !== "supervisor" && role !== "manager") {
+      showToast("Access Denied: Admin, Operator, Supervisor or Manager only", "error");
       return;
     }
-    if (target === "matrix-v2" && role !== "admin" && role !== "supervisor" && role !== "manager" && role !== "picker" && role !== "store") {
+    if (target === "matrix-v2" && role !== "admin" && role !== "operator" && role !== "supervisor" && role !== "manager" && role !== "picker" && role !== "store") {
       showToast("Access Denied: Restricted access", "error");
       return;
     }
@@ -433,7 +421,7 @@ export default function App() {
           />
         );
       case "matrix":
-        if (user?.role !== 'admin') {
+        if (user?.role !== 'admin' && user?.role !== 'operator') {
           return <Dashboard 
             user={user} 
             onLogout={logout} 
@@ -468,7 +456,7 @@ export default function App() {
           />
         );
       case "analytics":
-        if (user?.role !== 'admin') {
+        if (user?.role !== 'admin' && user?.role !== 'operator') {
           return <Dashboard 
             user={user} 
             onLogout={logout} 
@@ -536,6 +524,18 @@ export default function App() {
             setSoundAlertsEnabled={handleToggleSound}
             oosPushEnabled={oosPushEnabled}
             setOosPushEnabled={setOosPushEnabled}
+            oosPushRegions={oosPushRegions}
+            setOosPushRegions={setOosPushRegions}
+            whatsappOosEnabled={whatsappOosEnabled}
+            setWhatsappOosEnabled={setWhatsappOosEnabled}
+            whatsappApiUrl={whatsappApiUrl}
+            setWhatsappApiUrl={setWhatsappApiUrl}
+            whatsappInstanceName={whatsappInstanceName}
+            setWhatsappInstanceName={setWhatsappInstanceName}
+            whatsappApiKey={whatsappApiKey}
+            setWhatsappApiKey={setWhatsappApiKey}
+            whatsappRegionMappings={whatsappRegionMappings}
+            setWhatsappRegionMappings={setWhatsappRegionMappings}
             staffStatus={staffStatus}
             scheduledThreshold={scheduledThreshold}
             setScheduledThreshold={setScheduledThreshold}
@@ -584,6 +584,14 @@ export default function App() {
             navigateTo={navigateTo as any}
             user={user}
             adminData={adminData}
+            showToast={showToast}
+          />
+        );
+      case "usage-stats":
+        return (
+          <UsageStats 
+            user={user}
+            showToast={showToast}
           />
         );
       case "matrix-v2":
@@ -650,7 +658,8 @@ export default function App() {
             case 'attendance-v2': return 'Workforce Intelligence';
             case 'matrix-v2': return 'Matrix Intelligence V2';
             case 'oos-history': return 'OOS History';
-            default: return page.charAt(0).toUpperCase() + page.slice(1).replace("-", " ");
+            case 'usage-stats': return 'System Usage & Archival';
+            default: return 'Portal';
           }
         })()} 
         showBack={page !== "dashboard" && page !== "login"} 

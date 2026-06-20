@@ -23,7 +23,7 @@ export function useAlertTrigger(
     // Helper for store filtering
     const filterByStore = (item: MatrixItem) => {
       const role = String(user.role || "").toLowerCase().trim();
-      if (role === 'admin' || role === 'supervisor') return true;
+      if (role === 'admin' || role === 'operator' || role === 'supervisor') return true;
       
       const userStoreId = String(user.storeId || "").trim().toLowerCase();
       const itemStoreId = String(item.storeID || "").trim().toLowerCase();

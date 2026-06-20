@@ -80,8 +80,8 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({ order, onC
 
   // Helper for waiting times based on screenshot logic
   const getWaitingDuration = (type: 'picker' | 'driver') => {
-    if (!lifecycle.storingEnd || !lifecycle.goingToOriginStart) return '—';
-    const diff = Math.round((new Date(lifecycle.goingToOriginStart).getTime() - new Date(lifecycle.storingEnd).getTime()) / 60000);
+    if (!lifecycle.storingEnd || !lifecycle.goingToOriginEnd) return '—';
+    const diff = Math.round((new Date(lifecycle.goingToOriginEnd).getTime() - new Date(lifecycle.storingEnd).getTime()) / 60000);
     
     if (type === 'picker') {
       // Picker Waiting: 0 if negative
@@ -242,16 +242,16 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({ order, onC
             <OrderLifecycleBox 
               title="Picker Waiting for Driver" 
               start={lifecycle.storingEnd} 
-              end={lifecycle.goingToOriginStart} 
+              end={lifecycle.goingToOriginEnd} 
               duration={getWaitingDuration('picker')} 
-              sublabel="(goingToOriginStart - storingEnd), displays 0 if negative, NO multiply by -1" 
+              sublabel="(goingToOriginEnd - storingEnd), displays 0 if negative, NO multiply by -1" 
             />
             <OrderLifecycleBox 
               title="Driver Waiting for Order" 
               start={lifecycle.storingEnd} 
-              end={lifecycle.goingToOriginStart} 
+              end={lifecycle.goingToOriginEnd} 
               duration={getWaitingDuration('driver')} 
-              sublabel="(goingToOriginStart - storingEnd), displays 0 if positive, multiply by -1" 
+              sublabel="(goingToOriginEnd - storingEnd), displays 0 if positive, multiply by -1" 
             />
             <OrderLifecycleBox 
               title="Going to Origin" 
@@ -261,11 +261,11 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({ order, onC
               sublabel="Difference of above" 
             />
             <OrderLifecycleBox 
-              title="Collection of Order" 
-              start={lifecycle.transferToDeliveryStart} 
+              title="Dispatch" 
+              start={lifecycle.storingEnd} 
               end={lifecycle.transferToDeliveryEnd} 
-              duration={calculateDuration(lifecycle.transferToDeliveryStart, lifecycle.transferToDeliveryEnd)} 
-              sublabel="difference above" 
+              duration={calculateDuration(lifecycle.storingEnd, lifecycle.transferToDeliveryEnd)} 
+              sublabel="(TRANSFERRING_FROM_STORAGE_TO_DELIVERY actual_end - STORING actual_end)" 
             />
             <OrderLifecycleBox 
               title="Going to Destination" 
@@ -284,11 +284,11 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({ order, onC
               isActive={!!lifecycle.deliveringStart && !lifecycle.deliveringEnd}
             />
             <OrderLifecycleBox 
-              title="DELIVERED" 
-              start={lifecycle.deliveredStart || lifecycle.deliveringEnd} 
-              end={lifecycle.deliveredEnd || lifecycle.deliveringEnd} 
-              duration={calculateDuration(lifecycle.deliveredStart || lifecycle.deliveringStart, lifecycle.deliveredEnd || lifecycle.deliveringEnd)} 
-              sublabel="difference above" 
+              title="Transferring" 
+              start={lifecycle.storingEnd} 
+              end={lifecycle.transferToDeliveryEnd} 
+              duration={calculateDuration(lifecycle.storingEnd, lifecycle.transferToDeliveryEnd)} 
+              sublabel="(TRANSFERRING_FROM_STORAGE_TO_DELIVERY actual_end - STORING actual_end)" 
             />
           </div>
 
@@ -334,9 +334,21 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({ order, onC
                   <div className="person-status-pill">Delivery</div>
                   <div className="person-metrics mt-4">
                     <div className="metric-row">
-                      <span>Driver Start Time:</span>
+                      <span>Driver Reached store:</span>
                       <span className="val font-bold text-white">
-                        {lifecycle.goingToOriginStart ? new Date(lifecycle.goingToOriginStart).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'}
+                        {lifecycle.goingToOriginEnd ? new Date(lifecycle.goingToOriginEnd).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'}
+                      </span>
+                    </div>
+                    <div className="metric-row">
+                      <span>Driver Collected Order:</span>
+                      <span className="val font-bold text-white">
+                        {lifecycle.transferToDeliveryEnd ? new Date(lifecycle.transferToDeliveryEnd).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'}
+                      </span>
+                    </div>
+                    <div className="metric-row">
+                      <span>Driver Reach to Customer:</span>
+                      <span className="val font-bold text-white">
+                        {lifecycle.goingToDestinationEnd ? new Date(lifecycle.goingToDestinationEnd).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'}
                       </span>
                     </div>
                   </div>

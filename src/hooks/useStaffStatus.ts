@@ -24,7 +24,7 @@ export function useStaffStatus(
     }
 
     const role = String(user.role || "").toLowerCase().trim();
-    if (role !== 'admin' && role !== 'supervisor') {
+    if (role !== 'admin' && role !== 'operator' && role !== 'supervisor') {
       setStaffStatus([]);
       setLoading(false);
       return;

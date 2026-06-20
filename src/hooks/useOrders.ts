@@ -180,7 +180,7 @@ export function useOrders(
       console.log(`[Search] Matches found after ID filter: ${filtered.length}`);
       
       // Role-based filtering (Restrict what non-admins can see)
-      if (user.role !== 'admin' && user.role !== 'supervisor') {
+      if (user.role !== 'admin' && user.role !== 'operator' && user.role !== 'supervisor') {
         const userStoreId = String(user.storeId || "").trim().toLowerCase();
         const userNameRaw = String(user.name || "").trim().toLowerCase();
         

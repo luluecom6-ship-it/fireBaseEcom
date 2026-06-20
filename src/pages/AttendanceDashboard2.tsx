@@ -12,7 +12,7 @@ import { parseServerDate } from '../utils/api';
 import { cn } from '../lib/utils';
 import { SmartImage } from '../components/layout/common/SmartImage';
 import { fixImageUrl } from '../utils/formatters';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -190,25 +190,30 @@ export const AttendanceIntelligence: React.FC<AttendanceDashboardProps> = ({
 
   const todayStr = today.toLocaleDateString('en-CA');
 
-  // Subscribe to real-time users from Firestore for the most accurate staff list
+  // Fetch users from Firestore once on mount
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'users'), snapshot => {
-      const list: User[] = [];
-      snapshot.forEach(doc => {
-        const d = doc.data();
-        list.push({
-          ...d,
-          empId: String(d.empId || doc.id).trim(),
-          name: String(d.name || '').trim(),
-          storeId: String(d.storeId || '').trim(),
-          role: String(d.role || 'user').toLowerCase().trim() as User['role'],
-          status: String(d.status || 'active').toLowerCase().trim(),
-          weekOffDay: String(d.weekOffDay || '').trim(),
-        } as User);
-      });
-      setFirestoreUsers(list);
-    });
-    return () => unsub();
+    const fetchUsers = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'users'));
+        const list: User[] = [];
+        snapshot.forEach(doc => {
+          const d = doc.data();
+          list.push({
+            ...d,
+            empId: String(d.empId || doc.id).trim(),
+            name: String(d.name || '').trim(),
+            storeId: String(d.storeId || '').trim(),
+            role: String(d.role || 'user').toLowerCase().trim() as User['role'],
+            status: String(d.status || 'active').toLowerCase().trim(),
+            weekOffDay: String(d.weekOffDay || '').trim(),
+          } as User);
+        });
+        setFirestoreUsers(list);
+      } catch (e) {
+        console.error("Failed to fetch users", e);
+      }
+    };
+    fetchUsers();
   }, []);
 
   // Stores derived from users + regions + attendance

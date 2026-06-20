@@ -17,7 +17,7 @@ export function useAdmin(
 
   const fetchAdminData = useCallback(async (isManual = false) => {
     const role = String(user?.role || "").toLowerCase().trim();
-    if (!user || (role !== 'admin' && role !== 'supervisor' && role !== 'manager' && role !== 'store')) return;
+    if (!user || (role !== 'admin' && role !== 'operator' && role !== 'supervisor' && role !== 'manager' && role !== 'store')) return;
     
     if (!API_URL) {
       console.error("Admin sync failed: API_URL is not configured.");

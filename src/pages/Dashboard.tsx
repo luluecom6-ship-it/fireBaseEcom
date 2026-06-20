@@ -68,6 +68,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     "Notification" in window ? Notification.permission : "default"
   );
   const [isInIframe, setIsInIframe] = useState(false);
+  const [showNotifHelp, setShowNotifHelp] = useState(false);
 
   useEffect(() => {
     setIsInIframe(window.self !== window.top);
@@ -201,9 +202,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
           )}
 
           {notifPermission === "denied" && (
-            <div className="px-2 py-1 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-red-400">
-              <X size={10} /> Alerts Blocked
-            </div>
+            <button 
+              onClick={() => setShowNotifHelp(true)}
+              className="px-2 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-red-400 transition-all cursor-pointer shadow-sm"
+            >
+              <X size={10} /> Alerts Blocked (Fix)
+            </button>
           )}
 
           {isInIframe && notifPermission !== "granted" && (
@@ -581,6 +585,108 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </>
         )}
       </div>
+
+      {/* Notification Help Modal */}
+      {showNotifHelp && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-[2rem] p-6 max-w-sm w-full shadow-2xl relative overflow-hidden"
+          >
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 to-amber-500" />
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center text-red-500">
+                  <AlertCircle size={20} />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800">Alerts Blocked</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Action Required</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowNotifHelp(false)}
+                className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-400 rounded-full hover:bg-slate-100 hover:text-slate-600 transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            
+            <div className="space-y-4 mb-6">
+              <p className="text-sm font-bold text-slate-600 leading-relaxed">
+                You have previously blocked notifications for this app. To receive order alerts, you must re-enable them manually in your browser settings.
+              </p>
+              
+              {(() => {
+                const isPWA = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+                
+                if (isPWA && isIOS) {
+                  return (
+                    <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-6 h-6 shrink-0 rounded-full bg-white shadow-sm flex items-center justify-center text-xs font-black text-slate-500">1</div>
+                        <p className="text-xs font-bold text-slate-600">Open your iPhone's <strong className="text-slate-800">Settings</strong> app.</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-6 h-6 shrink-0 rounded-full bg-white shadow-sm flex items-center justify-center text-xs font-black text-slate-500">2</div>
+                        <p className="text-xs font-bold text-slate-600">Scroll down, find this App, and tap it.</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-6 h-6 shrink-0 rounded-full bg-white shadow-sm flex items-center justify-center text-xs font-black text-slate-500">3</div>
+                        <p className="text-xs font-bold text-slate-600">Tap <strong className="text-slate-800">Notifications</strong> and toggle <strong className="text-emerald-600">Allow</strong>.</p>
+                      </div>
+                    </div>
+                  );
+                }
+                
+                if (isPWA && !isIOS) {
+                  return (
+                    <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-6 h-6 shrink-0 rounded-full bg-white shadow-sm flex items-center justify-center text-xs font-black text-slate-500">1</div>
+                        <p className="text-xs font-bold text-slate-600">Open your device's <strong className="text-slate-800">Settings</strong> app.</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-6 h-6 shrink-0 rounded-full bg-white shadow-sm flex items-center justify-center text-xs font-black text-slate-500">2</div>
+                        <p className="text-xs font-bold text-slate-600">Go to <strong className="text-slate-800">Apps</strong> &gt; <strong className="text-slate-800">This App</strong>.</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-6 h-6 shrink-0 rounded-full bg-white shadow-sm flex items-center justify-center text-xs font-black text-slate-500">3</div>
+                        <p className="text-xs font-bold text-slate-600">Tap <strong className="text-slate-800">Notifications</strong> and select <strong className="text-emerald-600">Allow</strong>.</p>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-6 h-6 shrink-0 rounded-full bg-white shadow-sm flex items-center justify-center text-xs font-black text-slate-500">1</div>
+                      <p className="text-xs font-bold text-slate-600">Click the <strong className="text-slate-800">lock icon 🔒</strong> in your browser's address bar.</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-6 h-6 shrink-0 rounded-full bg-white shadow-sm flex items-center justify-center text-xs font-black text-slate-500">2</div>
+                      <p className="text-xs font-bold text-slate-600">Find <strong className="text-slate-800">Notifications</strong> and change it to <strong className="text-emerald-600">Allow</strong>.</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-6 h-6 shrink-0 rounded-full bg-white shadow-sm flex items-center justify-center text-xs font-black text-slate-500">3</div>
+                      <p className="text-xs font-bold text-slate-600">Refresh this page.</p>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+            
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full py-4 bg-slate-900 text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
+            >
+              <RefreshCw size={14} /> I Have Enabled Them
+            </button>
+          </motion.div>
+        </div>
+      )}
 
       {/* Logout Bottom */}
       <div className="px-8 mt-12">

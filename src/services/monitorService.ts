@@ -1,5 +1,5 @@
-import { detectAlerts } from "../utils/alertLogic";
-import { executeGasRequest } from "./gasService";
+import { detectAlerts } from "../utils/alertLogic.js";
+import { executeGasRequest } from "./gasService.js";
 import axios from "axios";
 
 // Memory caches to prevent continuous reads/writes of identical records
@@ -13,6 +13,39 @@ let isAlertsCacheInitialized = false;
 let cachedConfig: any = {};
 let cachedTokensData: any[] = [];
 let lastConfigTokenFetchTime = 0;
+
+const normalizeStoreId = (id: string | number | null | undefined): string => {
+  if (id === null || id === undefined) return "";
+  const s = String(id).trim().toLowerCase();
+  if (/^0+[1-9]\d*$/.test(s)) {
+    return s.replace(/^0+/, "");
+  }
+  return s;
+};
+
+const normalizeRole = (role: string | null | undefined): string => {
+  return String(role || "").toLowerCase().trim();
+};
+
+const normalizeRegion = (region: string | null | undefined): string => {
+  return String(region || "").toLowerCase().trim();
+};
+
+const isStoreMatch = (uStore: string, tStore: string): boolean => {
+  const userStoreId = normalizeStoreId(uStore);
+  const targetStoreId = normalizeStoreId(tStore);
+  if (userStoreId === 'all' || userStoreId === 'all stores' || userStoreId === 'all_stores' || userStoreId === '') return true;
+  if (targetStoreId === 'all' || targetStoreId === 'all stores' || targetStoreId === 'all_stores' || targetStoreId === '') return true;
+  return userStoreId === targetStoreId;
+};
+
+const isRegionMatch = (uRegion: string, tRegion: string): boolean => {
+  const userRegion = normalizeRegion(uRegion);
+  const targetRegion = normalizeRegion(tRegion);
+  if (userRegion === 'all' || userRegion === 'all regions' || userRegion === 'all_regions' || userRegion === '') return true;
+  if (targetRegion === 'all' || targetRegion === 'all regions' || targetRegion === 'all_regions' || targetRegion === '') return true;
+  return userRegion === targetRegion || userRegion.includes(targetRegion) || targetRegion.includes(userRegion);
+};
 
 export async function runMonitorTick(db: any, messaging: any) {
   try {
@@ -53,31 +86,42 @@ export async function runMonitorTick(db: any, messaging: any) {
     console.log(`[Monitor DEBUG] Config exists: ${!!config.escalationRules}, Rules count: ${escalationRules.length}`);
 
     // Helper for sending notifications with role-based filtering
-    const sendFilteredNotification = async (payload: { title: string, body: string, data: any, image?: string }, alertStoreId: string, alertRegion: string, isEscalation: boolean, isOOS?: boolean) => {
+    const sendFilteredNotification = async (payload: { title: string, body: string, data: any, icon?: string, image?: string }, alertStoreId: string, alertRegion: string, isEscalation: boolean, isOOS?: boolean) => {
       const validDocs = allTokensData.filter((data: any) => {
         if (!data.token) return false;
-        const userRole = String(data.role || "").toLowerCase().trim();
-        const userStoreId = String(data.storeId || "").trim();
-        const userRegion = String(data.region || "").trim();
+        const userRole = normalizeRole(data.role);
+        const userStoreId = normalizeStoreId(data.storeId);
+        const userRegion = normalizeRegion(data.region);
+
+        const targetStoreId = normalizeStoreId(alertStoreId);
+        const targetRegion = normalizeRegion(alertRegion);
 
         if (isOOS) {
           if (userRole === 'admin') return true;
-          if (userRole === 'supervisor') return userRegion && alertRegion && userRegion === alertRegion;
-          if (userRole === 'manager' || userRole === 'store') return userStoreId === alertStoreId;
+          if (userRole === 'supervisor') {
+            return isRegionMatch(data.region, alertRegion);
+          }
+          if (['manager', 'store', 'picker', 'driver', 'staff', 'operator'].includes(userRole)) {
+            return isStoreMatch(data.storeId, alertStoreId);
+          }
           return false;
         }
 
         // Level 2 (Escalation): Manager, Supervisor, Admin
         if (isEscalation) {
           if (userRole === 'admin') return true;
-          if (userRole === 'supervisor') return userRegion && alertRegion && userRegion === alertRegion;
-          if (userRole === 'manager') return userStoreId === alertStoreId;
+          if (userRole === 'supervisor') {
+            return isRegionMatch(data.region, alertRegion);
+          }
+          if (userRole === 'manager') {
+            return isStoreMatch(data.storeId, alertStoreId);
+          }
           return false;
         } 
         
         // Level 1 (Initial): Picker, Store
-        if (['picker', 'store'].includes(userRole)) {
-          return userStoreId === alertStoreId;
+        if (['picker', 'store', 'staff', 'operator'].includes(userRole)) {
+          return isStoreMatch(data.storeId, alertStoreId);
         }
 
         return false;
@@ -85,11 +129,45 @@ export async function runMonitorTick(db: any, messaging: any) {
 
       const tokens = validDocs.map((data: any) => data.token);
       if (tokens.length > 0) {
-        const message = {
-          notification: payload,
-          data: payload.data,
-          tokens: tokens
-        };
+        let message: any;
+        if (isOOS) {
+          message = {
+            notification: {
+              title: payload.title,
+              body: payload.body,
+              image: payload.image || ""
+            },
+            webpush: {
+              notification: {
+                icon: payload.icon || 'https://placehold.co/192x192.png?text=OOS',
+                image: payload.image || 'https://placehold.co/192x192.png?text=OOS'
+              }
+            },
+            data: {
+              orderId: String(payload.data?.orderId || ""),
+              type: String(payload.data?.type || ""),
+              storeId: String(payload.data?.storeId || ""),
+              icon: String(payload.icon || ""),
+              image: String(payload.image || "")
+            },
+            tokens: tokens
+          };
+        } else {
+          message = {
+            notification: {
+              title: payload.title,
+              body: payload.body,
+              image: payload.image || ""
+            },
+            data: {
+              orderId: String(payload.data?.orderId || ""),
+              type: String(payload.data?.type || "alert"),
+              alertId: String(payload.data?.alertId || "")
+            },
+            tokens: tokens
+          };
+        }
+
         const fcmResponse = await messaging.sendEachForMulticast(message);
         console.log(`[Monitor] FCM Sent (${isOOS ? 'OOS' : (isEscalation ? 'ESC' : 'INIT')}): ${fcmResponse.successCount} success, ${fcmResponse.failureCount} failure`);
 
@@ -128,9 +206,21 @@ export async function runMonitorTick(db: any, messaging: any) {
 
     // Using executeGasRequest ensures these requests are queued and cached
     const [matrixRes, adminRes, matrixV2Res] = await Promise.all([
-      executeGasRequest({ method: 'GET', url: `${baseUrl}?action=getMatrixData` }, { skipCache: true, cacheKey: `GET:${baseUrl}:action=getMatrixData` }),
-      executeGasRequest({ method: 'GET', url: `${baseUrl}?action=getAdminData` }, { skipCache: true, cacheKey: `GET:${baseUrl}:action=getAdminData` }),
-      executeGasRequest({ method: 'GET', url: `${v2Url}` }, { skipCache: true, cacheKey: `GET:${v2Url}` })
+      executeGasRequest({ method: 'GET', url: `${baseUrl}?action=getMatrixData` }, { skipCache: true, cacheKey: `GET:${baseUrl}:action=getMatrixData` })
+        .catch((err: any) => {
+          console.error(`[Monitor] matrixRes query failed:`, err.message);
+          return { status: 200, data: { status: "success", data: [] } };
+        }),
+      executeGasRequest({ method: 'GET', url: `${baseUrl}?action=getAdminData` }, { skipCache: true, cacheKey: `GET:${baseUrl}:action=getAdminData` })
+        .catch((err: any) => {
+          console.error(`[Monitor] adminRes query failed:`, err.message);
+          return { status: 200, data: { status: "success", data: { regions: [], users: [], attendance: [], orders: [] } } };
+        }),
+      executeGasRequest({ method: 'GET', url: `${v2Url}${v2Url.includes('?') ? '&' : '?'}action=getMatrixDataV2` }, { skipCache: true, cacheKey: `GET:${v2Url}:action=getMatrixDataV2` })
+        .catch((err: any) => {
+          console.error(`[Monitor] matrixV2Res query failed:`, err.message);
+          return { status: 200, data: { status: "success", data: [] } };
+        })
     ]);
 
     const matrixRaw = matrixRes.data.status === "success" ? matrixRes.data.data : (matrixRes.data.data || matrixRes.data);
@@ -184,6 +274,13 @@ export async function runMonitorTick(db: any, messaging: any) {
 
     const regions = adminRaw.regions || [];
 
+    const storeToRegion: Record<string, string> = {};
+    regions.forEach((r: any) => {
+      const sId = String(r.storeId || r.StoreID || "").trim();
+      const reg = String(r.region || r.Region || "").trim();
+      if (sId) storeToRegion[sId] = reg;
+    });
+
     const matrixData = {
       quick: processItems(matrixRaw.quick || []),
       schedule: processItems(matrixRaw.schedule || [])
@@ -200,7 +297,9 @@ export async function runMonitorTick(db: any, messaging: any) {
       const now = Date.now();
       
       matrixV2Raw.forEach((order: any) => {
-        const storeID = String(order.store_name || "").match(/^(\d{4})/) ? order.store_name.match(/^(\d{4})/)[1] : String(order.store_name || "").slice(0, 4);
+        const rawStore = String(order.store_name || "");
+        const sMatch = rawStore.match(/\b(\d{4})\b/);
+        const storeID = sMatch ? sMatch[1] : (rawStore.slice(0, 4) || "UNKNOWN");
         const status = (order.partial_status || "CREATED").toUpperCase();
         
         // Age calculation
@@ -265,7 +364,7 @@ export async function runMonitorTick(db: any, messaging: any) {
         
         const orderId = order.job_number || "";
         const rawStoreName = String(order.store_name || "");
-        const storeMatch = rawStoreName.match(/^(\d{4})/);
+        const storeMatch = rawStoreName.match(/\b(\d{4})\b/);
         const storeId = storeMatch ? storeMatch[1] : (rawStoreName.slice(0, 4) || "UNKNOWN");
         
         const slot = `${order.slot_from || ""} - ${order.slot_to || ""}`.trim();
@@ -296,6 +395,14 @@ export async function runMonitorTick(db: any, messaging: any) {
           if (processedOOSKeys.has(oosKey)) {
             continue;
           }
+
+          // Double check database to prevent duplicates from overlapping server instances/triggers
+          const oosDocRef = db.collection('oos_history').doc(oosKey);
+          const oosDocSnap = await oosDocRef.get();
+          if (oosDocSnap.exists) {
+            processedOOSKeys.add(oosKey);
+            continue;
+          }
           
           await db.collection('oos_history').doc(oosKey).set({
             orderId,
@@ -317,10 +424,12 @@ export async function runMonitorTick(db: any, messaging: any) {
           // Send Push Notification if this is a newly detected OOS and pushes are enabled
           if (oosPushEnabled) {
               // Find store's region if possible
-              const storeRegionObj = regions.find((r: any) => 
-                 Array.isArray(r.stores) && r.stores.includes(storeId)
-              );
-              const storeRegion = storeRegionObj ? storeRegionObj.name : "";
+              const storeRegion = storeToRegion[storeId] || "";
+
+              const oosPushRegions = config.oosPushRegions || ['All'];
+              const isRegionAllowed = oosPushRegions.includes('All') || (storeRegion && oosPushRegions.some((cr: string) => cr.toLowerCase() === storeRegion.toLowerCase()));
+
+              if (isRegionAllowed) {
 
               const getSmallThumbnailUrl = (url: string) => {
                 if (!url) return "";
@@ -332,12 +441,24 @@ export async function runMonitorTick(db: any, messaging: any) {
                 return str;
               };
 
+              const getLargeImageUrl = (url: string) => {
+                if (!url) return "";
+                const str = String(url);
+                if (str.includes("drive.google.com")) {
+                  const id = str.split("id=")[1] || str.split("/d/")[1]?.split("/")[0];
+                  if (id) return `https://lh3.googleusercontent.com/d/${id}=s1000`;
+                }
+                return str;
+              };
+
               await sendFilteredNotification({
                 title: `⚠️ OUT OF STOCK DETECTED`,
-                body: `Item ${item.item_name} (SKU: ${sku}) marked returning OOS at Store ${storeId}.`,
-                data: { orderId, type: "oos", storeId },
-                ...(item.photo_url ? { image: getSmallThumbnailUrl(item.photo_url) } : {})
+                body: `Item ${item.item_name} (SKU: ${sku}) at Store ${storeId}.`,
+                icon: getSmallThumbnailUrl(item.photo_url),
+                image: getLargeImageUrl(item.photo_url),
+                data: { orderId, type: "oos", storeId }
               }, storeId, storeRegion, false, true);
+              }
             }
           
           // Register in memory so we don't query/write again this session
@@ -394,12 +515,6 @@ export async function runMonitorTick(db: any, messaging: any) {
     // Function relocated.
 
     // 6. Detect New Alerts
-    const storeToRegion: Record<string, string> = {};
-    regions.forEach((r: any) => {
-      const sId = String(r.storeId || r.StoreID || "").trim();
-      const reg = String(r.region || r.Region || "").trim();
-      if (sId) storeToRegion[sId] = reg;
-    });
 
     const activeAlertsDetected = detectAlerts(matrixData, escalationRules as any, existingAlertIds, scheduledThreshold, storeToRegion, scheduledConfig);
     console.log(`[Monitor DEBUG] Detection complete. Potential alerts: ${activeAlertsDetected.length}`);

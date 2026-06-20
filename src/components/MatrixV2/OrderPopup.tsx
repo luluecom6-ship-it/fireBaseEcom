@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { Order, STATUS_LABELS, getTotalItems, getPickedItems, getSkuCount, getPickedSkuCount, getOrderDistance, getPickerInfo, getDriverInfo, getStatusColor, getOrderAgeMinutes, getAgeBucket, getOrderLifecycle, getTimeDiffMinutes, formatDuration, getRemovedItemsCount, getCustomerCancelledCount } from '../../typesV2';
 
 export interface PopupOrder {
@@ -40,6 +40,63 @@ const OrderPopup: React.FC<OrderPopupProps> = ({ orders, allOrders, position, he
   const [selectedOrder, setSelectedOrder] = useState<OrderDetail | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const popupRef = useRef<HTMLDivElement>(null);
+
+  const [coords, setCoords] = useState<{
+    x: number;
+    y: number;
+    transform: string;
+    visibility: 'visible' | 'hidden';
+    isFlipped: boolean;
+  }>({
+    x: position.x,
+    y: position.y,
+    transform: 'translate(-50%, -105%)',
+    visibility: 'hidden',
+    isFlipped: false
+  });
+
+  // useLayoutEffect runs synchronously before browser paint, so updating coords here is flash-free.
+
+  useLayoutEffect(() => {
+    if (showDetailModal || !popupRef.current) return;
+
+    const rect = popupRef.current.getBoundingClientRect();
+    const width = rect.width || 300;
+    const height = rect.height || 220;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    let targetX = position.x;
+    let targetY = position.y;
+    let transform = 'translate(-50%, -105%)';
+    let isFlipped = false;
+
+    // Define boundaries
+    let leftBoundary = targetX - (width / 2);
+    let rightBoundary = targetX + (width / 2);
+    let topBoundary = targetY - (height * 1.05);
+
+    // Adjust horizontal position if overflowing viewport edges
+    if (leftBoundary < 12) {
+      targetX = 12 + (width / 2);
+    } else if (rightBoundary > viewportWidth - 12) {
+      targetX = viewportWidth - 12 - (width / 2);
+    }
+
+    // Adjust vertical position: if it goes off the top edge, display it BELOW the cell instead
+    if (topBoundary < 12) {
+      transform = 'translate(-50%, 20px)';
+      isFlipped = true;
+    }
+
+    setCoords({
+      x: targetX,
+      y: targetY,
+      transform,
+      visibility: 'visible',
+      isFlipped
+    });
+  }, [position.x, position.y, orders.length, showDetailModal]);
 
   // Close on click outside (only when detail modal is NOT open)
   useEffect(() => {
@@ -145,14 +202,18 @@ const OrderPopup: React.FC<OrderPopupProps> = ({ orders, allOrders, position, he
   const renderCellPopup = () => {
     if (showDetailModal) return null;
 
+    const arrowOffset = position.x - coords.x;
+    const arrowLeftStyle = `calc(50% + ${Math.min(130, Math.max(-130, arrowOffset))}px)`;
+
     return (
       <div
         ref={popupRef}
         className="matrix-tooltip"
         style={{
-          left: position.x,
-          top: position.y,
-          transform: 'translate(-50%, -105%)' // Position above the cell
+          left: coords.x,
+          top: coords.y,
+          transform: coords.transform,
+          visibility: coords.visibility
         }}
       >
         <div className="tooltip-header-matrix">
@@ -171,30 +232,40 @@ const OrderPopup: React.FC<OrderPopupProps> = ({ orders, allOrders, position, he
         </div>
 
         <div className="tooltip-content-matrix">
-          {orders.map((order, idx) => (
-            <div key={idx} className="tooltip-order-row">
-              <div className="tooltip-order-header">
-                <span className="tooltip-job">{order.jobNumber}</span>
-                <span className="tooltip-store-pill">{order.storeCode}</span>
-              </div>
-              
-              <div className="tooltip-order-stats">
-                 <span className="stat-label">SKUs: <span className="stat-value">{order.skuPicked}/{order.skuTotal}</span></span>
-                 <span className="stat-label">Items: <span className="stat-value">{order.itemsPicked}/{order.itemsTotal}</span></span>
-              </div>
+          {orders.map((order, idx) => {
+            const fullOrder = getFullOrder(order.jobNumber);
+            const distance = fullOrder ? getOrderDistance(fullOrder) : null;
+            return (
+              <div key={idx} className="tooltip-order-row">
+                <div className="tooltip-order-header">
+                  <span className="tooltip-job">{order.jobNumber}</span>
+                  <span className="tooltip-store-pill">{order.storeCode}</span>
+                </div>
+                
+                <div className="tooltip-order-stats">
+                   <span className="stat-label">SKUs: <span className="stat-value">{order.skuPicked}/{order.skuTotal}</span></span>
+                   <span className="stat-label">Items: <span className="stat-value">{order.itemsPicked}/{order.itemsTotal}</span></span>
+                   {distance !== null && (
+                     <span className="stat-label">KM: <span className="stat-value">{distance.toFixed(1)} km</span></span>
+                   )}
+                </div>
 
-              {getFullOrder(order.jobNumber) && (
-                <button
-                  className="popup-details-btn-v2"
-                  onClick={() => getFullOrder(order.jobNumber) && handleDetails(getFullOrder(order.jobNumber)!)}
-                >
-                  View Details
-                </button>
-              )}
-            </div>
-          ))}
+                {fullOrder && (
+                  <button
+                    className="popup-details-btn-v2"
+                    onClick={() => handleDetails(fullOrder)}
+                  >
+                    View Details
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
-        <div className="tooltip-arrow"></div>
+        <div 
+          className={`tooltip-arrow ${coords.isFlipped ? 'arrow-flipped' : ''}`}
+          style={{ left: arrowLeftStyle }}
+        ></div>
       </div>
     );
   };

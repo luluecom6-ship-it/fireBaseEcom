@@ -1240,6 +1240,15 @@
   border-bottom: 1px solid rgba(255,255,255,0.15);
 }
 
+.matrix-v2-scope .tooltip-arrow.arrow-flipped {
+  bottom: auto;
+  top: -6px;
+  border-right: none;
+  border-bottom: none;
+  border-left: 1px solid rgba(255,255,255,0.15);
+  border-top: 1px solid rgba(255,255,255,0.15);
+}
+
 /* Order Details Modal V2 */
 .matrix-v2-scope .order-detail-overlay-v2 {
   position: fixed;

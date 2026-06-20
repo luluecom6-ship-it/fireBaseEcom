@@ -14,7 +14,7 @@ export function useStaffDashboard(user: User | null, isEnabled: boolean) {
   const fetchDashboard = useCallback(async () => {
     if (!user || !isEnabled) return;
     const role = String(user.role || '').toLowerCase();
-    const isPrivileged = ['admin', 'supervisor', 'manager', 'store'].includes(role);
+    const isPrivileged = ['admin', 'operator', 'supervisor', 'manager', 'store'].includes(role);
     if (!isPrivileged) return;
 
     setLoading(true);

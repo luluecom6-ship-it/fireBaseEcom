@@ -453,6 +453,14 @@ export const getOrderLifecycle = (order: Order): OrderLifecycle => {
           }
           break;
         case 'TRANSFERRING_FROM_STORAGE_TO_DELIVERY':
+          if (task.task_type === 'DELIVERY_WITH_STORAGE') {
+            if (!lifecycle.transferToDeliveryStart && step.actual_start) {
+              lifecycle.transferToDeliveryStart = step.actual_start;
+            }
+            if (step.actual_end) {
+              lifecycle.transferToDeliveryEnd = step.actual_end;
+            }
+          }
           // For EXPRESS orders: capture this step's actual_start for fallback
           if (order.source === 'EXPRESS' && step.actual_start) {
             transferringStepStart = step.actual_start;
