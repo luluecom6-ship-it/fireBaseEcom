@@ -145,9 +145,6 @@ async function executeGasRequest(config: any, options: { skipCache?: boolean, ca
 const FIRESTORE_DB_ID = process.env.FIREBASE_DATABASE_ID || 'ai-studio-589cf723-ab60-4b6f-a2cd-f84f8c8c1b48';
 
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 // Global Error Handlers to prevent process crashes
 process.on('unhandledRejection', (reason, promise) => {
   console.error('[Server] Unhandled Rejection:', reason);
@@ -406,8 +403,45 @@ async function startServer() {
   });
 
   // --- WhatsApp Evolution API Proxy ---
+  app.post("/api/admin/whatsapp/test", async (req, res) => {
+    try {
+      if (!db) return res.status(500).json({ error: "Missing Firebase features" });
+      const { number } = req.body;
+      if (!number) return res.status(400).json({ error: "Phone number or Group JID is required" });
+
+      const sysConfigSnap = await db.collection("system").doc("config").get();
+      const sysData = sysConfigSnap.data() || {};
+      
+      if (!sysData.whatsappApiUrl || !sysData.whatsappInstanceName || !sysData.whatsappApiKey) {
+        return res.status(400).json({ error: "WhatsApp integration is not fully configured" });
+      }
+
+      const url = `${sysData.whatsappApiUrl.replace(/\/$/, '')}/message/sendText/${sysData.whatsappInstanceName}`;
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': sysData.whatsappApiKey
+        },
+        body: JSON.stringify({
+          number: number,
+          options: { delay: 0, presence: "composing", linkPreview: false },
+          textMessage: { text: "Hello! This is a test message from your Firebase E-commerce Admin panel. If you are seeing this, your Evolution API connection is working perfectly! 🚀" }
+        })
+      });
+
+      const data = await response.json();
+      res.json(data);
+    } catch (error: any) {
+      console.error("[WhatsApp Test Error]", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get("/api/admin/whatsapp/groups", async (req, res) => {
     try {
+      if (!db) return res.status(500).json({ error: "Missing Firebase features" });
       const sysConfigSnap = await db.collection("system").doc("config").get();
       if (!sysConfigSnap.exists) {
         return res.status(404).json({ error: "System config not found" });

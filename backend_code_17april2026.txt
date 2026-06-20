@@ -1,0 +1,308 @@
+/**
+ * Google Apps Script Backend for Jee E-Commerce (Version 4.1)
+ * File: backend_code_17april2026.txt
+ * Fix: BUG-01 (ReferenceError in loginUser due to Temporal Dead Zone)
+ */
+
+function doGet(e) {
+  return handleRequest(e);
+}
+
+function doPost(e) {
+  return handleRequest(e);
+}
+
+function handleRequest(e) {
+  const action = e.parameter.action;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  if (action === "login") {
+    return loginUser(ss, e.parameter);
+  }
+  
+  if (action === "getTodayAttendance") {
+    return getTodayAttendance(ss, e.parameter);
+  }
+  
+  if (action === "getRecentOrders") {
+    return getRecentOrders(ss, e.parameter);
+  }
+  
+  if (action === "logalertv2") {
+    return logAlertV2(ss, e.parameter);
+  }
+  
+  if (action === "attendance") {
+    return markAttendance(ss, e.parameter);
+  }
+  
+  if (action === "submitOrder") {
+    return uploadOrder(ss, e.parameter);
+  }
+  
+  return jsonResponse({ status: "error", message: "Unknown action" });
+}
+
+function markAttendance(ss, params) {
+  try {
+    const sheet = ss.getSheetByName("Attendance");
+    if (!sheet) return jsonResponse({ status: "error", message: "Attendance sheet missing" });
+
+    const empId = params.empId;
+    const name = params.name;
+    const storeId = params.storeId;
+    const type = params.type; // In / Out
+    const base64Image = params.image;
+
+    if (!empId || !type) return jsonResponse({ status: "error", message: "Missing empId or type" });
+
+    let imageUrl = "";
+    if (base64Image) {
+      // Create folder if missing or use a hardcoded ID
+      const folderId = "1zX4Fv_m_X_X_X_X_X_X_X_X_X_X_X_X"; // Placeholder
+      imageUrl = uploadImageToDrive(base64Image, `${empId}_${type}_${Date.now()}.jpg`, folderId);
+    }
+
+    sheet.appendRow([
+      empId,
+      name,
+      storeId,
+      type,
+      new Date().toISOString(),
+      imageUrl
+    ]);
+
+    return jsonResponse({ status: "success", message: "Attendance recorded", imageUrl });
+  } catch (err) {
+    return jsonResponse({ status: "error", message: "Attendance failed: " + err.message });
+  }
+}
+
+function uploadOrder(ss, params) {
+  try {
+    const sheet = ss.getSheetByName("DailyOrders");
+    if (!sheet) return jsonResponse({ status: "error", message: "DailyOrders sheet missing" });
+
+    const orderId = params.orderId;
+    const storeId = params.storeId;
+    const pickerName = params.pickerName;
+    const uploadedBy = params.uploadedBy;
+    const base64Image = params.image;
+
+    if (!orderId || !storeId) return jsonResponse({ status: "error", message: "Missing orderId or storeId" });
+
+    let imageUrl = "";
+    if (base64Image) {
+      const folderId = "1zX4Fv_m_X_X_X_X_X_X_X_X_X_X_X_X"; // Placeholder
+      imageUrl = uploadImageToDrive(base64Image, `${orderId}_${Date.now()}.jpg`, folderId);
+    }
+
+    sheet.appendRow([
+      orderId,
+      storeId,
+      pickerName,
+      uploadedBy,
+      new Date().toISOString(),
+      imageUrl
+    ]);
+
+    return jsonResponse({ status: "success", message: "Order uploaded", imageUrl });
+  } catch (err) {
+    return jsonResponse({ status: "error", message: "Order upload failed: " + err.message });
+  }
+}
+
+function uploadImageToDrive(base64Data, fileName, folderId) {
+  if (!base64Data || !base64Data.includes(',')) throw new Error("Invalid image data");
+  const bytes = Utilities.base64Decode(base64Data.split(',')[1]);
+  const blob  = Utilities.newBlob(bytes, "image/jpeg", fileName);
+  
+  // Attempt to save to folder, fallback to root if ID is invalid
+  try {
+    const folder = DriveApp.getFolderById(folderId);
+    const file = folder.createFile(blob);
+    return "https://lh3.googleusercontent.com/d/" + file.getId();
+  } catch (e) {
+    const file = DriveApp.createFile(blob);
+    return "https://lh3.googleusercontent.com/d/" + file.getId();
+  }
+}
+
+function logAlertV2(ss, params) {
+  const sheet = ss.getSheetByName("AlertLogs");
+  if (!sheet) return jsonResponse({ status: "error", message: "AlertLogs sheet missing" });
+
+  const orderId = (params.orderId || "").toString().trim();
+  const statusTrigger = (params.statusTrigger || "").toString().trim();
+  const eventType = (params.eventType || "trigger").toString().trim();
+
+  if (!orderId || !statusTrigger) {
+    return jsonResponse({ status: "error", message: "Missing orderId or statusTrigger" });
+  }
+
+  const timestamp = params.timestamp || new Date().toISOString();
+  // ... rest of params ...
+  const storeId = params.storeId || "";
+  const userId = params.userId || "";
+  const bucket = params.bucket || "";
+  const notificationTime = params.notificationTime || "";
+  const storeStaffName = params.storeStaffName || "";
+  const status = params.status || "Pending";
+  const escalation = params.escalation || "FALSE";
+  const managerName = params.managerName || "";
+  const managerStatus = params.managerStatus || "Pending";
+  const orderCreatedAt = params.orderCreatedAt || "";
+
+  // Performance Optimization: Search only recent rows (last 500) for deduplication
+  const lastRow = sheet.getLastRow();
+  const searchDepth = 500;
+  const startRow = Math.max(2, lastRow - searchDepth);
+  const rowCount = lastRow - startRow + 1;
+  
+  let foundRow = -1;
+  if (rowCount > 0) {
+    const data = sheet.getRange(startRow, 1, rowCount, 14).getValues();
+    for (let i = 0; i < data.length; i++) {
+       // Index 1 is orderId, Index 13 is statusTrigger
+       if (String(data[i][1]) === orderId && String(data[i][13]) === statusTrigger) {
+         foundRow = startRow + i;
+         break;
+       }
+    }
+  }
+
+  const rowData = [
+    timestamp, orderId, eventType, storeId, userId, bucket, notificationTime,
+    storeStaffName, status, escalation, managerName, managerStatus,
+    orderCreatedAt, statusTrigger
+  ];
+
+  if (foundRow !== -1) {
+    sheet.getRange(foundRow, 1, 1, rowData.length).setValues([rowData]);
+    return jsonResponse({ status: "success", message: "Alert updated", row: foundRow });
+  } else {
+    sheet.appendRow(rowData);
+    return jsonResponse({ status: "success", message: "Alert logged" });
+  }
+}
+
+function getTodayAttendance(ss, params) {
+  const sheet = ss.getSheetByName("Attendance");
+  if (!sheet) return jsonResponse({ status: "error", message: "Attendance sheet missing" });
+  
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return jsonResponse({ status: "success", data: [] });
+
+  // Optimization: Read only last 1000 rows by default or use limit param
+  const limit = parseInt(params.limit || "1000");
+  const startRow = Math.max(2, lastRow - limit + 1);
+  const rowCount = lastRow - startRow + 1;
+  
+  const data = sheet.getRange(startRow, 1, rowCount, 6).getValues();
+
+  const tz = Session.getScriptTimeZone();
+  const today = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd");
+  const filterEmpId = (params.empId || "").toString().trim();
+
+  const result = data
+    .filter(r => {
+      try {
+        const rowDate = Utilities.formatDate(new Date(r[4]), tz, "yyyy-MM-dd");
+        const dateMatch = rowDate === today;
+        const idMatch = !filterEmpId || String(r[0]).trim() === filterEmpId;
+        return dateMatch && idMatch;
+      } catch (e) {
+        return false;
+      }
+    })
+    .map(r => ({ 
+      empId: r[0], 
+      name: r[1], 
+      storeId: r[2], 
+      type: r[3], 
+      timestamp: r[4], 
+      imageUrl: r[5] 
+    }));
+
+  return jsonResponse({ status: "success", data: result, count: result.length, scanned: rowCount });
+}
+
+function getRecentOrders(ss, params) {
+  const sheet = ss.getSheetByName("DailyOrders");
+  if (!sheet) return jsonResponse({ status: "error", message: "DailyOrders sheet missing" });
+
+  const lastRow = sheet.getLastRow();
+  const limit = parseInt(params.limit || "500");
+  const startRow = Math.max(2, lastRow - limit + 1);
+  const rowCount = lastRow - startRow + 1;
+
+  if (rowCount <= 0) return jsonResponse({ status: "success", data: [] });
+
+  const data = sheet.getRange(startRow, 1, rowCount, 6).getValues();
+  const result = data.map(r => ({
+    orderId: r[0],
+    storeId: r[1],
+    pickerName: r[2],
+    uploadedBy: r[3],
+    timestamp: r[4],
+    imageUrl: r[5]
+  })).reverse(); // Most recent first
+
+  return jsonResponse({ status: "success", data: result });
+}
+
+function loginUser(ss, params) {
+  const sheet = ss.getSheetByName("Users");
+  if (!sheet) return jsonResponse({ status: "error", message: "Users sheet missing" });
+
+  const data    = sheet.getDataRange().getValues();
+  if (data.length < 2) return jsonResponse({ status: "error", message: "No user data found" });
+  
+  const headers = data[0].map(h => String(h).toLowerCase().trim());
+
+  // Declare ALL indices first to avoid BUG-01 ReferenceError
+  const userIdx   = headers.indexOf("username");
+  const passIdx   = headers.indexOf("password");
+  const statusIdx = headers.indexOf("status");
+  const roleIdx   = headers.indexOf("role");
+  const storeIdx  = headers.indexOf("storeid");
+  const nameIdx   = headers.indexOf("name");
+  const empIdx    = headers.indexOf("empid");
+  const regionIdx = headers.indexOf("region");
+
+  // Now safe to guard
+  if (userIdx === -1 || passIdx === -1 || statusIdx === -1) {
+    return jsonResponse({ status: "error", message: "Invalid sheet structure: Missing required columns (username, password, status)" });
+  }
+
+  const username = params.username;
+  const password = params.password;
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (String(row[userIdx]) === username && String(row[passIdx]) === password) {
+      if (String(row[statusIdx]).toLowerCase() !== "active") {
+        return jsonResponse({ status: "error", message: "Account is inactive" });
+      }
+
+      return jsonResponse({
+        status: "success",
+        user: {
+          username: row[userIdx],
+          role: row[roleIdx] || "user",
+          storeId: row[storeIdx] || "",
+          name: row[nameIdx] || username,
+          empId: row[empIdx] || "",
+          region: row[regionIdx] || ""
+        }
+      });
+    }
+  }
+
+  return jsonResponse({ status: "error", message: "Invalid username or password" });
+}
+
+function jsonResponse(data) {
+  return ContentService.createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
