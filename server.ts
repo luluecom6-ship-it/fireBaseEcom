@@ -448,7 +448,10 @@ async function startServer() {
           
           if (sysData.whatsappOosEnabled && sysData.whatsappApiUrl && sysData.whatsappInstanceName && sysData.whatsappApiKey) {
             const mappings = sysData.whatsappRegionMappings || [];
-            const mapping = mappings.find((m: any) => String(m.region).trim().toLowerCase() === String(alertRegion).trim().toLowerCase());
+            let mapping = mappings.find((m: any) => String(m.region).trim().toLowerCase() === String(alertRegion).trim().toLowerCase());
+            if (!mapping) {
+              mapping = mappings.find((m: any) => ["global", "all", ""].includes(String(m.region).trim().toLowerCase()));
+            }
             
             if (mapping && mapping.groupJid) {
               const waMessage = `*Out of Stock Alert!*\nStore: ${item.storeId}\nOrder No: ${item.orderId || 'N/A'}\nSKU: ${item.sku}\nItem Name: ${item.itemName}\nQty: 0`;
@@ -470,13 +473,13 @@ async function startServer() {
                   number: mapping.groupJid,
                   options: {
                     delay: 0,
-                    presence: "composing"
+                    presence: "composing",
+                    linkPreview: false
                   },
-                  mediaMessage: {
-                    mediatype: "image",
-                    caption: waMessage,
-                    media: payload.image
-                  }
+                  mediatype: "image",
+                  mimetype: "image/jpeg",
+                  caption: waMessage,
+                  media: payload.image
                 };
               }
               
