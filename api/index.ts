@@ -427,7 +427,7 @@ async function startServer() {
         body: JSON.stringify({
           number: number,
           options: { delay: 0, presence: "composing", linkPreview: false },
-          textMessage: { text: "Hello! This is a test message from your Firebase E-commerce Admin panel. If you are seeing this, your Evolution API connection is working perfectly! 🚀" }
+          text: "Hello! This is a test message from your Firebase E-commerce Admin panel. If you are seeing this, your Evolution API connection is working perfectly! 🚀"
         })
       });
 
@@ -594,9 +594,7 @@ async function startServer() {
                     presence: "composing",
                     linkPreview: false
                   },
-                  textMessage: {
-                    text: waMessage
-                  }
+                  text: waMessage
                 };
 
                 if (payload.image) {
