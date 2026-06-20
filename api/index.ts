@@ -9,6 +9,7 @@ import cors from "cors";
 import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import fs from "fs";
+import { runMonitorTick } from "../src/services/monitorService.js";
 
 // Optimized Cache for GAS Proxy (Inlined for standalone serverless function deployment)
 const gasCache = new Map<string, { data: any, headers: any, status: number, expiry: number }>();
@@ -216,6 +217,38 @@ async function startServer() {
   const db = admin.apps.length ? getFirestore(admin.app(), FIRESTORE_DB_ID) : null;
   const messaging = admin.apps.length ? admin.messaging() : null;
 
+  const normalizeStoreId = (id: string | number | null | undefined): string => {
+    if (id === null || id === undefined) return "";
+    const s = String(id).trim().toLowerCase();
+    if (/^0+[1-9]\d*$/.test(s)) {
+      return s.replace(/^0+/, "");
+    }
+    return s;
+  };
+
+  const normalizeRole = (role: string | null | undefined): string => {
+    return String(role || "").toLowerCase().trim();
+  };
+
+  const normalizeRegion = (region: string | null | undefined): string => {
+    return String(region || "").toLowerCase().trim();
+  };
+
+  const isStoreMatch = (uStore: string, tStore: string): boolean => {
+    const userStoreId = normalizeStoreId(uStore);
+    const targetStoreId = normalizeStoreId(tStore);
+    if (userStoreId === 'all' || userStoreId === 'all stores' || userStoreId === 'all_stores' || userStoreId === '') return true;
+    if (targetStoreId === 'all' || targetStoreId === 'all stores' || targetStoreId === 'all_stores' || targetStoreId === '') return true;
+    return userStoreId === targetStoreId;
+  };
+
+  const isRegionMatch = (uRegion: string, tRegion: string): boolean => {
+    const userRegion = normalizeRegion(uRegion);
+    const targetRegion = normalizeRegion(tRegion);
+    if (userRegion === 'all' || userRegion === 'all regions' || userRegion === 'all_regions' || userRegion === '') return true;
+    if (targetRegion === 'all' || targetRegion === 'all regions' || targetRegion === 'all_regions' || targetRegion === '') return true;
+    return userRegion === targetRegion || userRegion.includes(targetRegion) || targetRegion.includes(userRegion);
+  };
 
   const app = express();
   const PORT = 3000;
@@ -247,18 +280,49 @@ async function startServer() {
     }
   });
 
+  app.get("/api/oos-trigger", async (req, res) => {
+    try {
+      if (!db || !messaging) return res.status(500).json({ error: "Missing Firebase features" });
+      await runMonitorTick(db, messaging);
+      res.json({ status: "Tick completed" });
+    } catch(e: any) {
+      console.error(e);
+      res.status(500).json({ error: e.stack || e.message });
+    }
+  });
+
+  app.get("/api/monitor", async (req, res) => {
+    try {
+      if (!db || !messaging) return res.status(500).json({ status: "error", message: "Firebase features missing" });
+      const monKey = req.headers["x-monitor-key"] || req.query.key;
+      console.log(`[Monitor Trigger] Hitting monitor manually from Vercel/GAS. Key: ${!!monKey}`);
+      await runMonitorTick(db, messaging);
+      res.json({ status: "success", message: "Monitor tick completed successfully" });
+    } catch (e: any) {
+      console.error("[api/monitor] Error:", e);
+      res.status(500).json({ status: "error", message: e.message });
+    }
+  });
+
   app.post("/api/admin/test-oos-push", async (req, res) => {
     try {
       if (!db || !messaging) return res.status(500).json({ error: "Missing Firebase features" });
-      const tokensSnap = await db.collection('fcm_tokens').where('role', 'in', ['admin', 'supervisor']).get();
+      const tokensSnap = await db.collection('fcm_tokens').where('role', 'in', ['admin', 'supervisor', 'operator', 'manager']).get();
       const tokens = tokensSnap.docs.map(d => d.data().token).filter(Boolean);
       if (tokens.length === 0) return res.json({ status: "success", successCount: 0 });
       
       const payload = {
           title: `🧪 TEST OUT OF STOCK DETECTED`,
-          body: `Test Item Strawberry (SKU: 99999) marked returning OOS at Store TEST.`,
-          image: 'https://placehold.co/200x200.png?text=OOS+TEST',
-          data: { orderId: 'test-order-123', type: "oos", storeId: 'TEST', image: 'https://placehold.co/200x200.png?text=OOS+TEST' }
+          body: `Test Item Strawberry (SKU: 99999) at Store TEST.`,
+          icon: 'https://placehold.co/100x100.png?text=OOS+ICON',
+          image: 'https://placehold.co/600x400.png?text=OOS+TEST+IMAGE',
+          data: { 
+            orderId: 'test-order-123', 
+            type: "oos", 
+            storeId: 'TEST', 
+            icon: 'https://placehold.co/100x100.png?text=OOS+ICON', 
+            image: 'https://placehold.co/600x400.png?text=OOS+TEST+IMAGE' 
+          }
       };
 
       const MAX_TOKENS = 500;
@@ -266,16 +330,22 @@ async function startServer() {
       for (let i = 0; i < tokens.length; i += MAX_TOKENS) {
         const tokenBatch = tokens.slice(i, i + MAX_TOKENS);
         const message = {
-            notification: { title: payload.title, body: payload.body },
+            notification: { 
+              title: payload.title, 
+              body: payload.body, 
+              image: payload.image 
+            },
             webpush: {
                 notification: {
-                    icon: payload.data.image || 'https://placehold.co/192x192.png?text=OOS'
+                    icon: payload.data.icon || 'https://placehold.co/192x192.png?text=OOS',
+                    image: payload.data.image || 'https://placehold.co/192x192.png?text=OOS'
                 }
             },
             data: {
               orderId: String(payload.data.orderId || ""),
               type: String(payload.data.type || ""),
               storeId: String(payload.data.storeId || ""),
+              icon: String(payload.data.icon || ""),
               image: String(payload.data.image || "")
             },
             tokens: tokenBatch
@@ -289,11 +359,35 @@ async function startServer() {
           console.log("[FCM] Failure:", response.failureCount);
 
           if (response.failureCount > 0) {
+            const badTokens: string[] = [];
             response.responses.forEach((r, idx) => {
               if (!r.success) {
                 console.error("[FCM TOKEN ERROR]", tokenBatch[idx], r.error);
+                const errCode = r.error?.code;
+                if (errCode === 'messaging/registration-token-not-registered' || errCode === 'messaging/invalid-registration-token') {
+                  badTokens.push(tokenBatch[idx]);
+                }
               }
             });
+
+            if (badTokens.length > 0) {
+              console.log("[FCM CleanUp] Cleaning up invalid tokens:", badTokens.length);
+              for (const token of badTokens) {
+                try {
+                  const snap = await db.collection('fcm_tokens').where('token', '==', token).get();
+                  if (!snap.empty) {
+                    const cleanupBatch = db.batch();
+                    snap.docs.forEach(doc => {
+                      console.log(`[FCM CleanUp] Deleting unregistered token: ${doc.id}`);
+                      cleanupBatch.delete(doc.ref);
+                    });
+                    await cleanupBatch.commit();
+                  }
+                } catch (cleanupErr) {
+                  console.error("[FCM CleanUp ERROR]", cleanupErr);
+                }
+              }
+            }
           }
         } catch (fcmErr: any) {
           console.error("[FCM FATAL ERROR]", fcmErr);
@@ -311,12 +405,46 @@ async function startServer() {
     }
   });
 
+  // --- WhatsApp Evolution API Proxy ---
+  app.get("/api/admin/whatsapp/groups", async (req, res) => {
+    try {
+      const sysConfigSnap = await db.collection("system").doc("config").get();
+      if (!sysConfigSnap.exists) {
+        return res.status(404).json({ error: "System config not found" });
+      }
+      const sysData = sysConfigSnap.data() || {};
+      
+      if (!sysData.whatsappApiUrl || !sysData.whatsappInstanceName || !sysData.whatsappApiKey) {
+        return res.status(400).json({ error: "WhatsApp integration is not fully configured" });
+      }
+
+      const url = `${sysData.whatsappApiUrl.replace(/\/$/, '')}/group/fetchAllGroups/${sysData.whatsappInstanceName}?getParticipants=false`;
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'apikey': sysData.whatsappApiKey
+        }
+      });
+
+      if (!response.ok) {
+         throw new Error(`Evolution API returned ${response.status}: ${await response.text()}`);
+      }
+
+      const data = await response.json();
+      res.json({ status: "success", groups: data });
+    } catch (e: any) {
+      console.error("[WhatsApp] Proxy error fetching groups:", e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.post("/api/admin/send-oos-push", async (req, res) => {
     try {
       if (!db || !messaging) return res.status(500).json({ error: "Missing Firebase features" });
       
       const { item, requesterRole } = req.body;
-      if (!item || (requesterRole !== 'admin' && requesterRole !== 'supervisor')) {
+      if (!item || (requesterRole !== 'admin' && requesterRole !== 'operator' && requesterRole !== 'supervisor')) {
         return res.status(403).json({ error: "Unauthorized" });
       }
 
@@ -346,27 +474,26 @@ async function startServer() {
       
       const alertStoreId = String(item.storeId || "").trim();
 
-      // Optimize queries: don't fetch all fcm_tokens to avoid Vercel 500 timeouts/memory hit
-      const [adminSuperSnap, storeSnap] = await Promise.all([
-         db.collection('fcm_tokens').where('role', 'in', ['admin', 'supervisor']).get(),
-         db.collection('fcm_tokens').where('storeId', '==', alertStoreId).get()
-      ]);
+      // Retrieve all tokens to prevent strict case-sensitive Firestore 'where' exclusions
+      const tokensSnap = await db.collection('fcm_tokens').get();
+      const allTokensData = tokensSnap.docs.map((doc: any) => doc.data());
 
-      const allData = new Map();
-      adminSuperSnap.docs.forEach(d => allData.set(d.id, d.data()));
-      storeSnap.docs.forEach(d => allData.set(d.id, d.data()));
-
-      const tokens = Array.from(allData.values())
+      const tokens = allTokensData
         .filter(data => {
             if (!data.token) return false;
-            const userRole = String(data.role || "").toLowerCase().trim();
-            const userStoreId = String(data.storeId || "").trim();
-            const userRegion = String(data.region || "").trim();
-            
+            const userRole = normalizeRole(data.role);
+            const userStoreId = normalizeStoreId(data.storeId);
+            const userRegion = normalizeRegion(data.region);
+
+            const targetStoreId = normalizeStoreId(alertStoreId);
+            const targetRegion = normalizeRegion(alertRegion);
+
             if (userRole === 'admin') return true;
-            if (userRole === 'supervisor') return userRegion && alertRegion && userRegion === alertRegion;
-            if (userRole === 'manager' || userRole === 'store' || userRole === 'picker' || userRole === 'driver') {
-               return userStoreId === alertStoreId;
+            if (userRole === 'supervisor') {
+              return isRegionMatch(data.region, alertRegion);
+            }
+            if (['manager', 'store', 'picker', 'driver', 'staff', 'operator'].includes(userRole)) {
+              return isStoreMatch(data.storeId, alertStoreId);
             }
             return false;
         })
@@ -384,29 +511,111 @@ async function startServer() {
         return str;
       };
 
+      const getLargeImageUrl = (url: string) => {
+        if (!url) return "";
+        const str = String(url);
+        if (str.includes("drive.google.com")) {
+          const id = str.split("id=")[1] || str.split("/d/")[1]?.split("/")[0];
+          if (id) return `https://lh3.googleusercontent.com/d/${id}=s1000`;
+        }
+        return str;
+      };
+
       const payload = {
           title: `⚠️ OUT OF STOCK DETECTED`,
-          body: `Item ${item.itemName} (SKU: ${item.sku}) marked returning OOS at Store ${item.storeId}.`,
-          image: getSmallThumbnailUrl(item.photoUrl),
-          data: { orderId: String(item.orderId || ""), type: "oos", storeId: String(item.storeId || ""), image: getSmallThumbnailUrl(item.photoUrl) }
+          body: `Item ${item.itemName} (SKU: ${item.sku}) at Store ${item.storeId}.`,
+          icon: getSmallThumbnailUrl(item.photoUrl),
+          image: getLargeImageUrl(item.photoUrl),
+          data: { 
+            orderId: String(item.orderId || ""), 
+            type: "oos", 
+            storeId: String(item.storeId || ""), 
+            icon: getSmallThumbnailUrl(item.photoUrl),
+            image: getLargeImageUrl(item.photoUrl) 
+          }
       };
 
       // FCM has a 500 token limit per call
       const MAX_TOKENS = 500;
       let successCount = 0;
+
+        // --- WhatsApp Evolution API Dispatch ---
+        try {
+          const sysConfigSnap = await db.collection("system").doc("config").get();
+          if (sysConfigSnap.exists) {
+            const sysData = sysConfigSnap.data() || {};
+            
+            if (sysData.whatsappOosEnabled && sysData.whatsappApiUrl && sysData.whatsappInstanceName && sysData.whatsappApiKey) {
+              const mappings = sysData.whatsappRegionMappings || [];
+              const mapping = mappings.find((m: any) => String(m.region).trim().toLowerCase() === String(alertRegion).trim().toLowerCase());
+              
+              if (mapping && mapping.groupJid) {
+                const waMessage = `*Out of Stock Alert!*\nStore: ${item.storeId}\nOrder No: ${item.orderId || 'N/A'}\nSKU: ${item.sku}\nItem Name: ${item.itemName}\nQty: 0`;
+                
+                let url = `${sysData.whatsappApiUrl.replace(/\/$/, '')}/message/sendText/${sysData.whatsappInstanceName}`;
+                let bodyParams: any = {
+                  number: mapping.groupJid,
+                  options: {
+                    delay: 0,
+                    presence: "composing",
+                    linkPreview: false
+                  },
+                  textMessage: {
+                    text: waMessage
+                  }
+                };
+
+                if (payload.image) {
+                  url = `${sysData.whatsappApiUrl.replace(/\/$/, '')}/message/sendMedia/${sysData.whatsappInstanceName}`;
+                  bodyParams = {
+                    number: mapping.groupJid,
+                    options: {
+                      delay: 0,
+                      presence: "composing"
+                    },
+                    mediaMessage: {
+                      mediatype: "image",
+                      caption: waMessage,
+                      media: payload.image
+                    }
+                  };
+                }
+                
+                await fetch(url, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': sysData.whatsappApiKey
+                  },
+                  body: JSON.stringify(bodyParams)
+                }).catch(e => console.error("[WhatsApp] Error calling Evolution API:", e));
+              }
+            }
+          }
+        } catch (waErr) {
+          console.error("[WhatsApp] Internal Error:", waErr);
+        }
+        // ----------------------------------------
+
       for (let i = 0; i < tokens.length; i += MAX_TOKENS) {
         const tokenBatch = tokens.slice(i, i + MAX_TOKENS);
         const message = {
-            notification: { title: payload.title, body: payload.body },
+            notification: { 
+              title: payload.title, 
+              body: payload.body, 
+              image: payload.image 
+            },
             webpush: {
                 notification: {
-                    icon: payload.data.image || 'https://placehold.co/192x192.png?text=OOS'
+                    icon: payload.data.icon || 'https://placehold.co/192x192.png?text=OOS',
+                    image: payload.data.image || 'https://placehold.co/192x192.png?text=OOS'
                 }
             },
             data: {
               orderId: String(payload.data.orderId || ""),
               type: String(payload.data.type || ""),
               storeId: String(payload.data.storeId || ""),
+              icon: String(payload.data.icon || ""),
               image: String(payload.data.image || "")
             },
             tokens: tokenBatch
@@ -420,11 +629,35 @@ async function startServer() {
           console.log("[FCM] Failure:", response.failureCount);
 
           if (response.failureCount > 0) {
+            const badTokens: string[] = [];
             response.responses.forEach((r, idx) => {
               if (!r.success) {
                 console.error("[FCM TOKEN ERROR]", tokenBatch[idx], r.error);
+                const errCode = r.error?.code;
+                if (errCode === 'messaging/registration-token-not-registered' || errCode === 'messaging/invalid-registration-token') {
+                  badTokens.push(tokenBatch[idx]);
+                }
               }
             });
+
+            if (badTokens.length > 0) {
+              console.log("[FCM CleanUp] Cleaning up invalid tokens:", badTokens.length);
+              for (const token of badTokens) {
+                try {
+                  const snap = await db.collection('fcm_tokens').where('token', '==', token).get();
+                  if (!snap.empty) {
+                    const cleanupBatch = db.batch();
+                    snap.docs.forEach(doc => {
+                      console.log(`[FCM CleanUp] Deleting unregistered token: ${doc.id}`);
+                      cleanupBatch.delete(doc.ref);
+                    });
+                    await cleanupBatch.commit();
+                  }
+                } catch (cleanupErr) {
+                  console.error("[FCM CleanUp ERROR]", cleanupErr);
+                }
+              }
+            }
           }
         } catch (fcmErr: any) {
           console.error("[FCM FATAL ERROR]", fcmErr);
@@ -457,6 +690,58 @@ async function startServer() {
     }
   });
 
+  app.post("/api/admin/archive-logs", async (req, res) => {
+    try {
+      if (!db) return res.status(500).json({ error: "No DB" });
+
+      // Calculate 48 hours ago
+      const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+      const logsToArchive: any[] = [];
+      
+      // 1. Get old OOS History
+      const oosSnap = await db.collection("oos_history").where("timestamp", "<", fortyEightHoursAgo).get();
+      const oosBatch = db.batch();
+      oosSnap.docs.forEach(doc => {
+        logsToArchive.push({ type: 'oos', id: doc.id, ...doc.data() });
+        oosBatch.delete(doc.ref);
+      });
+
+      // 2. Get old Alerts
+      const alertsSnap = await db.collection("alerts").where("triggeredAt", "<", fortyEightHoursAgo).get();
+      const alertsBatch = db.batch();
+      alertsSnap.docs.forEach(doc => {
+        logsToArchive.push({ type: 'alert', id: doc.id, ...doc.data() });
+        alertsBatch.delete(doc.ref);
+      });
+
+      if (logsToArchive.length === 0) {
+        return res.json({ status: "success", archivedCount: 0, message: "No logs older than 48 hours found." });
+      }
+
+      // 3. Push to Google Sheet V2
+      const V2_FALLBACK = "https://script.google.com/macros/s/AKfycbxGr0rRSmIuutAd80GfkVO4lYZ-ObJ4WY9hr-xfLim1Is_t1gUBKStJ7nb7LoepIEA_IA/exec";
+      const rawUrl = (process.env.V2_GAS_URL || process.env.VITE_V2_GAS_URL || V2_FALLBACK).trim();
+      
+      const syncParams = new URLSearchParams();
+      syncParams.append('action', 'archiveOldLogs');
+      syncParams.append('payload', JSON.stringify(logsToArchive));
+
+      await axios.post(rawUrl, syncParams.toString(), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 60000
+      });
+
+      // 4. Delete from Firestore to save space
+      if (!oosSnap.empty) await oosBatch.commit();
+      if (!alertsSnap.empty) await alertsBatch.commit();
+
+      res.json({ status: "success", archivedCount: logsToArchive.length });
+    } catch (e: any) {
+      console.error("[archive-logs] Error:", e);
+      res.status(500).json({ status: "error", error: e.message });
+    }
+  });
+
   // GAS Proxy Route
     app.all(["/api/proxy-gas", "/proxy-gas"], async (req, res) => {
     const start = Date.now();
@@ -467,7 +752,7 @@ async function startServer() {
       
       // Hierarchy: 1. Specialized V2 env (PRIORITY), 2. query param, 3. general GAS env, 4. Hardcoded fallback
       const V1_FALLBACK = "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec";
-      const V2_FALLBACK = "https://script.google.com/macros/s/AKfycbz6l6gUuVhoXde_zYZNNGchQLnvzZHE8_kkk2RcvQyk55tpitg2N8ZQHVo_DV7FO71Gzw/exec";
+      const V2_FALLBACK = "https://script.google.com/macros/s/AKfycbxGr0rRSmIuutAd80GfkVO4lYZ-ObJ4WY9hr-xfLim1Is_t1gUBKStJ7nb7LoepIEA_IA/exec";
       
       let rawUrl = (typeof req.query.gasUrl === 'string' ? req.query.gasUrl : "").trim();
       
@@ -686,7 +971,8 @@ async function startServer() {
         if (!isAdmin) {
           const adminDoc = await db.collection('users').doc(rId).get();
           const adminData = adminDoc.data();
-          isAdmin = adminDoc.exists && String(adminData?.role || "").toLowerCase() === 'admin';
+          const role = String(adminData?.role || "").toLowerCase().trim();
+          isAdmin = adminDoc.exists && (role === 'admin' || role === 'operator');
           currentRole = adminData?.role || 'Unknown';
         }
 
@@ -773,13 +1059,14 @@ async function startServer() {
         if (!isAdmin) {
           const adminDoc = await db.collection('users').doc(rId).get();
           const adminData = adminDoc.data();
-          isAdmin = adminDoc.exists && String(adminData?.role || "").toLowerCase() === 'admin';
+          const role = String(adminData?.role || "").toLowerCase().trim();
+          isAdmin = adminDoc.exists && (role === 'admin' || role === 'operator');
           currentRole = adminData?.role || 'Unknown';
         }
 
         if (!isAdmin) {
           console.warn(`[Admin Check] Access denied for ${rId}. Role found: ${currentRole}`);
-          return res.status(403).json({ error: `Access denied: Only administrators can delete users. Your role is ${currentRole}` });
+          return res.status(403).json({ error: `Access denied: Only administrators and operators can delete users. Your role is ${currentRole}` });
         }
       }
 
@@ -828,13 +1115,14 @@ async function startServer() {
         if (!isAdmin) {
           const adminDoc = await db.collection('users').doc(rId).get();
           const adminData = adminDoc.data();
-          isAdmin = adminDoc.exists && String(adminData?.role || "").toLowerCase() === 'admin';
+          const role = String(adminData?.role || "").toLowerCase().trim();
+          isAdmin = adminDoc.exists && (role === 'admin' || role === 'operator');
           currentRole = adminData?.role || 'Unknown';
         }
 
         if (!isAdmin) {
           console.warn(`[Admin Check] Access denied for ${rId}. Role found: ${currentRole}`);
-          return res.status(403).json({ error: `Access denied: Admin role required. Your role is ${currentRole}` });
+          return res.status(403).json({ error: `Access denied: Admin/Operator role required. Your role is ${currentRole}` });
         }
       }
 

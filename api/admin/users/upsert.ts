@@ -42,7 +42,7 @@ async function syncUserToGas(user: any, action: 'upsert' | 'delete') {
   try {
     let gasUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
     if (!gasUrl || gasUrl === "undefined" || !gasUrl.startsWith("http")) {
-      gasUrl = "https://script.google.com/macros/s/AKfycbz6l6gUuVhoXde_zYZNNGchQLnvzZHE8_kkk2RcvQyk55tpitg2N8ZQHVo_DV7FO71Gzw/exec";
+      gasUrl = "https://script.google.com/macros/s/AKfycbxGr0rRSmIuutAd80GfkVO4lYZ-ObJ4WY9hr-xfLim1Is_t1gUBKStJ7nb7LoepIEA_IA/exec";
     }
     const params = new URLSearchParams();
     params.append('action', 'syncUser');
