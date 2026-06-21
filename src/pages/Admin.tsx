@@ -49,8 +49,8 @@ interface AdminProps {
   setWhatsappInstanceName?: (val: string) => void;
   whatsappApiKey?: string;
   setWhatsappApiKey?: (val: string) => void;
-  whatsappRegionMappings?: {region: string, groupJid: string}[];
-  setWhatsappRegionMappings?: (val: {region: string, groupJid: string}[]) => void;
+  whatsappRegionMappings?: {region: string, groupJid: string, storeId?: string, supervisorId?: string, instanceName?: string}[];
+  setWhatsappRegionMappings?: (val: {region: string, groupJid: string, storeId?: string, supervisorId?: string, instanceName?: string}[]) => void;
   staffStatus: any[];
   scheduledThreshold: number;
   setScheduledThreshold: (num: number) => void;
@@ -1515,64 +1515,104 @@ export const Admin: React.FC<AdminProps> = ({
                       
                       <div className="space-y-3">
                         {(whatsappRegionMappings || []).map((mapping, idx) => (
-                          <div key={idx} className="flex flex-col sm:flex-row gap-2 sm:items-center bg-white p-2 rounded-xl border border-slate-100">
-                            <select 
-                              value={mapping.region}
-                              onChange={(e) => {
-                                const newMappings = [...(whatsappRegionMappings || [])];
-                                newMappings[idx].region = e.target.value;
-                                setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
-                              }}
-                              className="w-full sm:w-1/3 shrink-0 bg-slate-50 border border-slate-100 rounded-lg p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
-                            >
-                              <option value="">Select Region...</option>
-                              {availableRegions.map(reg => <option key={reg} value={reg}>{reg}</option>)}
-                            </select>
-                            
-                            {fetchedGroups.length > 0 ? (
-                              <select
-                                value={mapping.groupJid}
+                          <div key={idx} className="flex flex-col gap-2 bg-white p-3 rounded-xl border border-slate-200">
+                            <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center w-full">
+                              <select 
+                                value={mapping.region}
                                 onChange={(e) => {
                                   const newMappings = [...(whatsappRegionMappings || [])];
-                                  newMappings[idx].groupJid = e.target.value;
+                                  newMappings[idx].region = e.target.value;
                                   setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
                                 }}
-                                className="flex-1 min-w-0 overflow-hidden text-ellipsis bg-slate-50 border border-slate-100 rounded-lg p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
+                                className="w-full sm:w-1/4 shrink-0 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
                               >
-                                <option value="">Select a fetched WhatsApp group...</option>
-                                {fetchedGroups.map(g => <option key={g.id} value={g.id}>{g.subject} ({g.id})</option>)}
+                                <option value="">Select Region...</option>
+                                {availableRegions.map(reg => <option key={reg} value={reg}>{reg}</option>)}
                               </select>
-                            ) : (
-                              <input 
+
+                              <input
                                 type="text"
-                                value={mapping.groupJid}
+                                value={mapping.storeId || ''}
                                 onChange={(e) => {
                                   const newMappings = [...(whatsappRegionMappings || [])];
-                                  newMappings[idx].groupJid = e.target.value;
+                                  newMappings[idx].storeId = e.target.value;
                                   setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
                                 }}
-                                placeholder="120363...Group JID"
-                                className="flex-1 bg-slate-50 border border-slate-100 rounded-lg p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
+                                placeholder="Store ID (Optional)"
+                                className="w-full sm:w-1/4 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
                               />
-                            )}
-                            
-                            <button 
-                              onClick={() => {
-                                const newMappings = [...(whatsappRegionMappings || [])];
-                                newMappings.splice(idx, 1);
-                                setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
-                              }}
-                              className="p-2.5 mt-1 sm:mt-0 text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors flex items-center justify-center"
-                              title="Remove mapping"
-                            >
-                              <X size={16} />
-                            </button>
+
+                              <input
+                                type="text"
+                                value={mapping.supervisorId || ''}
+                                onChange={(e) => {
+                                  const newMappings = [...(whatsappRegionMappings || [])];
+                                  newMappings[idx].supervisorId = e.target.value;
+                                  setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                                }}
+                                placeholder="Supervisor ID (Optional)"
+                                className="w-full sm:w-1/4 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
+                              />
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center w-full">
+                              {fetchedGroups.length > 0 ? (
+                                <select
+                                  value={mapping.groupJid}
+                                  onChange={(e) => {
+                                    const newMappings = [...(whatsappRegionMappings || [])];
+                                    newMappings[idx].groupJid = e.target.value;
+                                    setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                                  }}
+                                  className="flex-1 min-w-0 overflow-hidden text-ellipsis bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
+                                >
+                                  <option value="">Select a fetched WhatsApp group...</option>
+                                  {fetchedGroups.map(g => <option key={g.id} value={g.id}>{g.subject} ({g.id})</option>)}
+                                </select>
+                              ) : (
+                                <input 
+                                  type="text"
+                                  value={mapping.groupJid}
+                                  onChange={(e) => {
+                                    const newMappings = [...(whatsappRegionMappings || [])];
+                                    newMappings[idx].groupJid = e.target.value;
+                                    setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                                  }}
+                                  placeholder="WhatsApp Group JID"
+                                  className="flex-1 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
+                                />
+                              )}
+
+                              <input
+                                type="text"
+                                value={mapping.instanceName || ''}
+                                onChange={(e) => {
+                                  const newMappings = [...(whatsappRegionMappings || [])];
+                                  newMappings[idx].instanceName = e.target.value;
+                                  setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                                }}
+                                placeholder="Evolution Instance (Optional)"
+                                className="w-full sm:w-1/3 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
+                              />
+                              
+                              <button 
+                                onClick={() => {
+                                  const newMappings = [...(whatsappRegionMappings || [])];
+                                  newMappings.splice(idx, 1);
+                                  setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                                }}
+                                className="p-2 sm:mt-0 text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors flex items-center justify-center shrink-0"
+                                title="Remove mapping"
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
                           </div>
                         ))}
                         
                         <button 
                           onClick={() => {
-                            setWhatsappRegionMappings && setWhatsappRegionMappings([...(whatsappRegionMappings || []), {region: '', groupJid: ''}]);
+                            setWhatsappRegionMappings && setWhatsappRegionMappings([...(whatsappRegionMappings || []), {region: '', groupJid: '', storeId: '', supervisorId: '', instanceName: ''}]);
                           }}
                           className="mt-2 w-full sm:w-auto px-4 py-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
                         >

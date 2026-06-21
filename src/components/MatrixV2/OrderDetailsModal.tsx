@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, MapPin, Clock, Truck, User, Phone, 
   ShoppingBag, Package, CheckCircle2, AlertCircle, Ban,
-  ExternalLink, Copy, Calendar
+  ExternalLink, Copy, Calendar, MessageSquare
 } from 'lucide-react';
+import { useAuth } from '../../hooks/useAuth';
 import { 
   Order, getOrderLifecycle, formatDuration, getOrderDistance,
   getTotalItems, getPickedItems, getSkuCount, getPickedSkuCount,
@@ -65,7 +66,39 @@ const OrderLifecycleBox = ({
 };
 
 export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({ order, onClose }) => {
+  const { user } = useAuth();
   const [selectedImageUrl, setSelectedImageUrl] = React.useState<string | null>(null);
+  const [pushingItem, setPushingItem] = React.useState<string | null>(null);
+
+  const canPushWhatsapp = user?.role === 'admin' || user?.role === 'supervisor' || user?.role === 'operator';
+
+  const handleManualPush = async (item: any) => {
+    if (!item || !order) return;
+    setPushingItem(item.sku);
+    try {
+      const response = await fetch('/api/admin/whatsapp/manual-item-push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order,
+          item,
+          requesterId: (user as any)?.uid || (user as any)?.empId || '',
+          requesterRole: user?.role || ''
+        })
+      });
+      const data = await response.json();
+      if (data.status === 'success') {
+        alert('WhatsApp Message Sent Successfully!');
+      } else {
+        alert('Failed to send WhatsApp message: ' + (data.error || 'Unknown error'));
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert('Error sending WhatsApp message: ' + e.message);
+    } finally {
+      setPushingItem(null);
+    }
+  };
   const lifecycle = getOrderLifecycle(order);
   const picker = getPickerInfo(order);
   const driver = getDriverInfo(order);
@@ -368,7 +401,8 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({ order, onC
               <div className="col-photo">PHOTO</div>
               <div className="col-status">STATUS</div>
               <div className="col-sku">SKU</div>
-              <div className="col-name">ITEM NAME</div>
+              <div className="col-name flex-1">ITEM NAME</div>
+              {canPushWhatsapp && <div className="col-action w-10 text-center">MSG</div>}
               <div className="col-qty">QUANTITY</div>
             </div>
             {order.items.map((item: any, idx) => {
@@ -408,7 +442,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({ order, onC
                   <div className="col-sku">
                     <span className="sku-text">{item.sku}</span>
                   </div>
-                  <div className="col-name">
+                  <div className="col-name flex-1">
                     <div 
                       className={`item-name-clickable ${isPickComplete ? 'view-mode' : ''}`}
                       onClick={() => isPickComplete && hasImage && setSelectedImageUrl(photoUrl)}
@@ -425,6 +459,22 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({ order, onC
                       )}
                     </div>
                   </div>
+                  {canPushWhatsapp && (
+                    <div className="col-action w-10 flex justify-center items-center">
+                      <button
+                        onClick={() => handleManualPush(item)}
+                        disabled={pushingItem === item.sku}
+                        className={`p-2 rounded-full transition-colors ${
+                          pushingItem === item.sku 
+                            ? "bg-slate-100 text-slate-400" 
+                            : "bg-green-50 text-green-600 hover:bg-green-100"
+                        }`}
+                        title="Send WhatsApp Alert"
+                      >
+                        <MessageSquare size={16} />
+                      </button>
+                    </div>
+                  )}
                   <div className="col-qty">
                     <div className="qty-pill">
                       {item.found_qty}/{item.quantity}

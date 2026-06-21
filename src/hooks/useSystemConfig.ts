@@ -24,7 +24,7 @@ export function useSystemConfig(
   const [whatsappApiUrl, setWhatsappApiUrl] = useState('');
   const [whatsappInstanceName, setWhatsappInstanceName] = useState('');
   const [whatsappApiKey, setWhatsappApiKey] = useState('');
-  const [whatsappRegionMappings, setWhatsappRegionMappings] = useState<{region: string, groupJid: string}[]>([]);
+  const [whatsappRegionMappings, setWhatsappRegionMappings] = useState<{region: string, groupJid: string, storeId?: string, supervisorId?: string, instanceName?: string}[]>([]);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   // Use Firestore for real-time config
