@@ -744,11 +744,18 @@ async function startServer() {
         requesterId,
       );
 
-      if (!mapping || !mapping.groupJid) {
+      if (!mapping) {
         return res
           .status(400)
           .json({
-            error: "No WhatsApp group mapped for this region/store/supervisor",
+            error: `No mapping found for Region: '${alertRegion}', Store: '${item.storeId || order.store_id}', Supervisor: '${requesterId}'`,
+          });
+      }
+      if (!mapping.groupJid) {
+        return res
+          .status(400)
+          .json({
+            error: "Mapping found but WhatsApp Group JID is missing in the configuration.",
           });
       }
 
