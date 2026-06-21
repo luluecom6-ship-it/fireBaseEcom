@@ -1244,6 +1244,33 @@ async function startServer() {
       res.status(500).json({ status: "error", error: e.message });
     }
   });
+  app.get("/api/admin/whatsapp/groups", async (req, res) => {
+    try {
+      const sysConfigSnap = await db.collection("system").doc("config").get();
+      if (!sysConfigSnap.exists) {
+        return res.status(404).json({ error: "System config not found" });
+      }
+      const sysData = sysConfigSnap.data() || {};
+      if (!sysData.whatsappApiUrl || !sysData.whatsappInstanceName || !sysData.whatsappApiKey) {
+        return res.status(400).json({ error: "WhatsApp integration is not fully configured" });
+      }
+      const url = `${sysData.whatsappApiUrl.replace(/\/$/, "")}/group/fetchAllGroups/${sysData.whatsappInstanceName}?getParticipants=false`;
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "apikey": sysData.whatsappApiKey
+        }
+      });
+      if (!response.ok) {
+        throw new Error(`Evolution API returned ${response.status}: ${await response.text()}`);
+      }
+      const data = await response.json();
+      res.json({ status: "success", groups: data });
+    } catch (e) {
+      console.error("[WhatsApp] Proxy error fetching groups:", e);
+      res.status(500).json({ error: e.message });
+    }
+  });
   app.post("/api/admin/send-oos-push", async (req, res) => {
     try {
       if (!db || !messaging) return res.status(500).json({ error: "Missing Firebase features" });
@@ -1323,6 +1350,61 @@ async function startServer() {
       };
       const MAX_TOKENS = 500;
       let successCount = 0;
+      try {
+        const sysConfigSnap = await db.collection("system").doc("config").get();
+        if (sysConfigSnap.exists) {
+          const sysData = sysConfigSnap.data() || {};
+          if (sysData.whatsappOosEnabled && sysData.whatsappApiUrl && sysData.whatsappInstanceName && sysData.whatsappApiKey) {
+            const mappings = sysData.whatsappRegionMappings || [];
+            const mapping = mappings.find((m) => String(m.region).trim().toLowerCase() === String(alertRegion).trim().toLowerCase());
+            if (mapping && mapping.groupJid) {
+              const waMessage = `*Out of Stock Alert!*
+Store: ${item.storeId}
+Order No: ${item.orderId || "N/A"}
+SKU: ${item.sku}
+Item Name: ${item.itemName}
+Qty: 0`;
+              let url = `${sysData.whatsappApiUrl.replace(/\/$/, "")}/message/sendText/${sysData.whatsappInstanceName}`;
+              let bodyParams = {
+                number: mapping.groupJid,
+                options: {
+                  delay: 0,
+                  presence: "composing",
+                  linkPreview: false
+                },
+                textMessage: {
+                  text: waMessage
+                }
+              };
+              if (payload.image) {
+                url = `${sysData.whatsappApiUrl.replace(/\/$/, "")}/message/sendMedia/${sysData.whatsappInstanceName}`;
+                bodyParams = {
+                  number: mapping.groupJid,
+                  options: {
+                    delay: 0,
+                    presence: "composing"
+                  },
+                  mediaMessage: {
+                    mediatype: "image",
+                    caption: waMessage,
+                    media: payload.image
+                  }
+                };
+              }
+              await fetch(url, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "apikey": sysData.whatsappApiKey
+                },
+                body: JSON.stringify(bodyParams)
+              }).catch((e) => console.error("[WhatsApp] Error calling Evolution API:", e));
+            }
+          }
+        }
+      } catch (waErr) {
+        console.error("[WhatsApp] Internal Error:", waErr);
+      }
       for (let i = 0; i < tokens.length; i += MAX_TOKENS) {
         const tokenBatch = tokens.slice(i, i + MAX_TOKENS);
         const message = {
