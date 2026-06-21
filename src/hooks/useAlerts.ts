@@ -474,17 +474,17 @@ export function useAlerts(
       await robustFetch(API_URL, { method: 'POST', mode: 'no-cors', body: params });
       setTimeout(() => pendingActionsRef.current.delete(actionKey), 2000);
     } catch (error) {
-      handleFirestoreError(error, 'write', `alerts/${alert.id || 'new'}`);
+      console.error(error);
     }
-  }, [user, API_URL, handleFirestoreError]);
+  }, [user, API_URL]);
 
   // Firestore Real-time Sync for Alerts
   useEffect(() => {
     if (!user || !isFirebaseAuthenticated) return;
 
-    const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     const alertsRef = collection(db, 'alerts');
-    const q = query(alertsRef, where('timestamp', '>=', sixHoursAgo));
+    const q = query(alertsRef, where('timestamp', '>=', twoHoursAgo));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const firestoreLogs: AlertLog[] = [];

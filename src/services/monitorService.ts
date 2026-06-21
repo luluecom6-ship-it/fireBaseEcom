@@ -52,11 +52,15 @@ export async function runMonitorTick(db: any, messaging: any) {
     console.log(`[Monitor] Tick started...`);
     
     if (!isOOSCacheInitialized) {
-      console.log(`[Monitor] Initializing OOS memory cache from Firebase...`);
-      const oosSnap = await db.collection("oos_history").select().get(); // select() only gets document IDs to save bandwidth
+      console.log(`[Monitor] Initializing OOS memory cache from Firebase (recent 24h only)...`);
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const oosSnap = await db.collection("oos_history")
+        .where("updatedAt", ">=", oneDayAgo)
+        .select()
+        .get(); // select() only gets document IDs to save bandwidth
       oosSnap.docs.forEach((d: any) => processedOOSKeys.add(d.id));
       isOOSCacheInitialized = true;
-      console.log(`[Monitor] Loaded ${processedOOSKeys.size} existing OOS keys into memory.`);
+      console.log(`[Monitor] Loaded ${processedOOSKeys.size} recent OOS keys into memory.`);
     }
     
     // Refresh config and tokens every 5 minutes instead of every minute (saves massive quota limit)

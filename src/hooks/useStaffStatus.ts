@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
 import { User } from '../types';
@@ -14,7 +14,7 @@ export function useStaffStatus(
   isFirebaseAuthenticated: boolean,
   selectedStoreId: string = 'All'
 ) {
-  const [staffStatus, setStaffStatus] = useState<UserStatus[]>([]);
+  const [allStaffStatus, setAllStaffStatus] = useState<UserStatus[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -25,7 +25,7 @@ export function useStaffStatus(
 
     const role = String(user.role || "").toLowerCase().trim();
     if (role !== 'admin' && role !== 'operator' && role !== 'supervisor') {
-      setStaffStatus([]);
+      setAllStaffStatus([]);
       setLoading(false);
       return;
     }
@@ -40,10 +40,9 @@ export function useStaffStatus(
       }
     }
 
-    // UI selection filter
-    if (selectedStoreId !== 'All') {
-      constraints.push(where('storeId', '==', selectedStoreId));
-    }
+    // Notice: We NO LONGER filter by selectedStoreId in the Firebase query.
+    // This prevents the hook from deleting and re-creating the massive 'presence' 
+    // and 'users' listeners every time the user clicks the Store dropdown.
 
     const qUsers = query(collection(db, 'users'), ...constraints);
     const users: Record<string, User> = {};
@@ -102,7 +101,7 @@ export function useStaffStatus(
         return statusOrder[a.presenceStatus] - statusOrder[b.presenceStatus];
       });
 
-      setStaffStatus(combined);
+      setAllStaffStatus(combined);
     };
 
     // Listen to users
@@ -129,7 +128,13 @@ export function useStaffStatus(
       unsubUsers();
       unsubPresence();
     };
-  }, [user, isFirebaseAuthenticated, selectedStoreId]);
+  }, [user, isFirebaseAuthenticated]); // Removed selectedStoreId from dependency array
+
+  // Perform UI filtering synchronously in memory to save Firebase reads
+  const staffStatus = useMemo(() => {
+    if (selectedStoreId === 'All') return allStaffStatus;
+    return allStaffStatus.filter(s => String(s.storeId).trim().toLowerCase() === String(selectedStoreId).trim().toLowerCase());
+  }, [allStaffStatus, selectedStoreId]);
 
   return { staffStatus, loading };
 }
