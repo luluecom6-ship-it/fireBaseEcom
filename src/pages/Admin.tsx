@@ -43,6 +43,8 @@ interface AdminProps {
   setOosPushRegions?: (val: string[]) => void;
   whatsappOosEnabled?: boolean;
   setWhatsappOosEnabled?: (val: boolean) => void;
+  whatsappOosRegions?: string[];
+  setWhatsappOosRegions?: (val: string[]) => void;
   whatsappApiUrl?: string;
   setWhatsappApiUrl?: (val: string) => void;
   whatsappInstanceName?: string;
@@ -106,6 +108,8 @@ export const Admin: React.FC<AdminProps> = ({
   setOosPushRegions,
   whatsappOosEnabled,
   setWhatsappOosEnabled,
+  whatsappOosRegions = ['All'],
+  setWhatsappOosRegions,
   whatsappApiUrl,
   setWhatsappApiUrl,
   whatsappInstanceName,
@@ -1478,6 +1482,51 @@ export const Admin: React.FC<AdminProps> = ({
                           placeholder="YOUR_API_KEY_HERE"
                           className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
                         />
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-4 border-t border-slate-200">
+                      <div className="mb-4">
+                        <h5 className="text-xs font-black text-slate-800 uppercase tracking-widest">Target Automated Regions</h5>
+                        <p className="text-[9px] font-bold text-slate-400 mt-0.5 mb-3">Select which regions will trigger the automated WhatsApp OOS alerts</p>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => setWhatsappOosRegions && setWhatsappOosRegions(['All'])}
+                            className={cn(
+                              "px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all cursor-pointer",
+                              whatsappOosRegions.includes('All') 
+                                ? "bg-green-600 text-white border-green-600 shadow-sm" 
+                                : "bg-white text-slate-400 border-slate-100 hover:bg-slate-50"
+                            )}
+                          >
+                            All Regions
+                          </button>
+                          {availableRegions.map(reg => (
+                            <button
+                              key={reg}
+                              onClick={() => {
+                                if (setWhatsappOosRegions) {
+                                  if (whatsappOosRegions.includes('All')) {
+                                    setWhatsappOosRegions([reg]);
+                                  } else if (whatsappOosRegions.includes(reg)) {
+                                    const next = whatsappOosRegions.filter(r => r !== reg);
+                                    setWhatsappOosRegions(next.length === 0 ? ['All'] : next);
+                                  } else {
+                                    setWhatsappOosRegions([...whatsappOosRegions, reg]);
+                                  }
+                                }
+                              }}
+                              className={cn(
+                                "px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all cursor-pointer",
+                                whatsappOosRegions.includes(reg) && !whatsappOosRegions.includes('All')
+                                  ? "bg-green-600 text-white border-green-600 shadow-sm" 
+                                  : "bg-white text-slate-400 border-slate-100 hover:bg-slate-50"
+                              )}
+                            >
+                              {reg}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
 

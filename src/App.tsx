@@ -123,6 +123,12 @@ export default function App() {
     soundAlertsEnabled, setSoundAlertsEnabled,
     oosPushEnabled, setOosPushEnabled,
     oosPushRegions, setOosPushRegions,
+    whatsappOosEnabled, setWhatsappOosEnabled,
+    whatsappOosRegions, setWhatsappOosRegions,
+    whatsappApiUrl, setWhatsappApiUrl,
+    whatsappInstanceName, setWhatsappInstanceName,
+    whatsappApiKey, setWhatsappApiKey,
+    whatsappRegionMappings, setWhatsappRegionMappings,
     saveSystemConfig, isSavingConfig 
   } = useSystemConfig(user, showToast, isFirebaseAuthenticated);
 
@@ -521,6 +527,18 @@ export default function App() {
             setOosPushEnabled={setOosPushEnabled}
             oosPushRegions={oosPushRegions}
             setOosPushRegions={setOosPushRegions}
+            whatsappOosEnabled={whatsappOosEnabled}
+            setWhatsappOosEnabled={setWhatsappOosEnabled}
+            whatsappOosRegions={whatsappOosRegions}
+            setWhatsappOosRegions={setWhatsappOosRegions}
+            whatsappApiUrl={whatsappApiUrl}
+            setWhatsappApiUrl={setWhatsappApiUrl}
+            whatsappInstanceName={whatsappInstanceName}
+            setWhatsappInstanceName={setWhatsappInstanceName}
+            whatsappApiKey={whatsappApiKey}
+            setWhatsappApiKey={setWhatsappApiKey}
+            whatsappRegionMappings={whatsappRegionMappings}
+            setWhatsappRegionMappings={setWhatsappRegionMappings}
             staffStatus={staffStatus}
             scheduledThreshold={scheduledThreshold}
             setScheduledThreshold={setScheduledThreshold}

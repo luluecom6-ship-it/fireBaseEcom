@@ -20,6 +20,12 @@ export function useSystemConfig(
   const [soundAlertsEnabled, setSoundAlertsEnabled] = useState(true);
   const [oosPushEnabled, setOosPushEnabled] = useState(true);
   const [oosPushRegions, setOosPushRegions] = useState<string[]>(['All']);
+  const [whatsappOosEnabled, setWhatsappOosEnabled] = useState(false);
+  const [whatsappOosRegions, setWhatsappOosRegions] = useState<string[]>(['All']);
+  const [whatsappApiUrl, setWhatsappApiUrl] = useState('');
+  const [whatsappInstanceName, setWhatsappInstanceName] = useState('');
+  const [whatsappApiKey, setWhatsappApiKey] = useState('');
+  const [whatsappRegionMappings, setWhatsappRegionMappings] = useState<{region: string, groupJid: string, storeId?: string, supervisorId?: string, instanceName?: string}[]>([]);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   // Use Firestore for real-time config
@@ -57,6 +63,24 @@ export function useSystemConfig(
         if (Array.isArray(data.oosPushRegions)) {
           setOosPushRegions(data.oosPushRegions);
         }
+        if (typeof data.whatsappOosEnabled === 'boolean') {
+          setWhatsappOosEnabled(data.whatsappOosEnabled);
+        }
+        if (Array.isArray(data.whatsappOosRegions)) {
+          setWhatsappOosRegions(data.whatsappOosRegions);
+        }
+        if (typeof data.whatsappApiUrl === 'string') {
+          setWhatsappApiUrl(data.whatsappApiUrl);
+        }
+        if (typeof data.whatsappInstanceName === 'string') {
+          setWhatsappInstanceName(data.whatsappInstanceName);
+        }
+        if (typeof data.whatsappApiKey === 'string') {
+          setWhatsappApiKey(data.whatsappApiKey);
+        }
+        if (Array.isArray(data.whatsappRegionMappings)) {
+          setWhatsappRegionMappings(data.whatsappRegionMappings);
+        }
       } else {
         // Default rules if nothing in Firestore yet
         const defaultRules = [
@@ -73,6 +97,12 @@ export function useSystemConfig(
         setSoundAlertsEnabled(true);
         setOosPushEnabled(true);
         setOosPushRegions(['All']);
+        setWhatsappOosEnabled(false);
+        setWhatsappOosRegions(['All']);
+        setWhatsappApiUrl('');
+        setWhatsappInstanceName('');
+        setWhatsappApiKey('');
+        setWhatsappRegionMappings([]);
       }
     }, (error) => {
       console.error("Firestore config error:", error);
@@ -106,6 +136,12 @@ export function useSystemConfig(
         soundAlertsEnabled,
         oosPushEnabled,
         oosPushRegions,
+        whatsappOosEnabled,
+        whatsappOosRegions,
+        whatsappApiUrl,
+        whatsappInstanceName,
+        whatsappApiKey,
+        whatsappRegionMappings,
         updatedAt: new Date().toISOString()
       }, { merge: true }); // Use merge: true to avoid clobbering unseen config keys
       
@@ -142,6 +178,11 @@ export function useSystemConfig(
     soundAlertsEnabled,
     oosPushEnabled,
     oosPushRegions,
+    whatsappOosEnabled,
+    whatsappApiUrl,
+    whatsappInstanceName,
+    whatsappApiKey,
+    whatsappRegionMappings,
     showToast, 
     user
   ]);
@@ -167,7 +208,13 @@ export function useSystemConfig(
     setOosPushEnabled,
     oosPushRegions,
     setOosPushRegions,
-    isSavingConfig, 
-    saveSystemConfig 
+    whatsappOosEnabled, setWhatsappOosEnabled,
+    whatsappOosRegions, setWhatsappOosRegions,
+    whatsappApiUrl, setWhatsappApiUrl,
+    whatsappInstanceName, setWhatsappInstanceName,
+    whatsappApiKey, setWhatsappApiKey,
+    whatsappRegionMappings, setWhatsappRegionMappings,
+    saveSystemConfig,
+    isSavingConfig 
   };
 }
