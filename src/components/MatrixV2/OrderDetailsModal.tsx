@@ -90,7 +90,11 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({ order, onC
       if (data.status === 'success') {
         alert('WhatsApp Message Sent Successfully!');
       } else {
-        alert('Failed to send WhatsApp message: ' + (data.error || 'Unknown error'));
+        if (data.error && data.error.includes("connect with admin")) {
+          alert(data.error);
+        } else {
+          alert('Failed to send WhatsApp message: ' + (data.error || 'Unknown error'));
+        }
       }
     } catch (e: any) {
       console.error(e);
