@@ -684,7 +684,7 @@ async function startServer() {
     try {
       if (!db)
         return res.status(500).json({ error: "Missing Firebase features" });
-      const { order, item, requesterId, requesterRole } = req.body;
+      const { order, item, requesterId, requesterRole, userRegion } = req.body;
 
       if (
         !item ||
@@ -728,6 +728,11 @@ async function startServer() {
         }
       } catch (e) {}
 
+      // Fallback to the requester's own assigned region if store mapping failed
+      if (!alertRegion && userRegion && String(userRegion).toLowerCase() !== 'all') {
+        alertRegion = userRegion;
+      }
+
       const sysConfigSnap = await db.collection("system").doc("config").get();
       const sysData = sysConfigSnap.data() || {};
 
@@ -745,12 +750,13 @@ async function startServer() {
         requesterId,
       );
 
-      // Admin override: If no exact mapping is found for the admin's ID, allow the admin to use any mapping for the store/region to facilitate testing
-      if (!mapping && requesterRole === 'admin') {
+      // Admin/Operator override: If no exact mapping is found, allow them to use any mapping for the store/region, or ANY group to facilitate testing
+      if (!mapping && ['admin', 'operator'].includes(requesterRole)) {
         const normStore = String(item.storeId || order.store_id).trim();
         mapping = mappings.find((m: any) => String(m.storeId || "").trim() === normStore) 
-                  || mappings.find((m: any) => String(m.region || "").trim().toLowerCase() === String(alertRegion || "").trim().toLowerCase())
-                  || mappings.find((m: any) => ["global", "all", ""].includes(String(m.region).trim().toLowerCase()));
+                  || (alertRegion ? mappings.find((m: any) => String(m.region || "").trim().toLowerCase() === String(alertRegion || "").trim().toLowerCase()) : null)
+                  || mappings.find((m: any) => ["global", "all", ""].includes(String(m.region).trim().toLowerCase()))
+                  || mappings.find((m: any) => m.groupJid); // Ultimate failsafe
       }
 
       if (!mapping) {
