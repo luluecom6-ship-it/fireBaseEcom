@@ -408,17 +408,18 @@ async function startServer() {
       }
       const sysData = sysConfigSnap.data() || {};
 
+      const instanceName = req.query.instanceName || sysData.whatsappInstanceName;
       if (
         !sysData.whatsappApiUrl ||
-        !sysData.whatsappInstanceName ||
+        !instanceName ||
         !sysData.whatsappApiKey
       ) {
         return res
           .status(400)
-          .json({ error: "WhatsApp integration is not fully configured" });
+          .json({ error: "WhatsApp integration is not fully configured (Instance Name missing)" });
       }
 
-      const url = `${sysData.whatsappApiUrl.replace(/\/$/, "")}/group/fetchAllGroups/${sysData.whatsappInstanceName}?getParticipants=false`;
+      const url = `${sysData.whatsappApiUrl.replace(/\/$/, "")}/group/fetchAllGroups/${instanceName}?getParticipants=false`;
 
       const response = await fetch(url, {
         method: "GET",
@@ -508,7 +509,7 @@ async function startServer() {
     try {
       if (!db)
         return res.status(500).json({ error: "Missing Firebase features" });
-      const { order, item, requesterId, requesterRole } = req.body;
+      const { order, item, requesterId, requesterRole, userRegion } = req.body;
 
       if (
         !item ||
@@ -552,6 +553,11 @@ async function startServer() {
         }
       } catch (e) {}
 
+      // Fallback to the requester's own assigned region if store mapping failed
+      if (!alertRegion && userRegion && String(userRegion).toLowerCase() !== 'all') {
+        alertRegion = userRegion;
+      }
+
       const sysConfigSnap = await db.collection("system").doc("config").get();
       const sysData = sysConfigSnap.data() || {};
 
@@ -569,15 +575,18 @@ async function startServer() {
         requesterId,
       );
 
-      // Admin override: If no exact mapping is found for the admin's ID, allow the admin to use any mapping for the store/region to facilitate testing
-      if (!mapping && requesterRole === 'admin') {
+      // Admin/Operator override: If no exact mapping is found, allow them to use any mapping for the store/region, or ANY group to facilitate testing
+      if (!mapping && ['admin', 'operator'].includes(requesterRole)) {
         const normStore = String(item.storeId || order.store_id).trim();
         mapping = mappings.find((m: any) => String(m.storeId || "").trim() === normStore) 
-                  || mappings.find((m: any) => String(m.region || "").trim().toLowerCase() === String(alertRegion || "").trim().toLowerCase())
-                  || mappings.find((m: any) => ["global", "all", ""].includes(String(m.region).trim().toLowerCase()));
+                  || (alertRegion ? mappings.find((m: any) => String(m.region || "").trim().toLowerCase() === String(alertRegion || "").trim().toLowerCase()) : null)
+                  || mappings.find((m: any) => ["global", "all", ""].includes(String(m.region).trim().toLowerCase()))
+                  || mappings.find((m: any) => m.groupJid); // Ultimate failsafe
       }
 
       if (!mapping) {
+        console.log(`[WhatsApp Debug] Manual Push Failed. ID: ${requesterId}, Role: ${requesterRole}, Store: ${item.storeId || order.store_id}, ComputedRegion: ${alertRegion}`);
+        console.log(`[WhatsApp Debug] Available Mappings:`, JSON.stringify(mappings));
         return res
           .status(400)
           .json({
@@ -657,6 +666,128 @@ async function startServer() {
       res.json({ status: "success" });
     } catch (e: any) {
       console.error("[WhatsApp] Proxy error sending manual push:", e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Manual Scan & Send: Admin triggers the automated OOS WhatsApp queue on-demand
+  app.post("/api/admin/whatsapp/scan-and-send", async (req, res) => {
+    try {
+      if (!db) return res.status(500).json({ error: "Missing Firebase" });
+      const { requesterRole } = req.body;
+      if (!["admin", "operator"].includes(requesterRole)) {
+        return res.status(403).json({ error: "Admin/Operator only" });
+      }
+
+      const sysSnap = await db.collection("system").doc("config").get();
+      const config = sysSnap.data() || {};
+      if (!config.whatsappApiUrl || !config.whatsappApiKey || !config.whatsappInstanceName) {
+        return res.status(400).json({ error: "WhatsApp integration not fully configured" });
+      }
+
+      // Build store-to-region map
+      const storeToRegion: Record<string, string> = {};
+      try {
+        const adminSnap = await db.collection("app_config").doc("admin_control").get();
+        if (adminSnap.exists) {
+          const adminData = adminSnap.data() || {};
+          const regions = adminData.regions || [];
+          for (const r of regions) {
+            if (Array.isArray(r.stores)) {
+              for (const sid of r.stores) {
+                storeToRegion[String(sid).trim()] = r.name || "";
+              }
+            }
+          }
+        }
+      } catch (_) {}
+
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const oosSnap = await db.collection("oos_history")
+        .where("updatedAt", ">=", todayStart)
+        .get();
+
+      const mappings = config.whatsappRegionMappings || [];
+      const whatsappOosRegions = config.whatsappOosRegions || ['All'];
+      let sent = 0;
+      let skipped = 0;
+      let failed = 0;
+
+      for (const docSnap of oosSnap.docs) {
+        const oosData = docSnap.data();
+        if (oosData.whatsappSent) { skipped++; continue; }
+
+        const storeRegion = storeToRegion[oosData.storeId] || "";
+        const normRegion = String(storeRegion).trim().toLowerCase();
+
+        // Check region toggle
+        const isRegionAllowed = whatsappOosRegions.includes('All') || (storeRegion && whatsappOosRegions.some((cr: string) => cr.toLowerCase() === storeRegion.toLowerCase()));
+        if (!isRegionAllowed) {
+          await docSnap.ref.update({ whatsappSent: true, whatsappError: 'Region disabled' });
+          skipped++;
+          continue;
+        }
+
+        // Find master regional mapping (no storeId, no supervisorId)
+        const mapping = mappings.find((m: any) =>
+          (String(m.region).trim().toLowerCase() === normRegion || ["global", "all", ""].includes(String(m.region).trim().toLowerCase())) &&
+          !String(m.storeId || "").trim() &&
+          !String(m.supervisorId || "").trim()
+        );
+
+        if (!mapping || !mapping.groupJid) {
+          await docSnap.ref.update({ whatsappSent: true, whatsappError: 'No regional mapping found' });
+          skipped++;
+          continue;
+        }
+
+        const instanceToUse = mapping.instanceName || config.whatsappInstanceName;
+        const captionText = `🚨 *OOS Alert*\n\n*Order:* ${oosData.orderId || "N/A"}\n*Item:* ${oosData.itemName || "N/A"}\n*SKU:* ${oosData.sku || "N/A"}\n*Store:* ${oosData.storeId || "N/A"}\n*Location:* ${oosData.location || "--"}\n*Qty:* ${oosData.foundQty || 0}/${oosData.quantity || 0}`;
+
+        try {
+          let url = `${config.whatsappApiUrl.replace(/\/$/, "")}/message/sendText/${instanceToUse}`;
+          let bodyParams: any = {
+            number: mapping.groupJid,
+            options: { delay: 0, presence: "composing", linkPreview: false },
+            text: captionText,
+          };
+
+          if (oosData.photoUrl) {
+            url = `${config.whatsappApiUrl.replace(/\/$/, "")}/message/sendMedia/${instanceToUse}`;
+            bodyParams = {
+              number: mapping.groupJid,
+              options: { delay: 0, presence: "composing" },
+              mediatype: "image",
+              mimetype: "image/jpeg",
+              caption: captionText,
+              media: oosData.photoUrl,
+            };
+          }
+
+          const waRes = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", apikey: config.whatsappApiKey },
+            body: JSON.stringify(bodyParams),
+          });
+
+          if (waRes.ok) {
+            await docSnap.ref.update({ whatsappSent: true, whatsappSentAt: new Date().toISOString() });
+            sent++;
+          } else {
+            const errText = await waRes.text();
+            await docSnap.ref.update({ whatsappSent: true, whatsappError: `API ${waRes.status}: ${errText.slice(0,100)}` });
+            failed++;
+          }
+        } catch (sendErr: any) {
+          await docSnap.ref.update({ whatsappSent: true, whatsappError: sendErr.message?.slice(0,100) });
+          failed++;
+        }
+      }
+
+      res.json({ status: "success", sent, skipped, failed, total: oosSnap.docs.length });
+    } catch (e: any) {
+      console.error("[WhatsApp] Scan-and-send error:", e);
       res.status(500).json({ error: e.message });
     }
   });
