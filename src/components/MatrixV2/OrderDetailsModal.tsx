@@ -83,7 +83,8 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({ order, onC
           order,
           item,
           requesterId: (user as any)?.uid || (user as any)?.empId || '',
-          requesterRole: user?.role || ''
+          requesterRole: user?.role || '',
+          userRegion: user?.region || ''
         })
       });
       const data = await response.json();

@@ -124,6 +124,7 @@ export default function App() {
     oosPushEnabled, setOosPushEnabled,
     oosPushRegions, setOosPushRegions,
     whatsappOosEnabled, setWhatsappOosEnabled,
+    whatsappOosRegions, setWhatsappOosRegions,
     whatsappApiUrl, setWhatsappApiUrl,
     whatsappInstanceName, setWhatsappInstanceName,
     whatsappApiKey, setWhatsappApiKey,
@@ -528,6 +529,8 @@ export default function App() {
             setOosPushRegions={setOosPushRegions}
             whatsappOosEnabled={whatsappOosEnabled}
             setWhatsappOosEnabled={setWhatsappOosEnabled}
+            whatsappOosRegions={whatsappOosRegions}
+            setWhatsappOosRegions={setWhatsappOosRegions}
             whatsappApiUrl={whatsappApiUrl}
             setWhatsappApiUrl={setWhatsappApiUrl}
             whatsappInstanceName={whatsappInstanceName}

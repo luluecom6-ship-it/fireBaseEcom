@@ -52,14 +52,6 @@ export const useOOSHistory = (user: User | null, isEnabled: boolean) => {
     setLoading(true);
     fetchHistory();
 
-    // Poll every 30 seconds
-    timeoutRef.current = setInterval(() => {
-      fetchHistory();
-    }, 30000);
-
-    return () => {
-      if (timeoutRef.current) clearInterval(timeoutRef.current);
-    };
   }, [isEnabled, fetchHistory]);
 
   return { oosItems, loading, refetch: fetchHistory };

@@ -21,6 +21,7 @@ export function useSystemConfig(
   const [oosPushEnabled, setOosPushEnabled] = useState(true);
   const [oosPushRegions, setOosPushRegions] = useState<string[]>(['All']);
   const [whatsappOosEnabled, setWhatsappOosEnabled] = useState(false);
+  const [whatsappOosRegions, setWhatsappOosRegions] = useState<string[]>(['All']);
   const [whatsappApiUrl, setWhatsappApiUrl] = useState('');
   const [whatsappInstanceName, setWhatsappInstanceName] = useState('');
   const [whatsappApiKey, setWhatsappApiKey] = useState('');
@@ -65,6 +66,9 @@ export function useSystemConfig(
         if (typeof data.whatsappOosEnabled === 'boolean') {
           setWhatsappOosEnabled(data.whatsappOosEnabled);
         }
+        if (Array.isArray(data.whatsappOosRegions)) {
+          setWhatsappOosRegions(data.whatsappOosRegions);
+        }
         if (typeof data.whatsappApiUrl === 'string') {
           setWhatsappApiUrl(data.whatsappApiUrl);
         }
@@ -94,6 +98,7 @@ export function useSystemConfig(
         setOosPushEnabled(true);
         setOosPushRegions(['All']);
         setWhatsappOosEnabled(false);
+        setWhatsappOosRegions(['All']);
         setWhatsappApiUrl('');
         setWhatsappInstanceName('');
         setWhatsappApiKey('');
@@ -132,6 +137,7 @@ export function useSystemConfig(
         oosPushEnabled,
         oosPushRegions,
         whatsappOosEnabled,
+        whatsappOosRegions,
         whatsappApiUrl,
         whatsappInstanceName,
         whatsappApiKey,
@@ -203,6 +209,7 @@ export function useSystemConfig(
     oosPushRegions,
     setOosPushRegions,
     whatsappOosEnabled, setWhatsappOosEnabled,
+    whatsappOosRegions, setWhatsappOosRegions,
     whatsappApiUrl, setWhatsappApiUrl,
     whatsappInstanceName, setWhatsappInstanceName,
     whatsappApiKey, setWhatsappApiKey,

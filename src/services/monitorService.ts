@@ -664,6 +664,117 @@ export async function runMonitorTick(db: any, messaging: any) {
       }
     }
     
+    // 8. Automated WhatsApp OOS Queue Processor
+    try {
+      if (config.whatsappOosEnabled && config.whatsappApiUrl && config.whatsappInstanceName && config.whatsappApiKey) {
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+
+        // Fetch OOS items from today that haven't been sent
+        const oosSnap = await db.collection("oos_history")
+          .where("updatedAt", ">=", todayStart)
+          .where("whatsappSent", "!=", true)
+          .get();
+
+        const mappings = config.whatsappRegionMappings || [];
+
+        for (const docSnap of oosSnap.docs) {
+          const oosData = docSnap.data();
+          
+          // Double-check: skip if already sent (race condition guard)
+          if (oosData.whatsappSent) continue;
+
+          // Skip if already processed in-memory during this server session
+          if (processedOOSKeys.has(`wa_${docSnap.id}`)) continue;
+          processedOOSKeys.add(`wa_${docSnap.id}`);
+
+          const storeRegion = storeToRegion[oosData.storeId] || "";
+          const normRegion = String(storeRegion).trim().toLowerCase();
+
+          // Check Region Toggle
+          const whatsappOosRegions = config.whatsappOosRegions || ['All'];
+          const isRegionAllowed = whatsappOosRegions.includes('All') || (storeRegion && whatsappOosRegions.some((cr: string) => cr.toLowerCase() === storeRegion.toLowerCase()));
+          
+          if (!isRegionAllowed) {
+            await docSnap.ref.update({ whatsappSent: true, whatsappError: 'Region disabled in Admin toggle' });
+            continue;
+          }
+
+          let mapping = null;
+          // For automated alerts, Admin requested a SINGLE regional group. 
+          // Find mapping that exactly matches the region, but does NOT have a Store ID or Supervisor ID!
+          mapping = mappings.find((m: any) => 
+            (String(m.region).trim().toLowerCase() === normRegion || ["global", "all", ""].includes(String(m.region).trim().toLowerCase())) &&
+            !String(m.storeId || "").trim() &&
+            !String(m.supervisorId || "").trim()
+          );
+
+          if (mapping && mapping.groupJid) {
+            const instanceToUse = mapping.instanceName || config.whatsappInstanceName;
+            if (instanceToUse) {
+              // PRE-MARK as sent BEFORE calling the API to prevent race conditions
+              await docSnap.ref.update({ whatsappSent: true, whatsappSentAt: new Date().toISOString() });
+
+              const waMessage = `*Out of Stock Alert!*\nStore: ${oosData.storeId}\nOrder No: ${oosData.orderId || "N/A"}\nSKU: ${oosData.sku}\nItem Name: ${oosData.itemName}\nQty: 0`;
+
+              let url = `${config.whatsappApiUrl.replace(/\/$/, "")}/message/sendText/${instanceToUse}`;
+              let bodyParams: any = {
+                number: mapping.groupJid,
+                options: { delay: 0, presence: "composing", linkPreview: false },
+                text: waMessage,
+              };
+
+              if (oosData.photoUrl) {
+                const getLargeImageUrl = (u: string) => {
+                  if (!u) return "";
+                  const str = String(u);
+                  if (str.includes("drive.google.com")) {
+                    const id = str.split("id=")[1] || str.split("/d/")[1]?.split("/")[0];
+                    if (id) return `https://lh3.googleusercontent.com/d/${id}=s1000`;
+                  }
+                  return str;
+                };
+
+                url = `${config.whatsappApiUrl.replace(/\/$/, "")}/message/sendMedia/${instanceToUse}`;
+                bodyParams = {
+                  number: mapping.groupJid,
+                  options: { delay: 0, presence: "composing", linkPreview: false },
+                  mediatype: "image",
+                  mimetype: "image/jpeg",
+                  caption: waMessage,
+                  media: getLargeImageUrl(oosData.photoUrl),
+                };
+              }
+
+              try {
+                const waRes = await fetch(url, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", apikey: config.whatsappApiKey },
+                  body: JSON.stringify(bodyParams),
+                });
+
+                if (waRes.ok) {
+                  console.log(`[WhatsApp Auto] Sent OOS alert for SKU ${oosData.sku}`);
+                } else {
+                  const errText = await waRes.text();
+                  console.error(`[WhatsApp Auto] Failed to send for SKU ${oosData.sku}: ${errText}`);
+                  await docSnap.ref.update({ whatsappError: `API ${waRes.status}: ${errText.slice(0, 100)}` });
+                }
+              } catch (sendErr: any) {
+                console.error(`[WhatsApp Auto] Send error for SKU ${oosData.sku}:`, sendErr.message);
+                await docSnap.ref.update({ whatsappError: sendErr.message?.slice(0, 100) });
+              }
+            }
+          } else {
+             // If no mapping found, mark as error so we don't spam trying to send it
+             await docSnap.ref.update({ whatsappSent: true, whatsappError: 'No mapping found for store/region' });
+          }
+        }
+      }
+    } catch (e) {
+      console.error("[WhatsApp Auto] Queue processor error:", e);
+    }
+    
     // Automatically archive old OOS records older than 24 hours to keep free tier clean (5% chance per min ~ approx once per 20 mins)
     if (Math.random() < 0.05) {    
       await archiveOldOOS(db);

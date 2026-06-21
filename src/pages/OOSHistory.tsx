@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'motion/react';
-import { PackageX, Clock, RefreshCw, Search, Box, Bell, MapPin } from 'lucide-react';
+import { PackageX, Clock, RefreshCw, Search, Box, Bell, MapPin, MessageCircle, CheckCircle2, Send } from 'lucide-react';
 import { OOSRecord, User } from '../types';
 import { parseServerDate } from '../utils/api';
 // cn is in lib/utils
@@ -42,6 +42,7 @@ export const OOSHistory: React.FC<OOSHistoryProps> = ({
   const [filterStore, setFilterStore] = useState<string>("all");
   const [filterRegion, setFilterRegion] = useState<string>("all");
   const [pushingId, setPushingId] = useState<string | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
 
   const role = String(user?.role || "").toLowerCase().trim();
   const supervisorRegion = user && role === 'supervisor' ? (user.region || "").trim() : "";
@@ -53,6 +54,33 @@ export const OOSHistory: React.FC<OOSHistoryProps> = ({
   }, [role, supervisorRegion]);
 
   const isAdminOrSuper = ['admin', 'operator', 'supervisor'].includes(user?.role?.toLowerCase() || "");
+  const isAdminOrOp = ['admin', 'operator'].includes(user?.role?.toLowerCase() || "");
+
+  const handleScanAndSend = async () => {
+    if (!user || !isAdminOrOp) return;
+    try {
+      setIsScanning(true);
+      const res = await fetch("/api/admin/whatsapp/scan-and-send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requesterRole: user.role.toLowerCase() })
+      });
+      const data = await res.json();
+      if (res.ok && data.status === "success") {
+        const msg = `WA Scan Complete: ${data.sent} sent, ${data.skipped} skipped, ${data.failed} failed (${data.total} total)`;
+        showToast ? showToast(msg, data.sent > 0 ? 'success' : 'info') : alert(msg);
+        onRefresh();
+      } else {
+        const errMsg = "Scan failed: " + (data.error || "Unknown error");
+        showToast ? showToast(errMsg, 'error') : alert(errMsg);
+      }
+    } catch (e: any) {
+      const errMsg = "Scan error: " + e.message;
+      showToast ? showToast(errMsg, 'error') : alert(errMsg);
+    } finally {
+      setIsScanning(false);
+    }
+  };
 
   const handleSendPush = async (item: OOSRecord) => {
     if (!user || (!isAdminOrSuper)) return;
@@ -200,6 +228,24 @@ export const OOSHistory: React.FC<OOSHistoryProps> = ({
             </p>
           </div>
 
+          {/* Admin Scan & Send Button */}
+          {isAdminOrOp && (
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={handleScanAndSend}
+              disabled={isScanning}
+              className={cn(
+                "px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm border shrink-0",
+                isScanning
+                  ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                  : "bg-green-600 text-white border-green-700 hover:bg-green-700"
+              )}
+            >
+              <Send size={14} className={isScanning ? "animate-pulse" : ""} />
+              {isScanning ? "Scanning..." : "Scan & Send WA"}
+            </motion.button>
+          )}
+
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
             {/* Search Bar */}
             <div className="flex-1 w-full bg-white px-4 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3">
@@ -286,6 +332,18 @@ export const OOSHistory: React.FC<OOSHistoryProps> = ({
                 {new Set(filteredItems.map(i => i.orderId)).size}
               </span>
            </div>
+           <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">WA Sent</span>
+              <span className="text-2xl font-black text-green-600">
+                {filteredItems.filter(i => (i as any).whatsappSent).length}
+              </span>
+           </div>
+           <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">WA Pending</span>
+              <span className="text-2xl font-black text-orange-500">
+                {filteredItems.filter(i => !(i as any).whatsappSent).length}
+              </span>
+           </div>
         </div>
 
         {/* Table Content */}
@@ -302,6 +360,7 @@ export const OOSHistory: React.FC<OOSHistoryProps> = ({
                   <th className="p-4 sm:p-6 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Location</th>
                   <th className="p-4 sm:p-6 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Slot</th>
                   <th className="p-4 sm:p-6 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Qty</th>
+                  <th className="p-4 sm:p-6 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">WA</th>
                   {isAdminOrSuper && (
                     <th className="p-4 sm:p-6 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Action</th>
                   )}
@@ -310,7 +369,7 @@ export const OOSHistory: React.FC<OOSHistoryProps> = ({
               <tbody className="divide-y divide-slate-50">
                 {filteredItems.length === 0 ? (
                   <tr>
-                    <td colSpan={isAdminOrSuper ? 9 : 8} className="p-12 sm:p-20 text-center">
+                    <td colSpan={isAdminOrSuper ? 11 : 10} className="p-12 sm:p-20 text-center">
                       <div className="flex flex-col items-center gap-3">
                          <Box className="text-slate-200" size={48} />
                          <span className="text-slate-400 font-bold tracking-tight">No removed items found for the selected criteria</span>
@@ -371,6 +430,24 @@ export const OOSHistory: React.FC<OOSHistoryProps> = ({
                           <span className="text-[10px] sm:text-sm font-black text-slate-800">{item.foundQty}</span>
                           <span className="text-[9px] font-bold text-slate-400">/ {item.quantity}</span>
                         </div>
+                      </td>
+                      <td className="p-4 sm:p-6 text-center">
+                        {(item as any).whatsappSent ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-600 rounded-lg text-[9px] font-black uppercase tracking-widest" title={`Sent${(item as any).whatsappSentAt ? ' at ' + new Date((item as any).whatsappSentAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}`}>
+                            <CheckCircle2 size={12} />
+                            Sent
+                          </span>
+                        ) : (item as any).whatsappError ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-50 text-red-500 rounded-lg text-[9px] font-black uppercase tracking-widest" title={(item as any).whatsappError}>
+                            <MessageCircle size={12} />
+                            Error
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-slate-50 text-slate-400 rounded-lg text-[9px] font-black uppercase tracking-widest">
+                            <MessageCircle size={12} />
+                            Pending
+                          </span>
+                        )}
                       </td>
                       {isAdminOrSuper && (
                         <td className="p-4 sm:p-6 text-right">

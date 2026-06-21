@@ -43,6 +43,8 @@ interface AdminProps {
   setOosPushRegions?: (val: string[]) => void;
   whatsappOosEnabled?: boolean;
   setWhatsappOosEnabled?: (val: boolean) => void;
+  whatsappOosRegions?: string[];
+  setWhatsappOosRegions?: (val: string[]) => void;
   whatsappApiUrl?: string;
   setWhatsappApiUrl?: (val: string) => void;
   whatsappInstanceName?: string;
@@ -106,6 +108,8 @@ export const Admin: React.FC<AdminProps> = ({
   setOosPushRegions,
   whatsappOosEnabled,
   setWhatsappOosEnabled,
+  whatsappOosRegions = ['All'],
+  setWhatsappOosRegions,
   whatsappApiUrl,
   setWhatsappApiUrl,
   whatsappInstanceName,
@@ -144,7 +148,7 @@ export const Admin: React.FC<AdminProps> = ({
   const [userFilterStore, setUserFilterStore] = useState("All");
   const [userSearchQuery, setUserSearchQuery] = useState("");
 
-  const [fetchedGroups, setFetchedGroups] = useState<{id: string, subject: string}[]>([]);
+  const [fetchedGroupsByInstance, setFetchedGroupsByInstance] = useState<Record<string, {id: string, subject: string}[]>>({});
   const [isFetchingGroups, setIsFetchingGroups] = useState(false);
   const [isTestingWhatsapp, setIsTestingWhatsapp] = useState(false);
   
@@ -164,14 +168,16 @@ export const Admin: React.FC<AdminProps> = ({
     profileImage: '',
   });
 
-  const handleFetchGroups = async () => {
+  const handleFetchGroups = async (instance?: string) => {
+    const targetInstance = instance || whatsappInstanceName;
+    if (!targetInstance) return;
     setIsFetchingGroups(true);
     try {
-      const response = await fetch('/api/admin/whatsapp/groups');
+      const response = await fetch(`/api/admin/whatsapp/groups?instanceName=${encodeURIComponent(targetInstance)}`);
       const data = await response.json();
       if (data.status === 'success' && Array.isArray(data.groups)) {
-        setFetchedGroups(data.groups);
-        if (showToast) showToast(`Fetched ${data.groups.length} WhatsApp groups successfully.`, 'success');
+        setFetchedGroupsByInstance(prev => ({ ...prev, [targetInstance]: data.groups }));
+        if (showToast) showToast(`Fetched ${data.groups.length} WhatsApp groups for ${targetInstance}.`, 'success');
       } else {
         throw new Error(data.error || 'Failed to fetch groups');
       }
@@ -1480,6 +1486,51 @@ export const Admin: React.FC<AdminProps> = ({
                     </div>
 
                     <div className="mt-4 pt-4 border-t border-slate-200">
+                      <div className="mb-4">
+                        <h5 className="text-xs font-black text-slate-800 uppercase tracking-widest">Target Automated Regions</h5>
+                        <p className="text-[9px] font-bold text-slate-400 mt-0.5 mb-3">Select which regions will trigger the automated WhatsApp OOS alerts</p>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => setWhatsappOosRegions && setWhatsappOosRegions(['All'])}
+                            className={cn(
+                              "px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all cursor-pointer",
+                              whatsappOosRegions.includes('All') 
+                                ? "bg-green-600 text-white border-green-600 shadow-sm" 
+                                : "bg-white text-slate-400 border-slate-100 hover:bg-slate-50"
+                            )}
+                          >
+                            All Regions
+                          </button>
+                          {availableRegions.map(reg => (
+                            <button
+                              key={reg}
+                              onClick={() => {
+                                if (setWhatsappOosRegions) {
+                                  if (whatsappOosRegions.includes('All')) {
+                                    setWhatsappOosRegions([reg]);
+                                  } else if (whatsappOosRegions.includes(reg)) {
+                                    const next = whatsappOosRegions.filter(r => r !== reg);
+                                    setWhatsappOosRegions(next.length === 0 ? ['All'] : next);
+                                  } else {
+                                    setWhatsappOosRegions([...whatsappOosRegions, reg]);
+                                  }
+                                }
+                              }}
+                              className={cn(
+                                "px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all cursor-pointer",
+                                whatsappOosRegions.includes(reg) && !whatsappOosRegions.includes('All')
+                                  ? "bg-green-600 text-white border-green-600 shadow-sm" 
+                                  : "bg-white text-slate-400 border-slate-100 hover:bg-slate-50"
+                              )}
+                            >
+                              {reg}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-4 border-t border-slate-200">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
                         <div>
                           <h5 className="text-xs font-black text-slate-800">Region to WhatsApp Group Mapping</h5>
@@ -1499,7 +1550,7 @@ export const Admin: React.FC<AdminProps> = ({
                             <Send size={12} /> {isTestingWhatsapp ? "Testing..." : "Test Message"}
                           </button>
                           <button 
-                            onClick={handleFetchGroups}
+                            onClick={() => handleFetchGroups(whatsappInstanceName)}
                             disabled={isFetchingGroups || !whatsappApiUrl || !whatsappInstanceName || !whatsappApiKey}
                             className={cn(
                               "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
@@ -1508,7 +1559,7 @@ export const Admin: React.FC<AdminProps> = ({
                                 : "bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200"
                             )}
                           >
-                            <DownloadCloud size={12} /> {isFetchingGroups ? "Fetching..." : "Fetch Groups"}
+                            <DownloadCloud size={12} /> {isFetchingGroups ? "Fetching..." : "Fetch Global Groups"}
                           </button>
                         </div>
                       </div>
@@ -1556,32 +1607,59 @@ export const Admin: React.FC<AdminProps> = ({
                             </div>
 
                             <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center w-full">
-                              {fetchedGroups.length > 0 ? (
-                                <select
-                                  value={mapping.groupJid}
-                                  onChange={(e) => {
-                                    const newMappings = [...(whatsappRegionMappings || [])];
-                                    newMappings[idx].groupJid = e.target.value;
-                                    setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
-                                  }}
-                                  className="flex-1 min-w-0 overflow-hidden text-ellipsis bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
+                              <div className="flex-1 flex gap-2 w-full sm:w-auto">
+                                <div className="flex-1 relative">
+                                  {(() => {
+                                    const rowInstance = mapping.instanceName || whatsappInstanceName || '';
+                                    const groupsForInstance = fetchedGroupsByInstance[rowInstance] || [];
+                                    return (
+                                      groupsForInstance.length > 0 ? (
+                                        <select
+                                          value={mapping.groupJid || ""}
+                                          onChange={(e) => {
+                                            const newMappings = [...(whatsappRegionMappings || [])];
+                                            newMappings[idx].groupJid = e.target.value;
+                                            setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                                          }}
+                                          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 appearance-none pr-8"
+                                        >
+                                          <option value="">Select WhatsApp Group</option>
+                                          {groupsForInstance.map(g => <option key={g.id} value={g.id}>{g.subject} ({g.id})</option>)}
+                                        </select>
+                                      ) : (
+                                        <input 
+                                          type="text" 
+                                          value={mapping.groupJid || ""}
+                                          onChange={(e) => {
+                                            const newMappings = [...(whatsappRegionMappings || [])];
+                                            newMappings[idx].groupJid = e.target.value;
+                                            setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                                          }}
+                                          placeholder="WhatsApp Group JID"
+                                          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500"
+                                        />
+                                      )
+                                    );
+                                  })()}
+                                </div>
+                                <button
+                                  onClick={() => handleFetchGroups(mapping.instanceName || whatsappInstanceName)}
+                                  title="Fetch Groups for this Instance"
+                                  className="h-[38px] px-3 bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 rounded-xl flex items-center justify-center transition-colors shrink-0"
                                 >
-                                  <option value="">Select a fetched WhatsApp group...</option>
-                                  {fetchedGroups.map(g => <option key={g.id} value={g.id}>{g.subject} ({g.id})</option>)}
-                                </select>
-                              ) : (
-                                <input 
-                                  type="text"
-                                  value={mapping.groupJid}
-                                  onChange={(e) => {
+                                  <DownloadCloud size={14} />
+                                </button>
+                                <button 
+                                  onClick={() => {
                                     const newMappings = [...(whatsappRegionMappings || [])];
-                                    newMappings[idx].groupJid = e.target.value;
+                                    newMappings.splice(idx, 1);
                                     setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
                                   }}
-                                  placeholder="WhatsApp Group JID"
-                                  className="flex-1 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
-                                />
-                              )}
+                                  className="h-[38px] w-[38px] bg-red-50 hover:bg-red-100 text-red-500 rounded-xl flex items-center justify-center transition-colors shrink-0"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
 
                               <input
                                 type="text"
@@ -1595,17 +1673,7 @@ export const Admin: React.FC<AdminProps> = ({
                                 className="w-full sm:w-1/3 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
                               />
                               
-                              <button 
-                                onClick={() => {
-                                  const newMappings = [...(whatsappRegionMappings || [])];
-                                  newMappings.splice(idx, 1);
-                                  setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
-                                }}
-                                className="p-2 sm:mt-0 text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors flex items-center justify-center shrink-0"
-                                title="Remove mapping"
-                              >
-                                <X size={16} />
-                              </button>
+
                             </div>
                           </div>
                         ))}
