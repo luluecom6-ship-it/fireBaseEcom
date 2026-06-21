@@ -5,7 +5,7 @@ import {
   Clock, RefreshCw, Package, Users, UserCheck, TrendingUp, 
   ShieldCheck, AlertTriangle, History, Save, X, AlertCircle, Send,
   UserPlus, UserMinus, Key, Trash2, Edit3, Settings, LayoutDashboard, CalendarDays, Activity, Database,
-  Search, MapPin, Box
+  Search, MapPin, Box, MessageSquare, Plus, DownloadCloud
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -41,6 +41,16 @@ interface AdminProps {
   setOosPushEnabled?: (val: boolean) => void;
   oosPushRegions?: string[];
   setOosPushRegions?: (val: string[]) => void;
+  whatsappOosEnabled?: boolean;
+  setWhatsappOosEnabled?: (val: boolean) => void;
+  whatsappApiUrl?: string;
+  setWhatsappApiUrl?: (val: string) => void;
+  whatsappInstanceName?: string;
+  setWhatsappInstanceName?: (val: string) => void;
+  whatsappApiKey?: string;
+  setWhatsappApiKey?: (val: string) => void;
+  whatsappRegionMappings?: {region: string, groupJid: string, storeId?: string, supervisorId?: string, instanceName?: string}[];
+  setWhatsappRegionMappings?: (val: {region: string, groupJid: string, storeId?: string, supervisorId?: string, instanceName?: string}[]) => void;
   staffStatus: any[];
   scheduledThreshold: number;
   setScheduledThreshold: (num: number) => void;
@@ -94,6 +104,16 @@ export const Admin: React.FC<AdminProps> = ({
   setOosPushEnabled,
   oosPushRegions = ['All'],
   setOosPushRegions,
+  whatsappOosEnabled,
+  setWhatsappOosEnabled,
+  whatsappApiUrl,
+  setWhatsappApiUrl,
+  whatsappInstanceName,
+  setWhatsappInstanceName,
+  whatsappApiKey,
+  setWhatsappApiKey,
+  whatsappRegionMappings,
+  setWhatsappRegionMappings,
   staffStatus
 }) => {
   const getTodayStr = () => {
@@ -123,6 +143,10 @@ export const Admin: React.FC<AdminProps> = ({
   const [userFilterRegion, setUserFilterRegion] = useState("All");
   const [userFilterStore, setUserFilterStore] = useState("All");
   const [userSearchQuery, setUserSearchQuery] = useState("");
+
+  const [fetchedGroupsByInstance, setFetchedGroupsByInstance] = useState<Record<string, {id: string, subject: string}[]>>({});
+  const [isFetchingGroups, setIsFetchingGroups] = useState(false);
+  const [isTestingWhatsapp, setIsTestingWhatsapp] = useState(false);
   
   // Form State
   const [userForm, setUserForm] = useState({
@@ -139,6 +163,54 @@ export const Admin: React.FC<AdminProps> = ({
     status: 'Active',
     profileImage: '',
   });
+
+  const handleFetchGroups = async (instance?: string) => {
+    const targetInstance = instance || whatsappInstanceName;
+    if (!targetInstance) return;
+    setIsFetchingGroups(true);
+    try {
+      const response = await fetch(`/api/admin/whatsapp/groups?instanceName=${encodeURIComponent(targetInstance)}`);
+      const data = await response.json();
+      if (data.status === 'success' && Array.isArray(data.groups)) {
+        setFetchedGroupsByInstance(prev => ({ ...prev, [targetInstance]: data.groups }));
+        if (showToast) showToast(`Fetched ${data.groups.length} WhatsApp groups for ${targetInstance}.`, 'success');
+      } else {
+        throw new Error(data.error || 'Failed to fetch groups');
+      }
+    } catch (e: any) {
+      console.error(e);
+      if (showToast) showToast(e.message || "Failed to fetch WhatsApp groups", "error");
+    } finally {
+      setIsFetchingGroups(false);
+    }
+  };
+
+  const handleTestWhatsapp = async () => {
+    const number = window.prompt("Enter phone number (e.g., 919876543210) or Group JID to send a test message:");
+    if (!number) return;
+    
+    setIsTestingWhatsapp(true);
+    try {
+      const response = await fetch('/api/admin/whatsapp/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ number })
+      });
+      const data = await response.json();
+      if (data.key && data.key.id) {
+        if (showToast) showToast("Test message sent successfully!", "success");
+      } else if (data.error) {
+        throw new Error(data.error);
+      } else {
+        if (showToast) showToast("Test message sent, but response format unexpected.", "success");
+      }
+    } catch (e: any) {
+      console.error(e);
+      if (showToast) showToast(e.message || "Failed to send test message", "error");
+    } finally {
+      setIsTestingWhatsapp(false);
+    }
+  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1330,8 +1402,250 @@ export const Admin: React.FC<AdminProps> = ({
               </div>
             )}
           </div>
+            
+            {/* WhatsApp Evolution API Configuration */}
+            {String(user.role || "").toLowerCase().trim() === 'admin' && (
+              <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden mt-6">
+                <div className="p-4 sm:p-6 bg-green-50/50 border-b border-green-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
+                      <MessageSquare size={18} className="text-green-600 sm:hidden" />
+                      <MessageSquare size={20} className="text-green-600 hidden sm:block" />
+                      WhatsApp OOS Integration
+                    </h4>
+                    <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Automated WhatsApp Messaging via Evolution API</p>
+                  </div>
+                  
+                  {/* Master Toggle */}
+                  <div className="flex items-center gap-3 self-start sm:self-auto">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                      {whatsappOosEnabled ? "Enabled" : "Disabled"}
+                    </p>
+                    <button 
+                      onClick={() => setWhatsappOosEnabled && setWhatsappOosEnabled(!whatsappOosEnabled)}
+                      className={cn(
+                        "w-10 h-5 sm:w-12 sm:h-6 rounded-full relative transition-colors duration-300",
+                        whatsappOosEnabled ? "bg-green-500" : "bg-slate-200"
+                      )}
+                    >
+                      <div className={cn(
+                        "absolute top-1 h-3 w-3 sm:h-4 sm:w-4 bg-white rounded-full transition-all shadow-sm",
+                        whatsappOosEnabled ? "right-1" : "left-1"
+                      )}></div>
+                    </button>
+                    <button 
+                      onClick={onSaveConfig}
+                      disabled={isSavingConfig || !isFirebaseAuthenticated}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ml-2",
+                        (isSavingConfig || !isFirebaseAuthenticated) ? "bg-slate-100 text-slate-400" : "bg-green-600 text-white hover:bg-green-700 shadow-md"
+                      )}
+                    >
+                      <Save size={12} /> {isSavingConfig ? "Saving..." : "Save Config"}
+                    </button>
+                  </div>
+                </div>
 
-          {/* Staff Presence Column */}
+                {whatsappOosEnabled && (
+                  <div className="p-4 sm:p-6 bg-slate-50 border-b border-slate-100 flex flex-col gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">API Base URL</label>
+                        <input 
+                          type="text" 
+                          value={whatsappApiUrl || ""}
+                          onChange={(e) => setWhatsappApiUrl && setWhatsappApiUrl(e.target.value)}
+                          placeholder="http://68.233.108.125:8080"
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Instance Name</label>
+                        <input 
+                          type="text" 
+                          value={whatsappInstanceName || ""}
+                          onChange={(e) => setWhatsappInstanceName && setWhatsappInstanceName(e.target.value)}
+                          placeholder="EcomJedWhatsapp"
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Global API Key</label>
+                        <input 
+                          type="password" 
+                          value={whatsappApiKey || ""}
+                          onChange={(e) => setWhatsappApiKey && setWhatsappApiKey(e.target.value)}
+                          placeholder="YOUR_API_KEY_HERE"
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-4 border-t border-slate-200">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
+                        <div>
+                          <h5 className="text-xs font-black text-slate-800">Region to WhatsApp Group Mapping</h5>
+                          <p className="text-[9px] font-bold text-slate-400 mt-0.5">Map specific regions to WhatsApp Group JIDs (e.g. 120363...@g.us)</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={handleTestWhatsapp}
+                            disabled={isTestingWhatsapp || !whatsappApiUrl || !whatsappInstanceName || !whatsappApiKey}
+                            className={cn(
+                              "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
+                              (isTestingWhatsapp || !whatsappApiUrl || !whatsappInstanceName || !whatsappApiKey) 
+                                ? "bg-slate-200 text-slate-400 cursor-not-allowed" 
+                                : "bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-200"
+                            )}
+                          >
+                            <Send size={12} /> {isTestingWhatsapp ? "Testing..." : "Test Message"}
+                          </button>
+                          <button 
+                            onClick={() => handleFetchGroups(whatsappInstanceName)}
+                            disabled={isFetchingGroups || !whatsappApiUrl || !whatsappInstanceName || !whatsappApiKey}
+                            className={cn(
+                              "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
+                              (isFetchingGroups || !whatsappApiUrl || !whatsappInstanceName || !whatsappApiKey) 
+                                ? "bg-slate-200 text-slate-400 cursor-not-allowed" 
+                                : "bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200"
+                            )}
+                          >
+                            <DownloadCloud size={12} /> {isFetchingGroups ? "Fetching..." : "Fetch Global Groups"}
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        {(whatsappRegionMappings || []).map((mapping, idx) => (
+                          <div key={idx} className="flex flex-col gap-2 bg-white p-3 rounded-xl border border-slate-200">
+                            <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center w-full">
+                              <select 
+                                value={mapping.region}
+                                onChange={(e) => {
+                                  const newMappings = [...(whatsappRegionMappings || [])];
+                                  newMappings[idx].region = e.target.value;
+                                  setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                                }}
+                                className="w-full sm:w-1/4 shrink-0 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
+                              >
+                                <option value="">Select Region...</option>
+                                {availableRegions.map(reg => <option key={reg} value={reg}>{reg}</option>)}
+                              </select>
+
+                              <input
+                                type="text"
+                                value={mapping.storeId || ''}
+                                onChange={(e) => {
+                                  const newMappings = [...(whatsappRegionMappings || [])];
+                                  newMappings[idx].storeId = e.target.value;
+                                  setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                                }}
+                                placeholder="Store ID (Optional)"
+                                className="w-full sm:w-1/4 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
+                              />
+
+                              <input
+                                type="text"
+                                value={mapping.supervisorId || ''}
+                                onChange={(e) => {
+                                  const newMappings = [...(whatsappRegionMappings || [])];
+                                  newMappings[idx].supervisorId = e.target.value;
+                                  setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                                }}
+                                placeholder="Supervisor ID (Optional)"
+                                className="w-full sm:w-1/4 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
+                              />
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center w-full">
+                              <div className="flex-1 flex gap-2 w-full sm:w-auto">
+                                <div className="flex-1 relative">
+                                  {(() => {
+                                    const rowInstance = mapping.instanceName || whatsappInstanceName || '';
+                                    const groupsForInstance = fetchedGroupsByInstance[rowInstance] || [];
+                                    return (
+                                      groupsForInstance.length > 0 ? (
+                                        <select
+                                          value={mapping.groupJid || ""}
+                                          onChange={(e) => {
+                                            const newMappings = [...(whatsappRegionMappings || [])];
+                                            newMappings[idx].groupJid = e.target.value;
+                                            setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                                          }}
+                                          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 appearance-none pr-8"
+                                        >
+                                          <option value="">Select WhatsApp Group</option>
+                                          {groupsForInstance.map(g => <option key={g.id} value={g.id}>{g.subject} ({g.id})</option>)}
+                                        </select>
+                                      ) : (
+                                        <input 
+                                          type="text" 
+                                          value={mapping.groupJid || ""}
+                                          onChange={(e) => {
+                                            const newMappings = [...(whatsappRegionMappings || [])];
+                                            newMappings[idx].groupJid = e.target.value;
+                                            setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                                          }}
+                                          placeholder="WhatsApp Group JID"
+                                          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500"
+                                        />
+                                      )
+                                    );
+                                  })()}
+                                </div>
+                                <button
+                                  onClick={() => handleFetchGroups(mapping.instanceName || whatsappInstanceName)}
+                                  title="Fetch Groups for this Instance"
+                                  className="h-[38px] px-3 bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 rounded-xl flex items-center justify-center transition-colors shrink-0"
+                                >
+                                  <DownloadCloud size={14} />
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    const newMappings = [...(whatsappRegionMappings || [])];
+                                    newMappings.splice(idx, 1);
+                                    setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                                  }}
+                                  className="h-[38px] w-[38px] bg-red-50 hover:bg-red-100 text-red-500 rounded-xl flex items-center justify-center transition-colors shrink-0"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
+
+                              <input
+                                type="text"
+                                value={mapping.instanceName || ''}
+                                onChange={(e) => {
+                                  const newMappings = [...(whatsappRegionMappings || [])];
+                                  newMappings[idx].instanceName = e.target.value;
+                                  setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                                }}
+                                placeholder="Evolution Instance (Optional)"
+                                className="w-full sm:w-1/3 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
+                              />
+                              
+
+                            </div>
+                          </div>
+                        ))}
+                        
+                        <button 
+                          onClick={() => {
+                            setWhatsappRegionMappings && setWhatsappRegionMappings([...(whatsappRegionMappings || []), {region: '', groupJid: '', storeId: '', supervisorId: '', instanceName: ''}]);
+                          }}
+                          className="mt-2 w-full sm:w-auto px-4 py-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
+                        >
+                          <Plus size={14} /> Add Mapping
+                        </button>
+                      </div>
+                    </div>
+
+                  </div>
+                )}
+              </div>
+            )}
+  
+            {/* Staff Presence Column */}
           <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
             <div className="p-4 sm:p-6 bg-emerald-50/50 border-b border-emerald-100 flex items-center justify-between">
               <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
