@@ -416,8 +416,10 @@ async function startServer() {
         return res.status(400).json({ error: "WhatsApp integration is not fully configured" });
       }
 
-      const url = `${sysData.whatsappApiUrl.replace(/\/$/, '')}/message/sendText/${sysData.whatsappInstanceName}`;
+      const url = `${sysData.whatsappApiUrl.replace(/\/$/, '')}/message/sendMedia/${sysData.whatsappInstanceName}`;
       
+      const captionText = `Hello! This is a test message from your Firebase E-commerce Admin panel. 🚀\n\n*Order:* TEST-001\n*Item:* Sample Product Name\n*SKU:* SMPL-999\n*Store ID:* STORE-01\n\nIf you are seeing this image and text, your Evolution API connection is working perfectly!`;
+
       const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -426,8 +428,11 @@ async function startServer() {
         },
         body: JSON.stringify({
           number: number,
-          options: { delay: 0, presence: "composing", linkPreview: false },
-          text: "Hello! This is a test message from your Firebase E-commerce Admin panel. If you are seeing this, your Evolution API connection is working perfectly! 🚀"
+          options: { delay: 0, presence: "composing" },
+          mediatype: "image",
+          mimetype: "image/jpeg",
+          caption: captionText,
+          media: "https://bf1af2.cdn.akinoncloud.com/products/2024/09/11/56757/ef474c50-bdaf-4331-951f-6982163edb64.jpg"
         })
       });
 
