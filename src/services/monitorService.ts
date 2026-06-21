@@ -673,13 +673,20 @@ export async function runMonitorTick(db: any, messaging: any) {
         // Fetch OOS items from today that haven't been sent
         const oosSnap = await db.collection("oos_history")
           .where("updatedAt", ">=", todayStart)
+          .where("whatsappSent", "!=", true)
           .get();
 
         const mappings = config.whatsappRegionMappings || [];
 
         for (const docSnap of oosSnap.docs) {
           const oosData = docSnap.data();
+          
+          // Double-check: skip if already sent (race condition guard)
           if (oosData.whatsappSent) continue;
+
+          // Skip if already processed in-memory during this server session
+          if (processedOOSKeys.has(`wa_${docSnap.id}`)) continue;
+          processedOOSKeys.add(`wa_${docSnap.id}`);
 
           const storeRegion = storeToRegion[oosData.storeId] || "";
           const normRegion = String(storeRegion).trim().toLowerCase();
@@ -702,10 +709,12 @@ export async function runMonitorTick(db: any, messaging: any) {
             !String(m.supervisorId || "").trim()
           );
 
-
           if (mapping && mapping.groupJid) {
             const instanceToUse = mapping.instanceName || config.whatsappInstanceName;
             if (instanceToUse) {
+              // PRE-MARK as sent BEFORE calling the API to prevent race conditions
+              await docSnap.ref.update({ whatsappSent: true, whatsappSentAt: new Date().toISOString() });
+
               const waMessage = `*Out of Stock Alert!*\nStore: ${oosData.storeId}\nOrder No: ${oosData.orderId || "N/A"}\nSKU: ${oosData.sku}\nItem Name: ${oosData.itemName}\nQty: 0`;
 
               let url = `${config.whatsappApiUrl.replace(/\/$/, "")}/message/sendText/${instanceToUse}`;
@@ -737,17 +746,23 @@ export async function runMonitorTick(db: any, messaging: any) {
                 };
               }
 
-              const waRes = await fetch(url, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", apikey: config.whatsappApiKey },
-                body: JSON.stringify(bodyParams),
-              });
+              try {
+                const waRes = await fetch(url, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", apikey: config.whatsappApiKey },
+                  body: JSON.stringify(bodyParams),
+                });
 
-              if (waRes.ok) {
-                await docSnap.ref.update({ whatsappSent: true });
-                console.log(`[WhatsApp Auto] Sent OOS alert for SKU ${oosData.sku}`);
-              } else {
-                console.error(`[WhatsApp Auto] Failed to send for SKU ${oosData.sku}: ${await waRes.text()}`);
+                if (waRes.ok) {
+                  console.log(`[WhatsApp Auto] Sent OOS alert for SKU ${oosData.sku}`);
+                } else {
+                  const errText = await waRes.text();
+                  console.error(`[WhatsApp Auto] Failed to send for SKU ${oosData.sku}: ${errText}`);
+                  await docSnap.ref.update({ whatsappError: `API ${waRes.status}: ${errText.slice(0, 100)}` });
+                }
+              } catch (sendErr: any) {
+                console.error(`[WhatsApp Auto] Send error for SKU ${oosData.sku}:`, sendErr.message);
+                await docSnap.ref.update({ whatsappError: sendErr.message?.slice(0, 100) });
               }
             }
           } else {
