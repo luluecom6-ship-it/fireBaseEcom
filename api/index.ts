@@ -737,25 +737,33 @@ async function startServer() {
       }
 
       const mappings = sysData.whatsappRegionMappings || [];
-      const mapping = resolveWhatsappMapping(
+      let mapping = resolveWhatsappMapping(
         mappings,
         alertRegion,
         item.storeId || order.store_id,
         requesterId,
       );
 
+      // Admin override: If no exact mapping is found for the admin's ID, allow the admin to use any mapping for the store/region to facilitate testing
+      if (!mapping && requesterRole === 'admin') {
+        const normStore = String(item.storeId || order.store_id).trim();
+        mapping = mappings.find((m: any) => String(m.storeId || "").trim() === normStore) 
+                  || mappings.find((m: any) => String(m.region || "").trim().toLowerCase() === String(alertRegion || "").trim().toLowerCase())
+                  || mappings.find((m: any) => ["global", "all", ""].includes(String(m.region).trim().toLowerCase()));
+      }
+
       if (!mapping) {
         return res
           .status(400)
           .json({
-            error: `No mapping found for Region: '${alertRegion}', Store: '${item.storeId || order.store_id}', Supervisor: '${requesterId}'`,
+            error: "Please connect with admin to create your whatsapp account and assign an instance",
           });
       }
       if (!mapping.groupJid) {
         return res
           .status(400)
           .json({
-            error: "Mapping found but WhatsApp Group JID is missing in the configuration.",
+            error: "Please connect with admin to create your whatsapp account and assign an instance (Group JID missing)",
           });
       }
 
