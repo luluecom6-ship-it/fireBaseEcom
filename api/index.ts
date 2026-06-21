@@ -629,26 +629,26 @@ async function startServer() {
 
     let mapping = null;
 
-    if (normRegion && normStore && normSup) {
+    if (normStore && normSup) {
       mapping = mappings.find(
         (m: any) =>
-          String(m.region).trim().toLowerCase() === normRegion &&
+          (String(m.region).trim().toLowerCase() === normRegion || ["global", "all", ""].includes(String(m.region).trim().toLowerCase())) &&
           String(m.storeId || "").trim() === normStore &&
           String(m.supervisorId || "").trim() === normSup,
       );
     }
-    if (!mapping && normRegion && normStore) {
+    if (!mapping && normStore) {
       mapping = mappings.find(
         (m: any) =>
-          String(m.region).trim().toLowerCase() === normRegion &&
+          (String(m.region).trim().toLowerCase() === normRegion || ["global", "all", ""].includes(String(m.region).trim().toLowerCase())) &&
           String(m.storeId || "").trim() === normStore &&
           !m.supervisorId,
       );
     }
-    if (!mapping && normRegion && normSup) {
+    if (!mapping && normSup) {
       mapping = mappings.find(
         (m: any) =>
-          String(m.region).trim().toLowerCase() === normRegion &&
+          (String(m.region).trim().toLowerCase() === normRegion || ["global", "all", ""].includes(String(m.region).trim().toLowerCase())) &&
           !m.storeId &&
           String(m.supervisorId || "").trim() === normSup,
       );
