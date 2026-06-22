@@ -8,7 +8,8 @@ import { collection, query, onSnapshot, doc, setDoc, updateDoc, serverTimestamp,
 export function useAlerts(
   user: User | null,
   showToast: (msg: string, type?: 'success' | 'error') => void,
-  isFirebaseAuthenticated: boolean
+  isFirebaseAuthenticated: boolean,
+  isActive: boolean = false
 ) {
   const [activeAlerts, setActiveAlerts] = useState<ActiveAlert[]>([]);
   const [alertLogs, setAlertLogs] = useState<AlertLog[]>([]);
@@ -263,10 +264,10 @@ export function useAlerts(
     
     const startListener = () => {
       try {
-        const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+        const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
         const q = query(
           collection(db, 'push_queue'),
-          where('timestamp', '>=', twoHoursAgo)
+          where('timestamp', '>=', thirtyMinutesAgo)
         );
         unsubscribe = onSnapshot(q, (snapshot) => {
           snapshot.docChanges().forEach((change) => {
@@ -480,7 +481,7 @@ export function useAlerts(
 
   // Firestore Real-time Sync for Alerts
   useEffect(() => {
-    if (!user || !isFirebaseAuthenticated) return;
+    if (!user || !isFirebaseAuthenticated || !isActive) return;
 
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     const alertsRef = collection(db, 'alerts');
