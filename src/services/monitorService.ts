@@ -13,6 +13,9 @@ let isAlertsCacheInitialized = false;
 let cachedConfig: any = {};
 let cachedTokensData: any[] = [];
 let lastConfigTokenFetchTime = 0;
+let lastWhatsappQueueCheckTime = 0;
+let lastCleanupTime = 0;
+let lastOOSArchiveTime = 0;
 
 const normalizeStoreId = (id: string | number | null | undefined): string => {
   if (id === null || id === undefined) return "";
@@ -63,9 +66,9 @@ export async function runMonitorTick(db: any, messaging: any) {
       console.log(`[Monitor] Loaded ${processedOOSKeys.size} recent OOS keys into memory.`);
     }
     
-    // Refresh config and tokens every 5 minutes instead of every minute (saves massive quota limit)
+    // Refresh config and tokens every 10 minutes (saves massive quota limit)
     const nowTime = Date.now();
-    if (nowTime - lastConfigTokenFetchTime > 5 * 60 * 1000) {
+    if (nowTime - lastConfigTokenFetchTime > 10 * 60 * 1000) {
       console.log(`[Monitor DEBUG] Refreshing config and fcm_tokens from Firebase...`);
       const configDoc = await db.collection('system').doc('config').get();
       cachedConfig = configDoc.exists ? configDoc.data() : {};
@@ -422,6 +425,7 @@ export async function runMonitorTick(db: any, messaging: any) {
             orderCreatedAt: order.created_at || "",
             photoUrl: item.photo_url || "",
             pickerName: item.picker_name || item.picked_by || item.user_name || "System Detected",
+            whatsappSent: false,
             updatedAt: new Date()
           });
 
@@ -477,8 +481,9 @@ export async function runMonitorTick(db: any, messaging: any) {
     const oneHourAgo = new Date(Date.now() - 1 * 60 * 60 * 1000);
     const oneHourAgoISO = oneHourAgo.toISOString();
     
-    // Cleanup: Delete alerts older than 1 hour (Run occasionally to save quota)
-    if (Math.random() < 0.05) {
+    // Cleanup: Delete alerts older than 1 hour (Run every 6 hours to save quota)
+    if (nowTime - lastCleanupTime > 6 * 60 * 60 * 1000) {
+      lastCleanupTime = nowTime;
       const oldAlertsSnap = await db.collection('alerts')
         .where('timestamp', '<', oneHourAgoISO)
         .limit(200)
@@ -667,16 +672,21 @@ export async function runMonitorTick(db: any, messaging: any) {
     // 8. Automated WhatsApp OOS Queue Processor
     try {
       if (config.whatsappOosEnabled && config.whatsappApiUrl && config.whatsappInstanceName && config.whatsappApiKey) {
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
+        // Only check the queue every 5 minutes instead of every 60 seconds to save thousands of Firebase reads
+        if (nowTime - lastWhatsappQueueCheckTime > 5 * 60 * 1000) {
+          lastWhatsappQueueCheckTime = nowTime;
+          
+          const todayStart = new Date();
+          todayStart.setHours(0, 0, 0, 0);
 
-        // Fetch OOS items from today that haven't been sent
-        const oosSnap = await db.collection("oos_history")
-          .where("updatedAt", ">=", todayStart)
-          .where("whatsappSent", "!=", true)
-          .get();
+          // Fetch OOS items from today that haven't been sent
+          // Using == false is 2x cheaper than != true in Firestore
+          const oosSnap = await db.collection("oos_history")
+            .where("updatedAt", ">=", todayStart)
+            .where("whatsappSent", "==", false)
+            .get();
 
-        const mappings = config.whatsappRegionMappings || [];
+          const mappings = config.whatsappRegionMappings || [];
 
         for (const docSnap of oosSnap.docs) {
           const oosData = docSnap.data();
@@ -766,17 +776,18 @@ export async function runMonitorTick(db: any, messaging: any) {
               }
             }
           } else {
-             // If no mapping found, mark as error so we don't spam trying to send it
              await docSnap.ref.update({ whatsappSent: true, whatsappError: 'No mapping found for store/region' });
           }
         }
+        } // Closing brace for the time check
       }
-    } catch (e) {
-      console.error("[WhatsApp Auto] Queue processor error:", e);
+    } catch (err) {
+      console.error("[Monitor] WhatsApp Auto error:", err);
     }
     
-    // Automatically archive old OOS records older than 24 hours to keep free tier clean (5% chance per min ~ approx once per 20 mins)
-    if (Math.random() < 0.05) {    
+    // 9. Archive old OOS records (> 24 hours)
+    if (nowTime - lastOOSArchiveTime > 6 * 60 * 60 * 1000) {
+      lastOOSArchiveTime = nowTime;
       await archiveOldOOS(db);
     }
     
