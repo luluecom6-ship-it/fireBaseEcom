@@ -111,7 +111,7 @@ export default function App() {
     minimizedAlerts, setMinimizedAlerts, expandedAlertId, setExpandedAlertId,
     adminHiddenAlerts, requestNotificationPermission, testAlert, testBuzzer,
     lastBroadcast, setLastBroadcast
-  } = useAlerts(user, showToast, isFirebaseAuthenticated);
+  } = useAlerts(user, showToast, isFirebaseAuthenticated, page === "alerts");
 
   const { 
     escalationRules, setEscalationRules, maxImages, setMaxImages, 
@@ -132,7 +132,7 @@ export default function App() {
     saveSystemConfig, isSavingConfig 
   } = useSystemConfig(user, showToast, isFirebaseAuthenticated);
 
-  const { staffStatus } = useStaffStatus(user, isFirebaseAuthenticated);
+  const { staffStatus } = useStaffStatus(user, isFirebaseAuthenticated, 'All', page === "dashboard");
 
   const { oosItems, loading: oosLoading, refetch: refetchOOS } = useOOSHistory(user, page === "oos-history");
 
