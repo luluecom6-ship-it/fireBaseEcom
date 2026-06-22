@@ -356,7 +356,7 @@ async function startServer() {
   app.get("/api/oos-debug", async (req, res) => {
     try {
       if (!admin.apps.length) return res.status(500).json({ error: "No DB" });
-      const snap = await getFirestore().collection("oos_history").get();
+      const snap = await getFirestore().collection("oos_history").limit(50).get();
       res.json({ count: snap.size, data: snap.docs.map((d) => d.data()) });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
