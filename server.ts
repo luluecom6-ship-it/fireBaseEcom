@@ -948,7 +948,8 @@ async function startServer() {
               const instanceToUse =
                 mapping.instanceName || sysData.whatsappInstanceName;
               if (instanceToUse) {
-                const waMessage = `*Out of Stock Alert!*\nStore: ${item.storeId}\nOrder No: ${item.orderId || "N/A"}\nSKU: ${item.sku}\nItem Name: ${item.itemName}\nQty: 0`;
+                const storeDisplayName = item.storeName ? item.storeName : item.storeId;
+                const waMessage = `*Out of Stock Alert!*\nStore: ${item.storeId}\nOrder No: ${item.orderId || "N/A"}\nSKU: ${item.sku}\nItem Name: ${item.itemName}\nStore Name: ${storeDisplayName}`;
 
                 let url = `${sysData.whatsappApiUrl.replace(/\/$/, "")}/message/sendText/${instanceToUse}`;
                 let bodyParams: any = {
