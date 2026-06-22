@@ -12,33 +12,26 @@ export interface UserStatus extends User {
 export function useStaffStatus(
   user: User | null, 
   isFirebaseAuthenticated: boolean,
-  selectedStoreId: string = 'All'
+  selectedStoreId: string = 'All',
+  isActive: boolean = false
 ) {
   const [allStaffStatus, setAllStaffStatus] = useState<UserStatus[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user || !isFirebaseAuthenticated) {
+    if (!user || !isFirebaseAuthenticated || !isActive) {
       setLoading(false);
       return;
     }
 
     const role = String(user.role || "").toLowerCase().trim();
-    if (role !== 'admin' && role !== 'operator' && role !== 'supervisor') {
+    if (role !== 'admin') {
       setAllStaffStatus([]);
       setLoading(false);
       return;
     }
 
     let constraints: any[] = [];
-    
-    // Security: Restrict regional access for supervisors
-    if (role === 'supervisor') {
-      const userRegion = String(user.region || "").trim();
-      if (userRegion && userRegion.toLowerCase() !== 'all') {
-        constraints.push(where('region', '==', userRegion));
-      }
-    }
 
     // Notice: We NO LONGER filter by selectedStoreId in the Firebase query.
     // This prevents the hook from deleting and re-creating the massive 'presence' 
