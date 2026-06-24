@@ -14,6 +14,7 @@ import {
 } from '../types';
 import { Header } from '../components/layout/Header';
 import { STATUSES, AGE_BUCKETS } from '../constants';
+import { compressImage } from '../utils/imageUtils';
 import { fixImageUrl, getImages } from '../utils/formatters';
 import { SmartImage } from '../components/layout/common/SmartImage';
 import { cn } from '../lib/utils';
@@ -220,7 +221,7 @@ export const Admin: React.FC<AdminProps> = ({
     }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 2 * 1024 * 1024) {
@@ -228,8 +229,11 @@ export const Admin: React.FC<AdminProps> = ({
         return;
       }
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setUserForm(prev => ({ ...prev, profileImage: reader.result as string }));
+      reader.onloadend = async () => {
+        const base64 = reader.result as string;
+        // Compress to 200px max width, JPEG 0.7 quality to keep under Firestore 1MB doc limit
+        const compressed = await compressImage(base64, 200, 0.7);
+        setUserForm(prev => ({ ...prev, profileImage: compressed }));
       };
       reader.readAsDataURL(file);
     }
@@ -788,7 +792,7 @@ export const Admin: React.FC<AdminProps> = ({
                   <div className="flex items-center gap-3 sm:gap-4">
                     <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 font-black text-sm sm:text-base overflow-hidden border border-slate-50">
                       {u.profileImage ? (
-                        <img src={u.profileImage} className="w-full h-full object-cover" alt={u.name} />
+                        <img src={u.profileImage} className="w-full h-full object-cover" alt={u.name} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                       ) : (
                         u.name.charAt(0)
                       )}
@@ -931,7 +935,7 @@ export const Admin: React.FC<AdminProps> = ({
                           <div className="flex items-center gap-3">
                             <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-sm overflow-hidden border border-slate-100">
                               {u.profileImage ? (
-                                <img src={u.profileImage} className="w-full h-full object-cover" alt={u.name} />
+                                <img src={u.profileImage} className="w-full h-full object-cover" alt={u.name} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                               ) : (
                                 u.name.charAt(0)
                               )}

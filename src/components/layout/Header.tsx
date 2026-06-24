@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { ChevronLeft, Download, Volume2, VolumeX, User as UserIcon, Camera, Loader2 } from 'lucide-react';
 import { User } from '../../types';
 import { cn } from '../../lib/utils';
+import { compressImage } from '../../utils/imageUtils';
 
 interface HeaderProps {
   title: string;
@@ -40,7 +41,9 @@ export const Header: React.FC<HeaderProps> = ({
       const reader = new FileReader();
       reader.onloadend = async () => {
         const base64 = reader.result as string;
-        const res = await onUpdateProfileImage(base64);
+        // Compress to 200px max width, JPEG 0.7 quality to keep under Firestore 1MB doc limit
+        const compressed = await compressImage(base64, 200, 0.7);
+        const res = await onUpdateProfileImage(compressed);
         if (!res.success) {
           alert(res.message || "Failed to update profile image");
         }
@@ -116,6 +119,7 @@ export const Header: React.FC<HeaderProps> = ({
                   alt={user.name} 
                   className="w-full h-full object-cover" 
                   referrerPolicy="no-referrer"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                 />
               ) : (
                 <UserIcon size={14} className="text-white/40" />
