@@ -128,7 +128,8 @@ export default function App() {
     whatsappApiUrl, setWhatsappApiUrl,
     whatsappInstanceName, setWhatsappInstanceName,
     whatsappApiKey, setWhatsappApiKey,
-    whatsappRegionMappings, setWhatsappRegionMappings,
+    whatsappAutoOosMappings, setWhatsappAutoOosMappings,
+    whatsappManualStoreMappings, setWhatsappManualStoreMappings,
     saveSystemConfig, isSavingConfig 
   } = useSystemConfig(user, showToast, isFirebaseAuthenticated);
 
@@ -537,8 +538,10 @@ export default function App() {
             setWhatsappInstanceName={setWhatsappInstanceName}
             whatsappApiKey={whatsappApiKey}
             setWhatsappApiKey={setWhatsappApiKey}
-            whatsappRegionMappings={whatsappRegionMappings}
-            setWhatsappRegionMappings={setWhatsappRegionMappings}
+            whatsappAutoOosMappings={whatsappAutoOosMappings}
+            setWhatsappAutoOosMappings={setWhatsappAutoOosMappings}
+            whatsappManualStoreMappings={whatsappManualStoreMappings}
+            setWhatsappManualStoreMappings={setWhatsappManualStoreMappings}
             staffStatus={staffStatus}
             scheduledThreshold={scheduledThreshold}
             setScheduledThreshold={setScheduledThreshold}

@@ -51,8 +51,10 @@ interface AdminProps {
   setWhatsappInstanceName?: (val: string) => void;
   whatsappApiKey?: string;
   setWhatsappApiKey?: (val: string) => void;
-  whatsappRegionMappings?: {region: string, groupJid: string, storeId?: string, supervisorId?: string, instanceName?: string}[];
-  setWhatsappRegionMappings?: (val: {region: string, groupJid: string, storeId?: string, supervisorId?: string, instanceName?: string}[]) => void;
+  whatsappAutoOosMappings?: {region: string, groupJid: string, instanceName?: string}[];
+  setWhatsappAutoOosMappings?: (val: {region: string, groupJid: string, instanceName?: string}[]) => void;
+  whatsappManualStoreMappings?: {storeId: string, groupJid: string, instanceName?: string}[];
+  setWhatsappManualStoreMappings?: (val: {storeId: string, groupJid: string, instanceName?: string}[]) => void;
   staffStatus: any[];
   scheduledThreshold: number;
   setScheduledThreshold: (num: number) => void;
@@ -116,8 +118,10 @@ export const Admin: React.FC<AdminProps> = ({
   setWhatsappInstanceName,
   whatsappApiKey,
   setWhatsappApiKey,
-  whatsappRegionMappings,
-  setWhatsappRegionMappings,
+  whatsappAutoOosMappings,
+  setWhatsappAutoOosMappings,
+  whatsappManualStoreMappings,
+  setWhatsappManualStoreMappings,
   staffStatus
 }) => {
   const getTodayStr = () => {
@@ -1564,50 +1568,44 @@ export const Admin: React.FC<AdminProps> = ({
                         </div>
                       </div>
                       
-                      <div className="space-y-3">
-                        {(whatsappRegionMappings || []).map((mapping, idx) => (
-                          <div key={idx} className="flex flex-col gap-2 bg-white p-3 rounded-xl border border-slate-200">
-                            <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center w-full">
-                              <select 
-                                value={mapping.region}
-                                onChange={(e) => {
-                                  const newMappings = [...(whatsappRegionMappings || [])];
-                                  newMappings[idx].region = e.target.value;
-                                  setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
-                                }}
-                                className="w-full sm:w-1/4 shrink-0 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
-                              >
-                                <option value="">Select Region...</option>
-                                {availableRegions.map(reg => <option key={reg} value={reg}>{reg}</option>)}
-                              </select>
+                      <div className="space-y-6">
+                        {/* 1. Automated OOS Mappings (Region) */}
+                        <div className="space-y-3 border border-slate-200 rounded-xl p-4 bg-slate-50/50">
+                          <h5 className="font-bold text-slate-700 text-sm flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                            Automated OOS Mappings (Region Wise)
+                          </h5>
+                          <p className="text-xs text-slate-500 mb-2">Used by the background monitor for automated Out-Of-Stock alerts.</p>
+                          {(whatsappAutoOosMappings || []).map((mapping, idx) => (
+                            <div key={`auto_${idx}`} className="flex flex-col gap-2 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                              <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center w-full">
+                                <select 
+                                  value={mapping.region}
+                                  onChange={(e) => {
+                                    const newMappings = [...(whatsappAutoOosMappings || [])];
+                                    newMappings[idx].region = e.target.value;
+                                    setWhatsappAutoOosMappings && setWhatsappAutoOosMappings(newMappings);
+                                  }}
+                                  className="w-full sm:w-1/3 shrink-0 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                                >
+                                  <option value="">Select Region...</option>
+                                  <option value="All">All Regions</option>
+                                  {availableRegions.map(reg => <option key={reg} value={reg}>{reg}</option>)}
+                                </select>
+                                <input
+                                  type="text"
+                                  value={mapping.instanceName || ''}
+                                  onChange={(e) => {
+                                    const newMappings = [...(whatsappAutoOosMappings || [])];
+                                    newMappings[idx].instanceName = e.target.value;
+                                    setWhatsappAutoOosMappings && setWhatsappAutoOosMappings(newMappings);
+                                  }}
+                                  placeholder="Instance Name (Optional override)"
+                                  className="w-full sm:w-2/3 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                                />
+                              </div>
 
-                              <input
-                                type="text"
-                                value={mapping.storeId || ''}
-                                onChange={(e) => {
-                                  const newMappings = [...(whatsappRegionMappings || [])];
-                                  newMappings[idx].storeId = e.target.value;
-                                  setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
-                                }}
-                                placeholder="Store ID (Optional)"
-                                className="w-full sm:w-1/4 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
-                              />
-
-                              <input
-                                type="text"
-                                value={mapping.supervisorId || ''}
-                                onChange={(e) => {
-                                  const newMappings = [...(whatsappRegionMappings || [])];
-                                  newMappings[idx].supervisorId = e.target.value;
-                                  setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
-                                }}
-                                placeholder="Supervisor ID (Optional)"
-                                className="w-full sm:w-1/4 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
-                              />
-                            </div>
-
-                            <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center w-full">
-                              <div className="flex-1 flex gap-2 w-full sm:w-auto">
+                              <div className="flex gap-2 items-center w-full">
                                 <div className="flex-1 relative">
                                   {(() => {
                                     const rowInstance = mapping.instanceName || whatsappInstanceName || '';
@@ -1617,11 +1615,11 @@ export const Admin: React.FC<AdminProps> = ({
                                         <select
                                           value={mapping.groupJid || ""}
                                           onChange={(e) => {
-                                            const newMappings = [...(whatsappRegionMappings || [])];
+                                            const newMappings = [...(whatsappAutoOosMappings || [])];
                                             newMappings[idx].groupJid = e.target.value;
-                                            setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                                            setWhatsappAutoOosMappings && setWhatsappAutoOosMappings(newMappings);
                                           }}
-                                          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 appearance-none pr-8"
+                                          className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
                                         >
                                           <option value="">Select WhatsApp Group</option>
                                           {groupsForInstance.map(g => <option key={g.id} value={g.id}>{g.subject} ({g.id})</option>)}
@@ -1631,12 +1629,12 @@ export const Admin: React.FC<AdminProps> = ({
                                           type="text" 
                                           value={mapping.groupJid || ""}
                                           onChange={(e) => {
-                                            const newMappings = [...(whatsappRegionMappings || [])];
+                                            const newMappings = [...(whatsappAutoOosMappings || [])];
                                             newMappings[idx].groupJid = e.target.value;
-                                            setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                                            setWhatsappAutoOosMappings && setWhatsappAutoOosMappings(newMappings);
                                           }}
                                           placeholder="WhatsApp Group JID"
-                                          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500"
+                                          className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
                                         />
                                       )
                                     );
@@ -1644,48 +1642,132 @@ export const Admin: React.FC<AdminProps> = ({
                                 </div>
                                 <button
                                   onClick={() => handleFetchGroups(mapping.instanceName || whatsappInstanceName)}
-                                  title="Fetch Groups for this Instance"
-                                  className="h-[38px] px-3 bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 rounded-xl flex items-center justify-center transition-colors shrink-0"
+                                  title="Fetch Groups"
+                                  className="p-2 bg-blue-50 text-blue-600 rounded-lg border border-blue-200 hover:bg-blue-100 shrink-0"
                                 >
                                   <DownloadCloud size={14} />
                                 </button>
                                 <button 
                                   onClick={() => {
-                                    const newMappings = [...(whatsappRegionMappings || [])];
+                                    const newMappings = [...(whatsappAutoOosMappings || [])];
                                     newMappings.splice(idx, 1);
-                                    setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                                    setWhatsappAutoOosMappings && setWhatsappAutoOosMappings(newMappings);
                                   }}
-                                  className="h-[38px] w-[38px] bg-red-50 hover:bg-red-100 text-red-500 rounded-xl flex items-center justify-center transition-colors shrink-0"
+                                  className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 shrink-0"
                                 >
                                   <X size={14} />
                                 </button>
                               </div>
-
-                              <input
-                                type="text"
-                                value={mapping.instanceName || ''}
-                                onChange={(e) => {
-                                  const newMappings = [...(whatsappRegionMappings || [])];
-                                  newMappings[idx].instanceName = e.target.value;
-                                  setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
-                                }}
-                                placeholder="Evolution Instance (Optional)"
-                                className="w-full sm:w-1/3 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
-                              />
-                              
-
                             </div>
-                          </div>
-                        ))}
-                        
-                        <button 
-                          onClick={() => {
-                            setWhatsappRegionMappings && setWhatsappRegionMappings([...(whatsappRegionMappings || []), {region: '', groupJid: '', storeId: '', supervisorId: '', instanceName: ''}]);
-                          }}
-                          className="mt-2 w-full sm:w-auto px-4 py-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
-                        >
-                          <Plus size={14} /> Add Mapping
-                        </button>
+                          ))}
+                          <button 
+                            onClick={() => {
+                              setWhatsappAutoOosMappings && setWhatsappAutoOosMappings([...(whatsappAutoOosMappings || []), {region: '', groupJid: '', instanceName: ''}]);
+                            }}
+                            className="mt-2 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                          >
+                            <Plus size={14} /> Add Region Mapping
+                          </button>
+                        </div>
+
+                        {/* 2. Manual Store Mappings (Store Wise) */}
+                        <div className="space-y-3 border border-slate-200 rounded-xl p-4 bg-slate-50/50">
+                          <h5 className="font-bold text-slate-700 text-sm flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                            Manual Push Mappings (Store Wise)
+                          </h5>
+                          <p className="text-xs text-slate-500 mb-2">Used when clicking the manual WhatsApp button in Order Details.</p>
+                          {(whatsappManualStoreMappings || []).map((mapping, idx) => (
+                            <div key={`manual_${idx}`} className="flex flex-col gap-2 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                              <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center w-full">
+                                <input
+                                  type="text"
+                                  value={mapping.storeId || ''}
+                                  onChange={(e) => {
+                                    const newMappings = [...(whatsappManualStoreMappings || [])];
+                                    newMappings[idx].storeId = e.target.value;
+                                    setWhatsappManualStoreMappings && setWhatsappManualStoreMappings(newMappings);
+                                  }}
+                                  placeholder="Store ID (Exact match required)"
+                                  className="w-full sm:w-1/3 shrink-0 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-purple-500"
+                                />
+                                <input
+                                  type="text"
+                                  value={mapping.instanceName || ''}
+                                  onChange={(e) => {
+                                    const newMappings = [...(whatsappManualStoreMappings || [])];
+                                    newMappings[idx].instanceName = e.target.value;
+                                    setWhatsappManualStoreMappings && setWhatsappManualStoreMappings(newMappings);
+                                  }}
+                                  placeholder="Instance Name (Optional override)"
+                                  className="w-full sm:w-2/3 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-purple-500"
+                                />
+                              </div>
+
+                              <div className="flex gap-2 items-center w-full">
+                                <div className="flex-1 relative">
+                                  {(() => {
+                                    const rowInstance = mapping.instanceName || whatsappInstanceName || '';
+                                    const groupsForInstance = fetchedGroupsByInstance[rowInstance] || [];
+                                    return (
+                                      groupsForInstance.length > 0 ? (
+                                        <select
+                                          value={mapping.groupJid || ""}
+                                          onChange={(e) => {
+                                            const newMappings = [...(whatsappManualStoreMappings || [])];
+                                            newMappings[idx].groupJid = e.target.value;
+                                            setWhatsappManualStoreMappings && setWhatsappManualStoreMappings(newMappings);
+                                          }}
+                                          className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-purple-500"
+                                        >
+                                          <option value="">Select WhatsApp Group</option>
+                                          {groupsForInstance.map(g => <option key={g.id} value={g.id}>{g.subject} ({g.id})</option>)}
+                                        </select>
+                                      ) : (
+                                        <input 
+                                          type="text" 
+                                          value={mapping.groupJid || ""}
+                                          onChange={(e) => {
+                                            const newMappings = [...(whatsappManualStoreMappings || [])];
+                                            newMappings[idx].groupJid = e.target.value;
+                                            setWhatsappManualStoreMappings && setWhatsappManualStoreMappings(newMappings);
+                                          }}
+                                          placeholder="WhatsApp Group JID"
+                                          className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-purple-500"
+                                        />
+                                      )
+                                    );
+                                  })()}
+                                </div>
+                                <button
+                                  onClick={() => handleFetchGroups(mapping.instanceName || whatsappInstanceName)}
+                                  title="Fetch Groups"
+                                  className="p-2 bg-purple-50 text-purple-600 rounded-lg border border-purple-200 hover:bg-purple-100 shrink-0"
+                                >
+                                  <DownloadCloud size={14} />
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    const newMappings = [...(whatsappManualStoreMappings || [])];
+                                    newMappings.splice(idx, 1);
+                                    setWhatsappManualStoreMappings && setWhatsappManualStoreMappings(newMappings);
+                                  }}
+                                  className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 shrink-0"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                          <button 
+                            onClick={() => {
+                              setWhatsappManualStoreMappings && setWhatsappManualStoreMappings([...(whatsappManualStoreMappings || []), {storeId: '', groupJid: '', instanceName: ''}]);
+                            }}
+                            className="mt-2 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                          >
+                            <Plus size={14} /> Add Store Mapping
+                          </button>
+                        </div>
                       </div>
                     </div>
 

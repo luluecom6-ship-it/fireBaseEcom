@@ -25,7 +25,8 @@ export function useSystemConfig(
   const [whatsappApiUrl, setWhatsappApiUrl] = useState('');
   const [whatsappInstanceName, setWhatsappInstanceName] = useState('');
   const [whatsappApiKey, setWhatsappApiKey] = useState('');
-  const [whatsappRegionMappings, setWhatsappRegionMappings] = useState<{region: string, groupJid: string, storeId?: string, supervisorId?: string, instanceName?: string}[]>([]);
+  const [whatsappAutoOosMappings, setWhatsappAutoOosMappings] = useState<{region: string, groupJid: string, instanceName?: string}[]>([]);
+  const [whatsappManualStoreMappings, setWhatsappManualStoreMappings] = useState<{storeId: string, groupJid: string, instanceName?: string}[]>([]);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   // Use Firestore for real-time config
@@ -78,8 +79,11 @@ export function useSystemConfig(
         if (typeof data.whatsappApiKey === 'string') {
           setWhatsappApiKey(data.whatsappApiKey);
         }
-        if (Array.isArray(data.whatsappRegionMappings)) {
-          setWhatsappRegionMappings(data.whatsappRegionMappings);
+        if (Array.isArray(data.whatsappAutoOosMappings)) {
+          setWhatsappAutoOosMappings(data.whatsappAutoOosMappings);
+        }
+        if (Array.isArray(data.whatsappManualStoreMappings)) {
+          setWhatsappManualStoreMappings(data.whatsappManualStoreMappings);
         }
       } else {
         // Default rules if nothing in Firestore yet
@@ -102,7 +106,8 @@ export function useSystemConfig(
         setWhatsappApiUrl('');
         setWhatsappInstanceName('');
         setWhatsappApiKey('');
-        setWhatsappRegionMappings([]);
+        setWhatsappAutoOosMappings([]);
+        setWhatsappManualStoreMappings([]);
       }
     }, (error) => {
       console.error("Firestore config error:", error);
@@ -141,7 +146,8 @@ export function useSystemConfig(
         whatsappApiUrl,
         whatsappInstanceName,
         whatsappApiKey,
-        whatsappRegionMappings,
+        whatsappAutoOosMappings,
+        whatsappManualStoreMappings,
         updatedAt: new Date().toISOString()
       }, { merge: true }); // Use merge: true to avoid clobbering unseen config keys
       
@@ -182,7 +188,8 @@ export function useSystemConfig(
     whatsappApiUrl,
     whatsappInstanceName,
     whatsappApiKey,
-    whatsappRegionMappings,
+    whatsappAutoOosMappings,
+    whatsappManualStoreMappings,
     showToast, 
     user
   ]);
@@ -213,7 +220,10 @@ export function useSystemConfig(
     whatsappApiUrl, setWhatsappApiUrl,
     whatsappInstanceName, setWhatsappInstanceName,
     whatsappApiKey, setWhatsappApiKey,
-    whatsappRegionMappings, setWhatsappRegionMappings,
+    whatsappAutoOosMappings,
+    setWhatsappAutoOosMappings,
+    whatsappManualStoreMappings,
+    setWhatsappManualStoreMappings,
     saveSystemConfig,
     isSavingConfig 
   };

@@ -249,8 +249,8 @@ export function detectAlerts(
       });
 
       if (matchingRules.length > 0) {
-        // Dedup by orderId + status + bucket. 
-        const alertKey = `QUICK|${item.orderID}|${status}|${bucket}`.toLowerCase().trim();
+        // Dedup by orderId + status (EXCLUDE bucket so we can update existing alerts when bucket changes)
+        const alertKey = `QUICK|${item.orderID}|${status}`.toLowerCase().trim();
         
         if (!existingAlertIds.has(alertKey)) {
           results.push({

@@ -416,6 +416,7 @@ export async function runMonitorTick(db: any, messaging: any) {
             sku,
             itemName: item.item_name || "",
             storeId,
+            storeName: rawStoreName,
             quantity: item.quantity || 0,
             foundQty: item.found_qty || 0,
             location: item.location || "",
@@ -686,13 +687,16 @@ export async function runMonitorTick(db: any, messaging: any) {
             .where("whatsappSent", "==", false)
             .get();
 
-          const mappings = config.whatsappRegionMappings || [];
+          const mappings = config.whatsappAutoOosMappings || [];
 
         for (const docSnap of oosSnap.docs) {
           const oosData = docSnap.data();
           
           // Double-check: skip if already sent (race condition guard)
-          if (oosData.whatsappSent) continue;
+          if (oosData.whatsappSent === true) {
+            processedOOSKeys.add(`wa_${docSnap.id}`);
+            continue;
+          }
 
           // Skip if already processed in-memory during this server session
           if (processedOOSKeys.has(`wa_${docSnap.id}`)) continue;
@@ -711,12 +715,9 @@ export async function runMonitorTick(db: any, messaging: any) {
           }
 
           let mapping = null;
-          // For automated alerts, Admin requested a SINGLE regional group. 
-          // Find mapping that exactly matches the region, but does NOT have a Store ID or Supervisor ID!
+          // Find automated mapping that exactly matches the region (or Global)
           mapping = mappings.find((m: any) => 
-            (String(m.region).trim().toLowerCase() === normRegion || ["global", "all", ""].includes(String(m.region).trim().toLowerCase())) &&
-            !String(m.storeId || "").trim() &&
-            !String(m.supervisorId || "").trim()
+            String(m.region).trim().toLowerCase() === normRegion || ["global", "all", ""].includes(String(m.region).trim().toLowerCase())
           );
 
           if (mapping && mapping.groupJid) {
@@ -725,7 +726,8 @@ export async function runMonitorTick(db: any, messaging: any) {
               // PRE-MARK as sent BEFORE calling the API to prevent race conditions
               await docSnap.ref.update({ whatsappSent: true, whatsappSentAt: new Date().toISOString() });
 
-              const waMessage = `*Out of Stock Alert!*\nStore: ${oosData.storeId}\nOrder No: ${oosData.orderId || "N/A"}\nSKU: ${oosData.sku}\nItem Name: ${oosData.itemName}\nQty: 0`;
+              const storeDisplayName = oosData.storeName ? oosData.storeName : oosData.storeId;
+              const waMessage = `*Out of Stock Alert!*\nStore: ${oosData.storeId}\nOrder No: ${oosData.orderId || "N/A"}\nSKU: ${oosData.sku}\nItem Name: ${oosData.itemName}\nStore Name: ${storeDisplayName}`;
 
               let url = `${config.whatsappApiUrl.replace(/\/$/, "")}/message/sendText/${instanceToUse}`;
               let bodyParams: any = {
