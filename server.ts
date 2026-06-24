@@ -441,75 +441,12 @@ async function startServer() {
       res.status(500).json({ error: e.message });
     }
   });
-  const resolveWhatsappMapping = (
-    mappings: any[],
-    alertRegion: string,
-    storeId: string,
-    supervisorId: string,
-  ) => {
-    const normRegion = String(alertRegion || "")
-      .trim()
-      .toLowerCase();
-    const normStore = String(storeId || "").trim();
-    const normSup = String(supervisorId || "").trim();
-
-    let mapping = null;
-
-    if (normStore && normSup) {
-      mapping = mappings.find(
-        (m: any) =>
-          (String(m.region).trim().toLowerCase() === normRegion || ["global", "all", ""].includes(String(m.region).trim().toLowerCase())) &&
-          String(m.storeId || "").trim() === normStore &&
-          String(m.supervisorId || "").trim() === normSup,
-      );
-    }
-    if (!mapping && normStore) {
-      mapping = mappings.find(
-        (m: any) =>
-          (String(m.region).trim().toLowerCase() === normRegion || ["global", "all", ""].includes(String(m.region).trim().toLowerCase())) &&
-          String(m.storeId || "").trim() === normStore &&
-          !m.supervisorId,
-      );
-    }
-    if (!mapping && normSup) {
-      mapping = mappings.find(
-        (m: any) =>
-          (String(m.region).trim().toLowerCase() === normRegion || ["global", "all", ""].includes(String(m.region).trim().toLowerCase())) &&
-          !m.storeId &&
-          String(m.supervisorId || "").trim() === normSup,
-      );
-    }
-    if (!mapping && normRegion) {
-      mapping = mappings.find(
-        (m: any) =>
-          String(m.region).trim().toLowerCase() === normRegion &&
-          !m.storeId &&
-          !m.supervisorId,
-      );
-    }
-    if (!mapping) {
-      mapping = mappings.find(
-        (m: any) =>
-          ["global", "all", ""].includes(
-            String(m.region).trim().toLowerCase(),
-          ) &&
-          !m.storeId &&
-          !m.supervisorId,
-      );
-    }
-    if (!mapping) {
-      mapping = mappings.find((m: any) =>
-        ["global", "all", ""].includes(String(m.region).trim().toLowerCase()),
-      );
-    }
-    return mapping;
-  };
 
   app.post("/api/admin/whatsapp/manual-item-push", async (req, res) => {
     try {
       if (!db)
         return res.status(500).json({ error: "Missing Firebase features" });
-      const { order, item, requesterId, requesterRole, userRegion } = req.body;
+      const { order, item, requesterId, requesterRole } = req.body;
 
       if (
         !item ||
@@ -517,45 +454,6 @@ async function startServer() {
         !["admin", "supervisor", "operator"].includes(requesterRole)
       ) {
         return res.status(403).json({ error: "Unauthorized or missing data" });
-      }
-
-      // Fetch region mapping
-      let alertRegion = "";
-      try {
-        const adminSnap = await db
-          .collection("app_config")
-          .doc("admin_control")
-          .get();
-        if (adminSnap.exists) {
-          const adminData = adminSnap.data() || {};
-          const regions = adminData.regions || [];
-          const storeRegionObj = regions.find(
-            (r: any) =>
-              Array.isArray(r.stores) &&
-              r.stores.includes(item.storeId || order.store_id),
-          );
-          if (storeRegionObj && storeRegionObj.name) {
-            alertRegion = storeRegionObj.name;
-          } else {
-            const storeRegionMapping = regions.find(
-              (r: any) =>
-                String(r.storeId || r.StoreID || "").trim() ===
-                String(item.storeId || order.store_id).trim(),
-            );
-            if (
-              storeRegionMapping &&
-              (storeRegionMapping.region || storeRegionMapping.Region)
-            ) {
-              alertRegion =
-                storeRegionMapping.region || storeRegionMapping.Region;
-            }
-          }
-        }
-      } catch (e) {}
-
-      // Fallback to the requester's own assigned region if store mapping failed
-      if (!alertRegion && userRegion && String(userRegion).toLowerCase() !== 'all') {
-        alertRegion = userRegion;
       }
 
       const sysConfigSnap = await db.collection("system").doc("config").get();
@@ -567,25 +465,14 @@ async function startServer() {
           .json({ error: "WhatsApp integration is not fully configured" });
       }
 
-      const mappings = sysData.whatsappRegionMappings || [];
-      let mapping = resolveWhatsappMapping(
-        mappings,
-        alertRegion,
-        item.storeId || order.store_id,
-        requesterId,
-      );
-
-      // Admin/Operator override: If no exact mapping is found, allow them to use any mapping for the store/region, or ANY group to facilitate testing
-      if (!mapping && ['admin', 'operator'].includes(requesterRole)) {
-        const normStore = String(item.storeId || order.store_id).trim();
-        mapping = mappings.find((m: any) => String(m.storeId || "").trim() === normStore) 
-                  || (alertRegion ? mappings.find((m: any) => String(m.region || "").trim().toLowerCase() === String(alertRegion || "").trim().toLowerCase()) : null)
-                  || mappings.find((m: any) => ["global", "all", ""].includes(String(m.region).trim().toLowerCase()))
-                  || mappings.find((m: any) => m.groupJid); // Ultimate failsafe
-      }
+      const mappings = sysData.whatsappManualStoreMappings || [];
+      const normStore = String(item.storeId || order.store_id).trim();
+      
+      // Strict Store-Wise matching only
+      let mapping = mappings.find((m: any) => String(m.storeId || "").trim() === normStore);
 
       if (!mapping) {
-        console.log(`[WhatsApp Debug] Manual Push Failed. ID: ${requesterId}, Role: ${requesterRole}, Store: ${item.storeId || order.store_id}, ComputedRegion: ${alertRegion}`);
+        console.log(`[WhatsApp Debug] Manual Push Failed. ID: ${requesterId}, Role: ${requesterRole}, Store: ${item.storeId || order.store_id}`);
         console.log(`[WhatsApp Debug] Available Mappings:`, JSON.stringify(mappings));
         return res
           .status(400)
@@ -627,7 +514,7 @@ async function startServer() {
           item.photoUrl,
       );
 
-      const captionText = `Hello Team! This is item is unable to trace/find Kindly arrange else we will mark it as OOS.\n\n*Order:* ${order.job_number || item.orderId || "N/A"}\n*Item:* ${item.item_name || item.itemName}\n*SKU:* ${item.sku}\n*Store id:* ${order.store_id || item.storeId}\n*Store Name:* ${order.store_name || ""}`;
+      const captionText = `*Following Item is not able to trace / find it. Kindly arrange at the earliest else will be mark it as OOS if there is no response*\n\n*Order:* ${order.job_number || item.orderId || "N/A"}\n*Item:* ${item.item_name || item.itemName}\n*SKU:* ${item.sku}\n*Store id:* ${order.store_id || item.storeId}\n*Store Name:* ${order.store_name || ""}`;
 
       let url = `${sysData.whatsappApiUrl.replace(/\/$/, "")}/message/sendText/${instanceToUse}`;
       let bodyParams: any = {
@@ -708,7 +595,7 @@ async function startServer() {
         .where("updatedAt", ">=", todayStart)
         .get();
 
-      const mappings = config.whatsappRegionMappings || [];
+      const mappings = config.whatsappAutoOosMappings || [];
       const whatsappOosRegions = config.whatsappOosRegions || ['All'];
       let sent = 0;
       let skipped = 0;
@@ -729,11 +616,9 @@ async function startServer() {
           continue;
         }
 
-        // Find master regional mapping (no storeId, no supervisorId)
+        // Find automated region mapping
         const mapping = mappings.find((m: any) =>
-          (String(m.region).trim().toLowerCase() === normRegion || ["global", "all", ""].includes(String(m.region).trim().toLowerCase())) &&
-          !String(m.storeId || "").trim() &&
-          !String(m.supervisorId || "").trim()
+          String(m.region).trim().toLowerCase() === normRegion || ["global", "all", ""].includes(String(m.region).trim().toLowerCase())
         );
 
         if (!mapping || !mapping.groupJid) {
@@ -933,15 +818,12 @@ async function startServer() {
             sysData.whatsappInstanceName &&
             sysData.whatsappApiKey
           ) {
-            const mappings = sysData.whatsappRegionMappings || [];
+            const mappings = sysData.whatsappAutoOosMappings || [];
 
-            // For automated OOS push, we use the item's storeId.
-            // We may not have a specific supervisor, so we pass empty string for supervisorId.
-            const mapping = resolveWhatsappMapping(
-              mappings,
-              alertRegion,
-              item.storeId,
-              "",
+            // For automated OOS push, find region-based mapping
+            const normRegion = String(alertRegion || "").trim().toLowerCase();
+            const mapping = mappings.find((m: any) =>
+              String(m.region).trim().toLowerCase() === normRegion || ["global", "all", ""].includes(String(m.region).trim().toLowerCase())
             );
 
             if (mapping && mapping.groupJid) {
