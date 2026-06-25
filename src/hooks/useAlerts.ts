@@ -561,7 +561,7 @@ export function useAlerts(
     });
 
     return () => unsubscribe();
-  }, [user, isFirebaseAuthenticated, showSystemNotification, handleFirestoreError]);
+  }, [user, isFirebaseAuthenticated, showSystemNotification, handleFirestoreError, isActive]);
 
   const handleAlertAction = useCallback(async (alert: ActiveAlert, action: 'acknowledge' | 'escalate' | 'hide') => {
     if (action === 'hide') {

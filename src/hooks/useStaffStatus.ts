@@ -121,7 +121,7 @@ export function useStaffStatus(
       unsubUsers();
       unsubPresence();
     };
-  }, [user, isFirebaseAuthenticated]); // Removed selectedStoreId from dependency array
+  }, [user, isFirebaseAuthenticated, isActive]); // Added isActive to dependency array to fix massive quota leak
 
   // Perform UI filtering synchronously in memory to save Firebase reads
   const staffStatus = useMemo(() => {
