@@ -524,7 +524,7 @@ async function startServer() {
           item.photoUrl,
       );
 
-      const captionText = `*Following Item is not able to trace / find it. Kindly arrange at the earliest else will be mark it as OOS if there is no response*\n\n*Order:* ${order.job_number || item.orderId || "N/A"}\n*Item:* ${item.item_name || item.itemName}\n*SKU:* ${item.sku}\n*Store id:* ${normStore}\n*Store Name:* ${order.store_name || ""}`;
+      const captionText = `*Hello Team! Following Item is not able to trace / find it. Kindly arrange at the earliest else will be mark it as OOS if there is no response*\n\n*Order:* ${order.job_number || item.orderId || "N/A"}\n*Item:* ${item.item_name || item.itemName}\n*SKU:* ${item.sku}\n*Store id:* ${normStore}\n*Store Name:* ${order.store_name || ""}`;
 
       let url = `${sysData.whatsappApiUrl.replace(/\/$/, "")}/message/sendText/${instanceToUse}`;
       let bodyParams: any = {
