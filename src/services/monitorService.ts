@@ -776,6 +776,9 @@ export async function runMonitorTick(db: any, messaging: any) {
                 console.error(`[WhatsApp Auto] Send error for SKU ${oosData.sku}:`, sendErr.message);
                 await docSnap.ref.update({ whatsappError: sendErr.message?.slice(0, 100) });
               }
+            } else {
+              // Fix poison pill: mark as sent even if instance is missing
+              await docSnap.ref.update({ whatsappSent: true, whatsappError: 'No WhatsApp instance configured' });
             }
           } else {
              await docSnap.ref.update({ whatsappSent: true, whatsappError: 'No mapping found for store/region' });
