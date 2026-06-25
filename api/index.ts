@@ -641,12 +641,24 @@ async function startServer() {
       }
 
       const mappings = sysData.whatsappManualStoreMappings || [];
-      const normStore = String(item.storeId || order.store_id).trim();
+      
+      // Resolve store ID from multiple possible sources
+      // V2 orders only have store_name (e.g. "1025 - Downtown Market, Dubai"), not store_id
+      let rawStoreId = item.storeId || item.store_id || order.store_id || order.storeId || "";
+      if (!rawStoreId && order.store_name) {
+        // Extract leading digits from store_name (same as frontend extractStoreCode)
+        const match = String(order.store_name).match(/^(\d+)/);
+        rawStoreId = match ? match[1] : "";
+      }
+      const normStore = String(rawStoreId).trim();
+      
+      console.log(`[WhatsApp Debug] Manual Push: Resolved storeId="${normStore}" from item.storeId="${item.storeId}", order.store_id="${order.store_id}", order.store_name="${order.store_name}"`);
       
       // Strict Store-Wise matching only
       let mapping = mappings.find((m: any) => String(m.storeId || "").trim() === normStore);
 
       if (!mapping) {
+        console.log(`[WhatsApp Debug] Manual Push Failed. Store="${normStore}", Available Mappings:`, JSON.stringify(mappings));
         return res
           .status(400)
           .json({
@@ -687,7 +699,7 @@ async function startServer() {
           item.photoUrl,
       );
 
-      const captionText = `*Following Item is not able to trace / find it. Kindly arrange at the earliest else will be mark it as OOS if there is no response*\n\n*Order:* ${order.job_number || item.orderId || "N/A"}\n*Item:* ${item.item_name || item.itemName}\n*SKU:* ${item.sku}\n*Store id:* ${order.store_id || item.storeId}\n*Store Name:* ${order.store_name || ""}`;
+      const captionText = `*Following Item is not able to trace / find it. Kindly arrange at the earliest else will be mark it as OOS if there is no response*\n\n*Order:* ${order.job_number || item.orderId || "N/A"}\n*Item:* ${item.item_name || item.itemName}\n*SKU:* ${item.sku}\n*Store id:* ${normStore}\n*Store Name:* ${order.store_name || ""}`;
 
       let url = `${sysData.whatsappApiUrl.replace(/\/$/, "")}/message/sendText/${instanceToUse}`;
       let bodyParams: any = {
