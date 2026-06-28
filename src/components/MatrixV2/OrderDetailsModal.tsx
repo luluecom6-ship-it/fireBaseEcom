@@ -87,7 +87,20 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({ order, onC
           userRegion: user?.region || ''
         })
       });
-      const data = await response.json();
+      
+      // Guard against non-JSON responses (Vercel error pages return plain text)
+      const contentType = response.headers.get('content-type') || '';
+      const rawText = await response.text();
+      
+      let data: any;
+      if (contentType.includes('application/json') && rawText.startsWith('{')) {
+        data = JSON.parse(rawText);
+      } else {
+        // Non-JSON response — likely a Vercel/server error page
+        console.error('[WhatsApp Manual Push] Non-JSON response:', rawText.substring(0, 200));
+        throw new Error(response.ok ? 'Server returned an unexpected response' : `Server error (${response.status}): ${rawText.substring(0, 100)}`);
+      }
+      
       if (data.status === 'success') {
         alert('WhatsApp Message Sent Successfully!');
       } else {
