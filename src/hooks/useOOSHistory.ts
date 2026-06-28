@@ -15,20 +15,13 @@ export const useOOSHistory = (user: User | null, isEnabled: boolean) => {
     }
 
     try {
-      if (!db) {
-        throw new Error("Firestore not initialized");
-      }
+      const res = await fetch("/api/oos-history?limit=500");
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       
-      const q = query(
-        collection(db, 'oos_history'),
-        limit(500)
-      );
-      const snap = await getDocs(q);
+      const json = await res.json();
+      if (json.status !== "success") throw new Error(json.error || "Unknown API error");
       
-      const items = snap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as OOSRecord[];
+      const items = json.data as OOSRecord[];
       
       // Memory sort by timestamp desc
       items.sort((a, b) => {
