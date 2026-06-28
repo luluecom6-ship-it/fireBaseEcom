@@ -206,10 +206,14 @@ export const getAgeBucket = (minutes: number): string => {
   if (minutes < 10) return '5-10';
   if (minutes < 15) return '10-15';
   if (minutes < 20) return '15-20';
-  if (minutes < 30) return '20-30';
-  if (minutes < 40) return '30-40';
-  if (minutes < 50) return '40-50';
-  if (minutes < 60) return '50-60';
+  if (minutes < 25) return '20-25';
+  if (minutes < 30) return '25-30';
+  if (minutes < 35) return '30-35';
+  if (minutes < 40) return '35-40';
+  if (minutes < 45) return '40-45';
+  if (minutes < 50) return '45-50';
+  if (minutes < 55) return '50-55';
+  if (minutes < 60) return '55-60';
   return '60+';
 };
 
@@ -309,7 +313,7 @@ export const TIME_SLOTS = [
 ];
 
 // Time intervals for ageing matrix
-export const TIME_INTERVALS = ['0-5', '5-10', '10-15', '15-20', '20-30', '30-40', '40-50', '50-60', '60+'];
+export const TIME_INTERVALS = ['0-5', '5-10', '10-15', '15-20', '20-25', '25-30', '30-35', '35-40', '40-45', '45-50', '50-55', '55-60', '60+'];
 
 // Get status color
 export const getStatusColor = (status: string): string => {
