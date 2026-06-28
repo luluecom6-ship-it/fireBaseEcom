@@ -673,7 +673,7 @@ export async function runMonitorTick(db: any, messaging: any) {
             if (whatsappSentKeys.has(levelDedupeKey)) continue;
 
             const isFulfillment = ['CREATED', 'PICKING', 'PICKINGWITHPACKING', 'PICKINGWITHUNASSIGNEDZONE', 'STORING', 'STORED'].includes(statusStr);
-            const isLastMile = ['TRANSFERRING','GOINGTOORIGIN', 'INROUTE', 'GOINGTODESTINATION', 'DELIVERING'].includes(statusStr);
+            const isLastMile = ['TRANSFERRING', 'GOINGTOORIGIN', 'INROUTE', 'GOINGTODESTINATION', 'DELIVERING'].includes(statusStr);
             
             let mappingsToUse = isFulfillment ? whatsappFulfillmentMappings : (isLastMile ? whatsappLastMileMappings : []);
             
@@ -720,7 +720,7 @@ export async function runMonitorTick(db: any, messaging: any) {
             const displayStatus = String(qcOrder.status || "").replace(/_/g, ' ').toUpperCase();
             
             // Determine if this is a last-mile status (show driver) or fulfillment (show picker)
-            const isLastMileStatus = ['GOINGTOORIGIN', 'INROUTE', 'GOINGTODESTINATION', 'DELIVERING'].includes(statusStr);
+            const isLastMileStatus = ['TRANSFERRING', 'GOINGTOORIGIN', 'INROUTE', 'GOINGTODESTINATION', 'DELIVERING'].includes(statusStr);
             
             let messageText = `*${emoji} Alert: Quick Commerce Delay in ${displayStatus} [${qcOrder.bucket}]*\n\n`;
             
