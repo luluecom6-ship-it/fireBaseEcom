@@ -734,7 +734,7 @@ export async function runMonitorTick(db: any, messaging: any) {
               'STORING': 'Order is still not handed over to Driver/Rider. Please handover immediately.',
               'TRANSFERRING': 'Order is still not handed over to Driver/Rider. Please handover immediately.',
               'GOINGTOORIGIN': 'Driver still not collected the Order - Please check and push him.',
-              'GOINGTODESTINATION': 'Driver still not left the store with the order.',
+              'GOINGTODESTINATION': 'Driver still did not delivered the Order to customer. Please check and push for on time delivery',
               'INROUTE': 'Driver is still in Route. Please follow up with him to deliver the order on time.',
               'DELIVERING': 'Order still showing in delivering - Please check with the driver whether order delivered to customer or not. If delivered ask him to update in the app.',
             };
