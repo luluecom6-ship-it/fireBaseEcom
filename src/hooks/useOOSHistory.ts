@@ -1,8 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { collection, query, limit, getDocs, orderBy } from 'firebase/firestore';
-import { db } from '../firebase';
 import { OOSRecord, User } from '../types';
-import { API_URL } from '../constants';
 import { robustFetch } from '../utils/api';
 
 export const useOOSHistory = (user: User | null, isEnabled: boolean) => {
@@ -17,7 +14,7 @@ export const useOOSHistory = (user: User | null, isEnabled: boolean) => {
     }
 
     try {
-      const res = await robustFetch(`${API_URL || ''}/api/oos-history?limit=500`.replace('//api', '/api'));
+      const res = await robustFetch("/api/oos-history?limit=500");
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       
       const json = await res.json();
