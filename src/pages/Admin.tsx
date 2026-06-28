@@ -56,6 +56,14 @@ interface AdminProps {
   setWhatsappAutoOosMappings?: (val: {region: string, groupJid: string, instanceName?: string}[]) => void;
   whatsappManualStoreMappings?: {storeId: string, groupJid: string, instanceName?: string}[];
   setWhatsappManualStoreMappings?: (val: {storeId: string, groupJid: string, instanceName?: string}[]) => void;
+  whatsappFulfillmentMappings?: {storeId: string, groupJid: string, inchargeJid: string, managerJid: string, instanceName?: string}[];
+  setWhatsappFulfillmentMappings?: (val: {storeId: string, groupJid: string, inchargeJid: string, managerJid: string, instanceName?: string}[]) => void;
+  whatsappLastMileMappings?: {storeId: string, groupJid: string, inchargeJid: string, managerJid: string, instanceName?: string}[];
+  setWhatsappLastMileMappings?: (val: {storeId: string, groupJid: string, inchargeJid: string, managerJid: string, instanceName?: string}[]) => void;
+  whatsappEscalationRules?: any[];
+  setWhatsappEscalationRules?: (val: any[]) => void;
+  whatsappGlobalGroupJid?: string;
+  setWhatsappGlobalGroupJid?: (val: string) => void;
   staffStatus: any[];
   scheduledThreshold: number;
   setScheduledThreshold: (num: number) => void;
@@ -123,6 +131,14 @@ export const Admin: React.FC<AdminProps> = ({
   setWhatsappAutoOosMappings,
   whatsappManualStoreMappings,
   setWhatsappManualStoreMappings,
+  whatsappFulfillmentMappings,
+  setWhatsappFulfillmentMappings,
+  whatsappLastMileMappings,
+  setWhatsappLastMileMappings,
+  whatsappEscalationRules,
+  setWhatsappEscalationRules,
+  whatsappGlobalGroupJid,
+  setWhatsappGlobalGroupJid,
   staffStatus
 }) => {
   const getTodayStr = () => {
@@ -1151,6 +1167,7 @@ export const Admin: React.FC<AdminProps> = ({
           </div>
         )}
 
+
         {/* Scheduled Alerts Configuration */}
         {String(user.role || "").toLowerCase().trim() === 'admin' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
@@ -1414,7 +1431,172 @@ export const Admin: React.FC<AdminProps> = ({
               </div>
             )}
           </div>
-            
+            {/* WhatsApp Escalation Matrix (Quick Commerce) */}
+            {String(user.role || "").toLowerCase().trim() === 'admin' && (
+              <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden mt-6">
+                <div className="p-4 sm:p-6 bg-emerald-50/50 border-b border-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
+                    <MessageSquare size={18} className="text-emerald-600 sm:hidden" />
+                    <MessageSquare size={20} className="text-emerald-600 hidden sm:block" />
+                    WhatsApp Escalation Matrix
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full ml-2">Quick Commerce</span>
+                  </h4>
+                  <div className="flex flex-col sm:flex-row gap-3 sm:items-center w-full sm:w-auto">
+                    <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-emerald-100 shadow-sm w-full sm:w-auto">
+                      <span className="text-[9px] font-black text-slate-500 uppercase">Global Group JID</span>
+                      <input
+                        type="text"
+                        value={whatsappGlobalGroupJid || ''}
+                        onChange={(e) => setWhatsappGlobalGroupJid && setWhatsappGlobalGroupJid(e.target.value)}
+                        placeholder="Global Whatsapp Group JID"
+                        className="bg-transparent border-none outline-none text-xs font-bold text-slate-700 w-32"
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button 
+                        onClick={onSaveConfig}
+                        disabled={isSavingConfig || !isFirebaseAuthenticated}
+                        className={cn(
+                          "px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 sm:gap-2",
+                          (isSavingConfig || !isFirebaseAuthenticated) ? "bg-slate-100 text-slate-400" : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-md"
+                        )}
+                      >
+                        <Save size={12} /> {isSavingConfig ? "Saving..." : "Save"}
+                      </button>
+                      <button 
+                        onClick={() => {
+                          if (setWhatsappEscalationRules && whatsappEscalationRules) {
+                            const newId = Date.now().toString();
+                            setWhatsappEscalationRules([
+                              ...whatsappEscalationRules, 
+                              { id: newId, region: 'All', storeId: 'All', status: 'CREATED', bucket: '15-20', escalationLevel: 'Level 1', isActive: true }
+                            ]);
+                          }
+                        }}
+                        className="px-3 py-1.5 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all"
+                      >
+                        Add Rule
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left min-w-[700px]">
+                    <thead>
+                      <tr className="bg-slate-50/50 border-b border-slate-100">
+                        <th className="p-3 sm:p-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Region</th>
+                        <th className="p-3 sm:p-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Store ID</th>
+                        <th className="p-3 sm:p-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+                        <th className="p-3 sm:p-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Bucket</th>
+                        <th className="p-3 sm:p-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Escalation To</th>
+                        <th className="p-3 sm:p-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Active</th>
+                        <th className="p-3 sm:p-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {(whatsappEscalationRules || [])
+                        .filter(rule => selectedRegion === "All" || rule.region === "All" || rule.region === selectedRegion)
+                        .map((rule: any) => (
+                        <tr key={rule.id} className="hover:bg-slate-50/30 transition-colors">
+                          <td className="p-3 sm:p-4">
+                            <select 
+                              value={rule.region || "All"}
+                              onChange={(e) => setWhatsappEscalationRules && setWhatsappEscalationRules(whatsappEscalationRules!.map(r => r.id === rule.id ? { ...r, region: e.target.value } : r))}
+                              className="w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-[10px] sm:text-xs font-bold text-slate-700 outline-none focus:border-emerald-500"
+                            >
+                              <option value="All">All Regions</option>
+                              {availableRegions.map(reg => (
+                                <option key={`wa_reg_${reg}`} value={reg}>{reg}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="p-3 sm:p-4">
+                            <input
+                              type="text"
+                              value={rule.storeId || 'All'}
+                              onChange={(e) => setWhatsappEscalationRules && setWhatsappEscalationRules(whatsappEscalationRules!.map(r => r.id === rule.id ? { ...r, storeId: e.target.value } : r))}
+                              placeholder="Store ID or All"
+                              className="w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-[10px] sm:text-xs font-bold text-slate-700 outline-none focus:border-emerald-500"
+                            />
+                          </td>
+                          <td className="p-3 sm:p-4">
+                            <select 
+                              value={rule.status || "CREATED"}
+                              onChange={(e) => setWhatsappEscalationRules && setWhatsappEscalationRules(whatsappEscalationRules!.map(r => r.id === rule.id ? { ...r, status: e.target.value } : r))}
+                              className="w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-[10px] sm:text-xs font-bold text-slate-700 outline-none focus:border-emerald-500"
+                            >
+                              <option value="CREATED">CREATED</option>
+                              <option value="PICKING">PICKING</option>
+                              <option value="PICKING WITH PACKING">PICKING WITH PACKING</option>
+                              <option value="PICKING WITH UNASSIGNED ZONE">PICKING WITH UNASSIGNED ZONE</option>
+                              <option value="STORING">STORING</option>
+                              <option value="STORED">STORED</option>
+                              <option value="TRANSFERRING">TRANSFERRING</option>
+                              <option value="GOING TO ORIGIN">GOING TO ORIGIN</option>
+                              <option value="IN ROUTE">IN ROUTE</option>
+                              <option value="GOING TO DESTINATION">GOING TO DESTINATION</option>
+                              <option value="DELIVERING">DELIVERING</option>
+                            </select>
+                          </td>
+                          <td className="p-3 sm:p-4">
+                            <select 
+                              value={rule.bucket || "15-20"}
+                              onChange={(e) => setWhatsappEscalationRules && setWhatsappEscalationRules(whatsappEscalationRules!.map(r => r.id === rule.id ? { ...r, bucket: e.target.value } : r))}
+                              className="w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-[10px] sm:text-xs font-bold text-slate-700 outline-none focus:border-emerald-500"
+                            >
+                              <option value="0-5">0-5 MIN</option>
+                              <option value="5-10">5-10 MIN</option>
+                              <option value="10-15">10-15 MIN</option>
+                              <option value="15-20">15-20 MIN</option>
+                              <option value="20-30">20-30 MIN</option>
+                              <option value="30-40">30-40 MIN</option>
+                              <option value="40-50">40-50 MIN</option>
+                              <option value="50-60">50-60 MIN</option>
+                              <option value="60+">60+ MIN</option>
+                            </select>
+                          </td>
+                          <td className="p-3 sm:p-4">
+                            <select 
+                              value={rule.escalationLevel || "Level 1"}
+                              onChange={(e) => setWhatsappEscalationRules && setWhatsappEscalationRules(whatsappEscalationRules!.map(r => r.id === rule.id ? { ...r, escalationLevel: e.target.value } : r))}
+                              className="w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-[10px] sm:text-xs font-bold text-slate-700 outline-none focus:border-emerald-500"
+                            >
+                              <option value="Level 1">Level 1 (Group)</option>
+                              <option value="Level 2">Level 2 (+ Incharge)</option>
+                              <option value="Level 3">Level 3 (+ Manager)</option>
+                              <option value="Global">Global (+ All)</option>
+                            </select>
+                          </td>
+                          <td className="p-3 sm:p-4 text-center">
+                            <button 
+                              onClick={() => setWhatsappEscalationRules && setWhatsappEscalationRules(whatsappEscalationRules!.map(r => r.id === rule.id ? { ...r, isActive: !r.isActive } : r))}
+                              className={cn(
+                                "w-8 h-4 sm:w-10 sm:h-5 rounded-full relative transition-all mx-auto",
+                                rule.isActive ? "bg-emerald-500" : "bg-slate-300"
+                              )}
+                            >
+                              <div className={cn(
+                                "absolute top-0.5 w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-white transition-all shadow-sm",
+                                rule.isActive ? "right-0.5" : "left-0.5"
+                              )}></div>
+                            </button>
+                          </td>
+                          <td className="p-3 sm:p-4 text-center">
+                            <button 
+                              onClick={() => setWhatsappEscalationRules && setWhatsappEscalationRules(whatsappEscalationRules!.filter(r => r.id !== rule.id))}
+                              className="p-1.5 sm:p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors mx-auto block"
+                            >
+                              <X size={14} className="sm:w-4 sm:h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {/* WhatsApp Evolution API Configuration */}
             {String(user.role || "").toLowerCase().trim() === 'admin' && (
               <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden mt-6">
@@ -1770,6 +1952,222 @@ export const Admin: React.FC<AdminProps> = ({
                             className="mt-2 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
                           >
                             <Plus size={14} /> Add Store Mapping
+                          </button>
+                        </div>
+                        
+                        {/* Fulfillment Alerts */}
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mt-6">
+                          <h5 className="font-bold text-sm text-slate-800 flex items-center gap-2 mb-1">
+                            <MessageSquare size={16} className="text-orange-500" />
+                            WhatsApp Fulfillment Alerts (Store Routing)
+                          </h5>
+                          <p className="text-xs text-slate-500 mb-2">Used for picking/storing automated status alerts.</p>
+                          {(whatsappFulfillmentMappings || []).map((mapping: any, idx: number) => (
+                            <div key={`fulfill_${idx}`} className="flex flex-col gap-2 bg-white p-3 rounded-xl border border-slate-200 shadow-sm mb-2">
+                              <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center w-full">
+                                <input
+                                  type="text"
+                                  value={mapping.storeId || ''}
+                                  onChange={(e) => {
+                                    const newMappings = [...(whatsappFulfillmentMappings || [])];
+                                    newMappings[idx].storeId = e.target.value;
+                                    setWhatsappFulfillmentMappings && setWhatsappFulfillmentMappings(newMappings);
+                                  }}
+                                  placeholder="Store ID"
+                                  className="w-full sm:w-1/4 shrink-0 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-orange-500"
+                                />
+                                <input
+                                  type="text"
+                                  value={mapping.instanceName || ''}
+                                  onChange={(e) => {
+                                    const newMappings = [...(whatsappFulfillmentMappings || [])];
+                                    newMappings[idx].instanceName = e.target.value;
+                                    setWhatsappFulfillmentMappings && setWhatsappFulfillmentMappings(newMappings);
+                                  }}
+                                  placeholder="Instance Name (Optional)"
+                                  className="w-full sm:w-1/4 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-orange-500"
+                                />
+                                <div className="flex-1 flex gap-2">
+                                  <button 
+                                    onClick={() => handleFetchGroups(mapping.instanceName || whatsappInstanceName)}
+                                    title="Fetch Groups for this Instance"
+                                    className="p-2 w-full bg-orange-50 text-orange-600 rounded-lg border border-orange-200 hover:bg-orange-100 shrink-0 text-xs font-bold flex justify-center items-center gap-1"
+                                  >
+                                    <MessageSquare size={14} /> Fetch WhatsApp Groups
+                                  </button>
+                                  <button 
+                                    onClick={() => {
+                                      const newMappings = [...(whatsappFulfillmentMappings || [])];
+                                      newMappings.splice(idx, 1);
+                                      setWhatsappFulfillmentMappings && setWhatsappFulfillmentMappings(newMappings);
+                                    }}
+                                    className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 shrink-0"
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="flex flex-col sm:flex-row gap-2">
+                                <div className="flex-1">
+                                  <div className="text-[10px] text-slate-400 font-bold mb-1 ml-1 uppercase">Store Group (Level 1)</div>
+                                  <input
+                                    type="text" 
+                                    value={mapping.groupJid || ""}
+                                    onChange={(e) => {
+                                      const newMappings = [...(whatsappFulfillmentMappings || [])];
+                                      newMappings[idx].groupJid = e.target.value;
+                                      setWhatsappFulfillmentMappings && setWhatsappFulfillmentMappings(newMappings);
+                                    }}
+                                    placeholder="Group JID"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-orange-500"
+                                  />
+                                </div>
+                                <div className="flex-1">
+                                  <div className="text-[10px] text-slate-400 font-bold mb-1 ml-1 uppercase">Store Incharge (Level 2)</div>
+                                  <input
+                                    type="text" 
+                                    value={mapping.inchargeJid || ""}
+                                    onChange={(e) => {
+                                      const newMappings = [...(whatsappFulfillmentMappings || [])];
+                                      newMappings[idx].inchargeJid = e.target.value;
+                                      setWhatsappFulfillmentMappings && setWhatsappFulfillmentMappings(newMappings);
+                                    }}
+                                    placeholder="Number / JID"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-orange-500"
+                                  />
+                                </div>
+                                <div className="flex-1">
+                                  <div className="text-[10px] text-slate-400 font-bold mb-1 ml-1 uppercase">Manager (Level 3)</div>
+                                  <input
+                                    type="text" 
+                                    value={mapping.managerJid || ""}
+                                    onChange={(e) => {
+                                      const newMappings = [...(whatsappFulfillmentMappings || [])];
+                                      newMappings[idx].managerJid = e.target.value;
+                                      setWhatsappFulfillmentMappings && setWhatsappFulfillmentMappings(newMappings);
+                                    }}
+                                    placeholder="Number / JID"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-orange-500"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                          <button 
+                            onClick={() => {
+                              setWhatsappFulfillmentMappings && setWhatsappFulfillmentMappings([...(whatsappFulfillmentMappings || []), {storeId: '', groupJid: '', inchargeJid: '', managerJid: '', instanceName: ''}]);
+                            }}
+                            className="mt-2 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                          >
+                            <Plus size={14} /> Add Fulfillment Mapping
+                          </button>
+                        </div>
+                        
+                        {/* Last Mile Alerts */}
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mt-6">
+                          <h5 className="font-bold text-sm text-slate-800 flex items-center gap-2 mb-1">
+                            <MessageSquare size={16} className="text-blue-500" />
+                            WhatsApp Last Mile Alerts (Delivery Routing)
+                          </h5>
+                          <p className="text-xs text-slate-500 mb-2">Used for transit/delivery automated status alerts.</p>
+                          {(whatsappLastMileMappings || []).map((mapping: any, idx: number) => (
+                            <div key={`lastmile_${idx}`} className="flex flex-col gap-2 bg-white p-3 rounded-xl border border-slate-200 shadow-sm mb-2">
+                              <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center w-full">
+                                <input
+                                  type="text"
+                                  value={mapping.storeId || ''}
+                                  onChange={(e) => {
+                                    const newMappings = [...(whatsappLastMileMappings || [])];
+                                    newMappings[idx].storeId = e.target.value;
+                                    setWhatsappLastMileMappings && setWhatsappLastMileMappings(newMappings);
+                                  }}
+                                  placeholder="Store ID"
+                                  className="w-full sm:w-1/4 shrink-0 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                                />
+                                <input
+                                  type="text"
+                                  value={mapping.instanceName || ''}
+                                  onChange={(e) => {
+                                    const newMappings = [...(whatsappLastMileMappings || [])];
+                                    newMappings[idx].instanceName = e.target.value;
+                                    setWhatsappLastMileMappings && setWhatsappLastMileMappings(newMappings);
+                                  }}
+                                  placeholder="Instance Name (Optional)"
+                                  className="w-full sm:w-1/4 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                                />
+                                <div className="flex-1 flex gap-2">
+                                  <button 
+                                    onClick={() => handleFetchGroups(mapping.instanceName || whatsappInstanceName)}
+                                    title="Fetch Groups for this Instance"
+                                    className="p-2 w-full bg-blue-50 text-blue-600 rounded-lg border border-blue-200 hover:bg-blue-100 shrink-0 text-xs font-bold flex justify-center items-center gap-1"
+                                  >
+                                    <MessageSquare size={14} /> Fetch WhatsApp Groups
+                                  </button>
+                                  <button 
+                                    onClick={() => {
+                                      const newMappings = [...(whatsappLastMileMappings || [])];
+                                      newMappings.splice(idx, 1);
+                                      setWhatsappLastMileMappings && setWhatsappLastMileMappings(newMappings);
+                                    }}
+                                    className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 shrink-0"
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="flex flex-col sm:flex-row gap-2">
+                                <div className="flex-1">
+                                  <div className="text-[10px] text-slate-400 font-bold mb-1 ml-1 uppercase">Delivery Group (Level 1)</div>
+                                  <input
+                                    type="text" 
+                                    value={mapping.groupJid || ""}
+                                    onChange={(e) => {
+                                      const newMappings = [...(whatsappLastMileMappings || [])];
+                                      newMappings[idx].groupJid = e.target.value;
+                                      setWhatsappLastMileMappings && setWhatsappLastMileMappings(newMappings);
+                                    }}
+                                    placeholder="Group JID"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                                  />
+                                </div>
+                                <div className="flex-1">
+                                  <div className="text-[10px] text-slate-400 font-bold mb-1 ml-1 uppercase">Delivery Incharge (Level 2)</div>
+                                  <input
+                                    type="text" 
+                                    value={mapping.inchargeJid || ""}
+                                    onChange={(e) => {
+                                      const newMappings = [...(whatsappLastMileMappings || [])];
+                                      newMappings[idx].inchargeJid = e.target.value;
+                                      setWhatsappLastMileMappings && setWhatsappLastMileMappings(newMappings);
+                                    }}
+                                    placeholder="Number / JID"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                                  />
+                                </div>
+                                <div className="flex-1">
+                                  <div className="text-[10px] text-slate-400 font-bold mb-1 ml-1 uppercase">Manager (Level 3)</div>
+                                  <input
+                                    type="text" 
+                                    value={mapping.managerJid || ""}
+                                    onChange={(e) => {
+                                      const newMappings = [...(whatsappLastMileMappings || [])];
+                                      newMappings[idx].managerJid = e.target.value;
+                                      setWhatsappLastMileMappings && setWhatsappLastMileMappings(newMappings);
+                                    }}
+                                    placeholder="Number / JID"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                          <button 
+                            onClick={() => {
+                              setWhatsappLastMileMappings && setWhatsappLastMileMappings([...(whatsappLastMileMappings || []), {storeId: '', groupJid: '', inchargeJid: '', managerJid: '', instanceName: ''}]);
+                            }}
+                            className="mt-2 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                          >
+                            <Plus size={14} /> Add Last Mile Mapping
                           </button>
                         </div>
                       </div>

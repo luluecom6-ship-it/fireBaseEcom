@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDocs, Timestamp } from 'firebase/firestore';
 import { User } from '../types';
 
 export interface UserStatus extends User {
@@ -31,13 +31,11 @@ export function useStaffStatus(
       return;
     }
 
-    let constraints: any[] = [];
-
-    // Notice: We NO LONGER filter by selectedStoreId in the Firebase query.
-    // This prevents the hook from deleting and re-creating the massive 'presence' 
-    // and 'users' listeners every time the user clicks the Store dropdown.
-
-    const qUsers = query(collection(db, 'users'), ...constraints);
+    // Filter users by operational roles only — excludes system/test accounts
+    const qUsers = query(
+      collection(db, 'users'),
+      where('role', 'in', ['picker', 'driver', 'supervisor', 'manager', 'store'])
+    );
     const users: Record<string, User> = {};
     const presence: Record<string, any> = {};
 
@@ -106,20 +104,29 @@ export function useStaffStatus(
       setLoading(false);
     });
 
-    // Listen to all presence updates (filtered by who we actually care about in updateCombinedStatus)
-    // This avoids the 30-limit which was breaking presence for stores with many staff members
-    const unsubPresence = onSnapshot(collection(db, 'presence'), (pSnap) => {
-      pSnap.docs.forEach(pDoc => {
-        const data = pDoc.data();
-        const uid = data.uid || pDoc.id;
-        if (uid) presence[uid] = data;
-      });
-      updateCombinedStatus();
-    });
+    // Poll presence every 30s instead of real-time onSnapshot.
+    // Presence heartbeats fire every 5 min per user — a real-time listener on the
+    // entire collection generates massive read costs across all admin Dashboard sessions.
+    // A 30s poll is more than adequate for presence status display.
+    const fetchPresence = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'presence'));
+        snap.forEach(pDoc => {
+          const data = pDoc.data();
+          const uid = data.uid || pDoc.id;
+          if (uid) presence[uid] = data;
+        });
+        updateCombinedStatus();
+      } catch (err) {
+        console.error('[StaffStatus] Presence fetch error:', err);
+      }
+    };
+    fetchPresence(); // initial fetch
+    const presenceInterval = setInterval(fetchPresence, 30000); // poll every 30s
 
     return () => {
       unsubUsers();
-      unsubPresence();
+      clearInterval(presenceInterval);
     };
   }, [user, isFirebaseAuthenticated, isActive]); // Added isActive to dependency array to fix massive quota leak
 

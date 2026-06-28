@@ -27,6 +27,10 @@ export function useSystemConfig(
   const [whatsappApiKey, setWhatsappApiKey] = useState('');
   const [whatsappAutoOosMappings, setWhatsappAutoOosMappings] = useState<{region: string, groupJid: string, instanceName?: string}[]>([]);
   const [whatsappManualStoreMappings, setWhatsappManualStoreMappings] = useState<{storeId: string, groupJid: string, instanceName?: string}[]>([]);
+  const [whatsappFulfillmentMappings, setWhatsappFulfillmentMappings] = useState<{storeId: string, groupJid: string, inchargeJid: string, managerJid: string, instanceName?: string}[]>([]);
+  const [whatsappLastMileMappings, setWhatsappLastMileMappings] = useState<{storeId: string, groupJid: string, inchargeJid: string, managerJid: string, instanceName?: string}[]>([]);
+  const [whatsappEscalationRules, setWhatsappEscalationRules] = useState<any[]>([]);
+  const [whatsappGlobalGroupJid, setWhatsappGlobalGroupJid] = useState('');
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   // Use Firestore for real-time config
@@ -85,6 +89,18 @@ export function useSystemConfig(
         if (Array.isArray(data.whatsappManualStoreMappings)) {
           setWhatsappManualStoreMappings(data.whatsappManualStoreMappings);
         }
+        if (Array.isArray(data.whatsappFulfillmentMappings)) {
+          setWhatsappFulfillmentMappings(data.whatsappFulfillmentMappings);
+        }
+        if (Array.isArray(data.whatsappLastMileMappings)) {
+          setWhatsappLastMileMappings(data.whatsappLastMileMappings);
+        }
+        if (Array.isArray(data.whatsappEscalationRules)) {
+          setWhatsappEscalationRules(data.whatsappEscalationRules);
+        }
+        if (typeof data.whatsappGlobalGroupJid === 'string') {
+          setWhatsappGlobalGroupJid(data.whatsappGlobalGroupJid);
+        }
       } else {
         // Default rules if nothing in Firestore yet
         const defaultRules = [
@@ -108,6 +124,10 @@ export function useSystemConfig(
         setWhatsappApiKey('');
         setWhatsappAutoOosMappings([]);
         setWhatsappManualStoreMappings([]);
+        setWhatsappFulfillmentMappings([]);
+        setWhatsappLastMileMappings([]);
+        setWhatsappEscalationRules([]);
+        setWhatsappGlobalGroupJid('');
       }
     }, (error) => {
       console.error("Firestore config error:", error);
@@ -148,6 +168,10 @@ export function useSystemConfig(
         whatsappApiKey,
         whatsappAutoOosMappings,
         whatsappManualStoreMappings,
+        whatsappFulfillmentMappings,
+        whatsappLastMileMappings,
+        whatsappEscalationRules,
+        whatsappGlobalGroupJid,
         updatedAt: new Date().toISOString()
       }, { merge: true }); // Use merge: true to avoid clobbering unseen config keys
       
@@ -190,6 +214,10 @@ export function useSystemConfig(
     whatsappApiKey,
     whatsappAutoOosMappings,
     whatsappManualStoreMappings,
+    whatsappFulfillmentMappings,
+    whatsappLastMileMappings,
+    whatsappEscalationRules,
+    whatsappGlobalGroupJid,
     showToast, 
     user
   ]);
@@ -224,6 +252,14 @@ export function useSystemConfig(
     setWhatsappAutoOosMappings,
     whatsappManualStoreMappings,
     setWhatsappManualStoreMappings,
+    whatsappFulfillmentMappings,
+    setWhatsappFulfillmentMappings,
+    whatsappLastMileMappings,
+    setWhatsappLastMileMappings,
+    whatsappEscalationRules,
+    setWhatsappEscalationRules,
+    whatsappGlobalGroupJid,
+    setWhatsappGlobalGroupJid,
     saveSystemConfig,
     isSavingConfig 
   };

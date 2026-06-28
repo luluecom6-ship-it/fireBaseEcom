@@ -216,7 +216,7 @@ export function detectAlerts(
   // Use UTC as base for all calculations
   const utcNow = new Date();
   
-  const normalize = (s: string) => (s || "").toString().toUpperCase().replace(/\s+/g, '').trim();
+  const normalize = (s: string) => (s || "").toString().toUpperCase().replace(/[\s_]+/g, '').trim();
   const activeRules = escalationRules.filter(r => r.isActive);
 
   // 1. Quick Commerce Alerts
