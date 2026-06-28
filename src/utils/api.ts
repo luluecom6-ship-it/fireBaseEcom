@@ -88,5 +88,5 @@ export async function robustFetch(
 
 // Re-exported from shared dateUtils so both frontend and backend-imported files can use it
 // without triggering ERR_MODULE_NOT_FOUND in Vercel serverless (Node.js ESM context)
-export { parseServerDate } from './dateUtils';
+export { parseServerDate } from './dateUtils.js';
 
