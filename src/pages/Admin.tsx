@@ -1548,10 +1548,14 @@ export const Admin: React.FC<AdminProps> = ({
                               <option value="5-10">5-10 MIN</option>
                               <option value="10-15">10-15 MIN</option>
                               <option value="15-20">15-20 MIN</option>
-                              <option value="20-30">20-30 MIN</option>
-                              <option value="30-40">30-40 MIN</option>
-                              <option value="40-50">40-50 MIN</option>
-                              <option value="50-60">50-60 MIN</option>
+                              <option value="20-25">20-25 MIN</option>
+                              <option value="25-30">25-30 MIN</option>
+                              <option value="30-35">30-35 MIN</option>
+                              <option value="35-40">35-40 MIN</option>
+                              <option value="40-45">40-45 MIN</option>
+                              <option value="45-50">45-50 MIN</option>
+                              <option value="50-55">50-55 MIN</option>
+                              <option value="55-60">55-60 MIN</option>
                               <option value="60+">60+ MIN</option>
                             </select>
                           </td>
