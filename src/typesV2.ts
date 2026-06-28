@@ -1,4 +1,4 @@
-import { parseServerDate } from './utils/dateUtils';
+import { parseServerDate } from './utils/dateUtils.js';
 
 // Order structure from Google Sheets - flat format with nested items and tasks
 
