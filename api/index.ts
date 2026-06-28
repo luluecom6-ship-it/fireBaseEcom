@@ -35,6 +35,25 @@ const gasQueue: {
 // Coalescing map for in-flight requests to same action
 const inFlightRequests = new Map<string, Promise<any>>();
 
+// --- Firebase Optimization Caches ---
+let apiConfigCache: any = null;
+let apiConfigCacheTime = 0;
+const API_CONFIG_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+
+async function getCachedConfig(db: any) {
+  if (apiConfigCache && Date.now() - apiConfigCacheTime < API_CONFIG_CACHE_TTL) {
+    return apiConfigCache;
+  }
+  const snap = await db.collection('system').doc('config').get();
+  apiConfigCache = snap.data() || {};
+  apiConfigCacheTime = Date.now();
+  return apiConfigCache;
+}
+
+let oosHistoryCache: any = null;
+let oosHistoryCacheTime = 0;
+const OOS_HISTORY_CACHE_TTL = 30 * 1000; // 30 seconds
+
 async function processGasQueue() {
   if (gasQueue.length === 0 || activeRequests >= MAX_CONCURRENT) return;
 
@@ -356,7 +375,7 @@ async function startServer() {
   app.get("/api/oos-debug", async (req, res) => {
     try {
       if (!admin.apps.length) return res.status(500).json({ error: "No DB" });
-      const snap = await getFirestore().collection("oos_history").limit(50).get();
+      const snap = await db!.collection("oos_history").limit(50).get();
       res.json({ count: snap.size, data: snap.docs.map((d) => d.data()) });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -531,8 +550,7 @@ async function startServer() {
           .status(400)
           .json({ error: "Phone number or Group JID is required" });
 
-      const sysConfigSnap = await db.collection("system").doc("config").get();
-      const sysData = sysConfigSnap.data() || {};
+      const sysData = await getCachedConfig(db);
 
       if (
         !sysData.whatsappApiUrl ||
@@ -577,11 +595,10 @@ async function startServer() {
     try {
       if (!db)
         return res.status(500).json({ error: "Missing Firebase features" });
-      const sysConfigSnap = await db.collection("system").doc("config").get();
-      if (!sysConfigSnap.exists) {
+      const sysData = await getCachedConfig(db);
+      if (!sysData || Object.keys(sysData).length === 0) {
         return res.status(404).json({ error: "System config not found" });
       }
-      const sysData = sysConfigSnap.data() || {};
 
       const instanceName = req.query.instanceName || sysData.whatsappInstanceName;
       if (
@@ -631,8 +648,7 @@ async function startServer() {
         return res.status(403).json({ error: "Unauthorized or missing data" });
       }
 
-      const sysConfigSnap = await db.collection("system").doc("config").get();
-      const sysData = sysConfigSnap.data() || {};
+      const sysData = await getCachedConfig(db);
 
       if (!sysData.whatsappApiUrl || !sysData.whatsappApiKey) {
         return res
@@ -751,8 +767,7 @@ async function startServer() {
         return res.status(403).json({ error: "Admin/Operator only" });
       }
 
-      const sysSnap = await db.collection("system").doc("config").get();
-      const config = sysSnap.data() || {};
+      const config = await getCachedConfig(db);
       if (!config.whatsappApiUrl || !config.whatsappApiKey || !config.whatsappInstanceName) {
         return res.status(400).json({ error: "WhatsApp integration not fully configured" });
       }
@@ -992,9 +1007,8 @@ async function startServer() {
 
       // --- WhatsApp Evolution API Dispatch ---
       try {
-        const sysConfigSnap = await db.collection("system").doc("config").get();
-        if (sysConfigSnap.exists) {
-          const sysData = sysConfigSnap.data() || {};
+        const sysData = await getCachedConfig(db);
+        if (sysData && Object.keys(sysData).length > 0) {
 
           if (
             sysData.whatsappOosEnabled &&
@@ -1163,12 +1177,21 @@ async function startServer() {
     try {
       if (!db) return res.status(500).json({ error: "No DB" });
       const limitParam = parseInt((req.query.limit as string) || "500", 10);
+      
+      // Return cached result if within TTL
+      if (oosHistoryCache && Date.now() - oosHistoryCacheTime < OOS_HISTORY_CACHE_TTL) {
+        return res.json(oosHistoryCache);
+      }
+      
       const snap = await db.collection("oos_history").limit(limitParam).get();
       const items = snap.docs.map((d) => ({
         id: d.id,
         ...d.data(),
       }));
-      res.json({ status: "success", data: items });
+      const result = { status: "success", data: items };
+      oosHistoryCache = result;
+      oosHistoryCacheTime = Date.now();
+      res.json(result);
     } catch (e: any) {
       res.status(500).json({ status: "error", error: e.message });
     }
