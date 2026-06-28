@@ -20,8 +20,8 @@ export const mapOrdersToMatrixData = (orders: Order[]): MatrixData => {
     const ageMins = getOrderAgeMinutes(order);
     const bucket = getAgeBucket(ageMins);
     
-    // Alert logic expects buckets like "15-20 MIN"
-    const formattedBucket = bucket.includes('+') ? `${bucket} MIN` : `${bucket} MIN`;
+    // Alert logic expects buckets like "20-25 MIN" or "60MIN+"
+    const formattedBucket = bucket === '60+' ? '60MIN+' : `${bucket} MIN`;
 
     const slot = `${order.slot_from || ""} - ${order.slot_to || ""}`.trim();
 
