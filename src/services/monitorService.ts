@@ -672,8 +672,8 @@ export async function runMonitorTick(db: any, messaging: any) {
             const levelDedupeKey = `${waDedupeKey}|${matchedRule.escalationLevel || 'Level 1'}`;
             if (whatsappSentKeys.has(levelDedupeKey)) continue;
 
-            const isFulfillment = ['CREATED', 'PICKING', 'PICKINGWITHPACKING', 'PICKINGWITHUNASSIGNEDZONE', 'STORING', 'STORED', 'TRANSFERRING'].includes(statusStr);
-            const isLastMile = ['GOINGTOORIGIN', 'INROUTE', 'GOINGTODESTINATION', 'DELIVERING'].includes(statusStr);
+            const isFulfillment = ['CREATED', 'PICKING', 'PICKINGWITHPACKING', 'PICKINGWITHUNASSIGNEDZONE', 'STORING', 'STORED'].includes(statusStr);
+            const isLastMile = ['TRANSFERRING','GOINGTOORIGIN', 'INROUTE', 'GOINGTODESTINATION', 'DELIVERING'].includes(statusStr);
             
             let mappingsToUse = isFulfillment ? whatsappFulfillmentMappings : (isLastMile ? whatsappLastMileMappings : []);
             
