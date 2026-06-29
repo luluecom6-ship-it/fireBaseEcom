@@ -19,7 +19,8 @@ let lastCleanupTime = 0;
 let lastOOSArchiveTime = 0;
 
 // WhatsApp dedup: track which alertKey+bucket combos already got a WhatsApp message
-const whatsappSentKeys = new Set<string>();
+const whatsappSentCache = new Map<string, string>();
+let isWaCacheInitialized = false;
 
 const normalizeStoreId = (id: string | number | null | undefined): string => {
   if (id === null || id === undefined) return "";
@@ -519,10 +520,30 @@ export async function runMonitorTick(db: any, messaging: any) {
       console.log(`[Monitor DEBUG] Initialized alerts cache with size: ${existingAlertsCache.size}`);
     }
 
+    if (!isWaCacheInitialized) {
+      const existingWaSnap = await db.collection('whatsapp_logs')
+        .where('timestamp', '>=', oneHourAgoISO)
+        .get();
+
+      existingWaSnap.docs.forEach((doc: any) => {
+        const d = doc.data();
+        whatsappSentCache.set(doc.id, d.timestamp);
+      });
+      isWaCacheInitialized = true;
+      console.log(`[Monitor DEBUG] Initialized WhatsApp cache with size: ${whatsappSentCache.size}`);
+    }
+
     // Cleanup memory trace of old alerts
     for (const [k, v] of existingAlertsCache.entries()) {
       if (v.timestamp && v.timestamp < oneHourAgoISO) {
         existingAlertsCache.delete(k);
+      }
+    }
+
+    // Cleanup memory trace of old WhatsApp logs
+    for (const [k, ts] of whatsappSentCache.entries()) {
+      if (ts && ts < oneHourAgoISO) {
+        whatsappSentCache.delete(k);
       }
     }
 
@@ -649,8 +670,6 @@ export async function runMonitorTick(db: any, messaging: any) {
             const orderBucketStart = getBucketStart(qcOrder.bucket);
             const waDedupeKey = `WA|${qcOrder.orderID}|${statusStr}|${qcOrder.bucket}`;
 
-            if (whatsappSentKeys.has(waDedupeKey)) continue;
-
             // Find ALL matching WhatsApp escalation rules, then pick the one with highest bucket
             // This ensures Level 2/3/Global rules (higher buckets) are preferred over Level 1
             const allMatchingRules = waEscalationRules.filter((r: any) => {
@@ -670,7 +689,7 @@ export async function runMonitorTick(db: any, messaging: any) {
 
             // Dedup includes escalation level so each level fires independently
             const levelDedupeKey = `${waDedupeKey}|${matchedRule.escalationLevel || 'Level 1'}`;
-            if (whatsappSentKeys.has(levelDedupeKey)) continue;
+            if (whatsappSentCache.has(levelDedupeKey)) continue;
 
             const isFulfillment = ['CREATED', 'PICKING', 'PICKINGWITHPACKING', 'PICKINGWITHUNASSIGNEDZONE', 'STORING', 'STORED'].includes(statusStr);
             const isLastMile = ['TRANSFERRING', 'GOINGTOORIGIN', 'INROUTE', 'GOINGTODESTINATION', 'DELIVERING'].includes(statusStr);
@@ -780,7 +799,10 @@ export async function runMonitorTick(db: any, messaging: any) {
               }
             }
             console.log(`[WhatsApp] ✅ ${displayStatus} [${qcOrder.bucket}] (${targetLevel}) → ${targetJids.size} recipients for ${qcOrder.orderID}`);
-            whatsappSentKeys.add(levelDedupeKey);
+            const ts = new Date().toISOString();
+            whatsappSentCache.set(levelDedupeKey, ts);
+            // Persist to Firebase to survive Vercel cold starts
+            db.collection('whatsapp_logs').doc(levelDedupeKey.replace(/[\/\.]/g, '_')).set({ timestamp: ts }).catch((e: any) => console.error("[WhatsApp] Failed to save dedupe key:", e.message));
           }
         } else {
           console.log(`[WhatsApp] ❌ Missing whatsappApiUrl or whatsappApiKey`);
