@@ -1170,7 +1170,7 @@ export const Admin: React.FC<AdminProps> = ({
 
         {/* Scheduled Alerts Configuration */}
         {String(user.role || "").toLowerCase().trim() === 'admin' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+          <div className="flex flex-col gap-6 mt-6">
             <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
               <div className="p-4 sm:p-6 bg-indigo-50/50 border-b border-indigo-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
