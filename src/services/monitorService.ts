@@ -938,7 +938,7 @@ export async function runMonitorTick(db: any, messaging: any) {
               await docSnap.ref.update({ whatsappSent: true, whatsappSentAt: new Date().toISOString() });
 
               const storeDisplayName = oosData.storeName ? oosData.storeName : oosData.storeId;
-              const waMessage = `*Out of Stock Alert!*\nStore: ${oosData.storeId}\nOrder No: ${oosData.orderId || "N/A"}\nSKU: ${oosData.sku}\nItem Name: ${oosData.itemName}\nStore Name: ${storeDisplayName}`;
+              const waMessage = `*Out of Stock Alert!*\nStore: ${oosData.storeId}\nOrder No: ${oosData.orderId || "N/A"}\nSKU: ${oosData.sku}\nItem Name: ${oosData.itemName}\nLocation: ${oosData.location || "N/A"}\nStore Name: ${storeDisplayName}`;
 
               let url = `${config.whatsappApiUrl.replace(/\/$/, "")}/message/sendText/${instanceToUse}`;
               let bodyParams: any = {
