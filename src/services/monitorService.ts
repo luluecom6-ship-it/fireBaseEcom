@@ -1,7 +1,7 @@
 import { detectAlerts } from "../utils/alertLogic.js";
 import { executeGasRequest } from "./gasService.js";
 import axios from "axios";
-import { getPickedItems, getTotalItems, getPickedSkuCount, getSkuCount, getPickerInfo, getDriverInfo } from "../typesV2.js";
+import { getPickedItems, getTotalItems, getPickedSkuCount, getSkuCount, getPickerInfo, getDriverInfo, getOrderLifecycle } from "../typesV2.js";
 
 // Memory caches to prevent continuous reads/writes of identical records
 const processedOOSKeys = new Set<string>();
@@ -686,6 +686,31 @@ export async function runMonitorTick(db: any, messaging: any) {
             const matchedRule = allMatchingRules[0] || null;
 
             if (!matchedRule) continue;
+
+            // --- 10-Minute Cooldown Logic for GOING TO DESTINATION ---
+            if (statusStr === 'GOINGTODESTINATION') {
+              let transferringAlertSent = false;
+              for (const key of whatsappSentCache.keys()) {
+                if (key.startsWith(`WA|${qcOrder.orderID}|TRANSFERRING|`)) {
+                  transferringAlertSent = true;
+                  break;
+                }
+              }
+
+              if (transferringAlertSent) {
+                const fullV2Order = matrixV2Array.find((o: any) => o.job_number === qcOrder.orderID);
+                if (fullV2Order) {
+                  const lifecycle = getOrderLifecycle(fullV2Order);
+                  if (lifecycle.goingToDestinationStart) {
+                    const elapsedMins = (Date.now() - new Date(lifecycle.goingToDestinationStart).getTime()) / 60000;
+                    if (elapsedMins < 10) {
+                      console.log(`[WhatsApp] ⏳ Cooldown: ${qcOrder.orderID} in GOING TO DESTINATION for ${elapsedMins.toFixed(1)}m. Suppressing until 10m.`);
+                      continue;
+                    }
+                  }
+                }
+              }
+            }
 
             // Dedup includes escalation level so each level fires independently
             const levelDedupeKey = `${waDedupeKey}|${matchedRule.escalationLevel || 'Level 1'}`;
