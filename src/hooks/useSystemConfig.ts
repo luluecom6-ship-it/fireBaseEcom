@@ -38,103 +38,108 @@ export function useSystemConfig(
     if (!isFirebaseAuthenticated) return;
     const configDoc = doc(db, 'system', 'config');
     
-    // Listen for real-time updates
-    const unsubscribe = onSnapshot(configDoc, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data();
-        if (Array.isArray(data.escalationRules)) {
-          setEscalationRules(data.escalationRules);
+    const fetchConfig = async () => {
+      try {
+        const snapshot = await getDoc(configDoc);
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          if (Array.isArray(data.escalationRules)) {
+            setEscalationRules(data.escalationRules);
+          }
+          if (typeof data.maxImages === 'number') {
+            setMaxImages(data.maxImages);
+          }
+          if (typeof data.scheduledThreshold === 'number') {
+            setScheduledThreshold(data.scheduledThreshold);
+          }
+          if (data.scheduledPastSlot) {
+            setScheduledPastSlotActive(data.scheduledPastSlot.isActive ?? true);
+            setScheduledPastSlotRegions(data.scheduledPastSlot.regions || ['All']);
+          }
+          if (data.scheduledRunningSlot) {
+            setScheduledRunningSlotActive(data.scheduledRunningSlot.isActive ?? true);
+            setScheduledRunningSlotRegions(data.scheduledRunningSlot.regions || ['All']);
+          }
+          if (typeof data.soundAlertsEnabled === 'boolean') {
+            setSoundAlertsEnabled(data.soundAlertsEnabled);
+          }
+          if (typeof data.oosPushEnabled === 'boolean') {
+            setOosPushEnabled(data.oosPushEnabled);
+          }
+          if (Array.isArray(data.oosPushRegions)) {
+            setOosPushRegions(data.oosPushRegions);
+          }
+          if (typeof data.whatsappOosEnabled === 'boolean') {
+            setWhatsappOosEnabled(data.whatsappOosEnabled);
+          }
+          if (Array.isArray(data.whatsappOosRegions)) {
+            setWhatsappOosRegions(data.whatsappOosRegions);
+          }
+          if (typeof data.whatsappApiUrl === 'string') {
+            setWhatsappApiUrl(data.whatsappApiUrl);
+          }
+          if (typeof data.whatsappInstanceName === 'string') {
+            setWhatsappInstanceName(data.whatsappInstanceName);
+          }
+          if (typeof data.whatsappApiKey === 'string') {
+            setWhatsappApiKey(data.whatsappApiKey);
+          }
+          if (Array.isArray(data.whatsappAutoOosMappings)) {
+            setWhatsappAutoOosMappings(data.whatsappAutoOosMappings);
+          }
+          if (Array.isArray(data.whatsappManualStoreMappings)) {
+            setWhatsappManualStoreMappings(data.whatsappManualStoreMappings);
+          }
+          if (Array.isArray(data.whatsappFulfillmentMappings)) {
+            setWhatsappFulfillmentMappings(data.whatsappFulfillmentMappings);
+          }
+          if (Array.isArray(data.whatsappLastMileMappings)) {
+            setWhatsappLastMileMappings(data.whatsappLastMileMappings);
+          }
+          if (Array.isArray(data.whatsappEscalationRules)) {
+            setWhatsappEscalationRules(data.whatsappEscalationRules);
+          }
+          if (typeof data.whatsappGlobalGroupJid === 'string') {
+            setWhatsappGlobalGroupJid(data.whatsappGlobalGroupJid);
+          }
+        } else {
+          // Default rules if nothing in Firestore yet
+          const defaultRules = [
+            { id: '1', status: 'CREATED', bucket: '15-20MIN', escalationUser: 'Supervisor A', isActive: true },
+            { id: '2', status: 'PICKING', bucket: '15-20MIN', escalationUser: 'Supervisor B', isActive: true }
+          ];
+          setEscalationRules(defaultRules);
+          setMaxImages(1);
+          setScheduledThreshold(15);
+          setScheduledPastSlotActive(true);
+          setScheduledRunningSlotActive(true);
+          setScheduledPastSlotRegions(['All']);
+          setScheduledRunningSlotRegions(['All']);
+          setSoundAlertsEnabled(true);
+          setOosPushEnabled(true);
+          setOosPushRegions(['All']);
+          setWhatsappOosEnabled(false);
+          setWhatsappOosRegions(['All']);
+          setWhatsappApiUrl('');
+          setWhatsappInstanceName('');
+          setWhatsappApiKey('');
+          setWhatsappAutoOosMappings([]);
+          setWhatsappManualStoreMappings([]);
+          setWhatsappFulfillmentMappings([]);
+          setWhatsappLastMileMappings([]);
+          setWhatsappEscalationRules([]);
+          setWhatsappGlobalGroupJid('');
         }
-        if (typeof data.maxImages === 'number') {
-          setMaxImages(data.maxImages);
-        }
-        if (typeof data.scheduledThreshold === 'number') {
-          setScheduledThreshold(data.scheduledThreshold);
-        }
-        if (data.scheduledPastSlot) {
-          setScheduledPastSlotActive(data.scheduledPastSlot.isActive ?? true);
-          setScheduledPastSlotRegions(data.scheduledPastSlot.regions || ['All']);
-        }
-        if (data.scheduledRunningSlot) {
-          setScheduledRunningSlotActive(data.scheduledRunningSlot.isActive ?? true);
-          setScheduledRunningSlotRegions(data.scheduledRunningSlot.regions || ['All']);
-        }
-        if (typeof data.soundAlertsEnabled === 'boolean') {
-          setSoundAlertsEnabled(data.soundAlertsEnabled);
-        }
-        if (typeof data.oosPushEnabled === 'boolean') {
-          setOosPushEnabled(data.oosPushEnabled);
-        }
-        if (Array.isArray(data.oosPushRegions)) {
-          setOosPushRegions(data.oosPushRegions);
-        }
-        if (typeof data.whatsappOosEnabled === 'boolean') {
-          setWhatsappOosEnabled(data.whatsappOosEnabled);
-        }
-        if (Array.isArray(data.whatsappOosRegions)) {
-          setWhatsappOosRegions(data.whatsappOosRegions);
-        }
-        if (typeof data.whatsappApiUrl === 'string') {
-          setWhatsappApiUrl(data.whatsappApiUrl);
-        }
-        if (typeof data.whatsappInstanceName === 'string') {
-          setWhatsappInstanceName(data.whatsappInstanceName);
-        }
-        if (typeof data.whatsappApiKey === 'string') {
-          setWhatsappApiKey(data.whatsappApiKey);
-        }
-        if (Array.isArray(data.whatsappAutoOosMappings)) {
-          setWhatsappAutoOosMappings(data.whatsappAutoOosMappings);
-        }
-        if (Array.isArray(data.whatsappManualStoreMappings)) {
-          setWhatsappManualStoreMappings(data.whatsappManualStoreMappings);
-        }
-        if (Array.isArray(data.whatsappFulfillmentMappings)) {
-          setWhatsappFulfillmentMappings(data.whatsappFulfillmentMappings);
-        }
-        if (Array.isArray(data.whatsappLastMileMappings)) {
-          setWhatsappLastMileMappings(data.whatsappLastMileMappings);
-        }
-        if (Array.isArray(data.whatsappEscalationRules)) {
-          setWhatsappEscalationRules(data.whatsappEscalationRules);
-        }
-        if (typeof data.whatsappGlobalGroupJid === 'string') {
-          setWhatsappGlobalGroupJid(data.whatsappGlobalGroupJid);
-        }
-      } else {
-        // Default rules if nothing in Firestore yet
-        const defaultRules = [
-          { id: '1', status: 'CREATED', bucket: '15-20MIN', escalationUser: 'Supervisor A', isActive: true },
-          { id: '2', status: 'PICKING', bucket: '15-20MIN', escalationUser: 'Supervisor B', isActive: true }
-        ];
-        setEscalationRules(defaultRules);
-        setMaxImages(1);
-        setScheduledThreshold(15);
-        setScheduledPastSlotActive(true);
-        setScheduledRunningSlotActive(true);
-        setScheduledPastSlotRegions(['All']);
-        setScheduledRunningSlotRegions(['All']);
-        setSoundAlertsEnabled(true);
-        setOosPushEnabled(true);
-        setOosPushRegions(['All']);
-        setWhatsappOosEnabled(false);
-        setWhatsappOosRegions(['All']);
-        setWhatsappApiUrl('');
-        setWhatsappInstanceName('');
-        setWhatsappApiKey('');
-        setWhatsappAutoOosMappings([]);
-        setWhatsappManualStoreMappings([]);
-        setWhatsappFulfillmentMappings([]);
-        setWhatsappLastMileMappings([]);
-        setWhatsappEscalationRules([]);
-        setWhatsappGlobalGroupJid('');
+      } catch (error) {
+        console.error("Firestore config error:", error);
+        if (showToast) showToast("Failed to load live config", "error");
       }
-    }, (error) => {
-      console.error("Firestore config error:", error);
-      if (showToast) showToast("Failed to load live config", "error");
-    });
+    };
 
-    return () => unsubscribe();
+    fetchConfig();
+    const interval = setInterval(fetchConfig, 120000);
+
+    return () => clearInterval(interval);
   }, [showToast, isFirebaseAuthenticated]);
 
   const saveSystemConfig = useCallback(async () => {

@@ -95,19 +95,26 @@ export function useStaffStatus(
       setAllStaffStatus(combined);
     };
 
-    // Listen to users
-    const unsubUsers = onSnapshot(qUsers, (snapshot) => {
-      snapshot.forEach(doc => {
-        users[doc.id] = doc.data() as User;
-      });
-      updateCombinedStatus();
-      setLoading(false);
-    });
+    // Poll users every 2 minutes instead of real-time onSnapshot.
+    // User profiles rarely change — polling saves massive read quota.
+    const fetchUsers = async () => {
+      try {
+        const snapshot = await getDocs(qUsers);
+        snapshot.forEach(doc => {
+          users[doc.id] = doc.data() as User;
+        });
+        updateCombinedStatus();
+        setLoading(false);
+      } catch (err) {
+        console.error('[StaffStatus] Users fetch error:', err);
+        setLoading(false);
+      }
+    };
+    fetchUsers(); // initial fetch
+    const usersInterval = setInterval(fetchUsers, 120000); // poll every 2 min
 
-    // Poll presence every 30s instead of real-time onSnapshot.
-    // Presence heartbeats fire every 5 min per user — a real-time listener on the
-    // entire collection generates massive read costs across all admin Dashboard sessions.
-    // A 30s poll is more than adequate for presence status display.
+    // Poll presence every 2 minutes instead of 30s.
+    // Presence heartbeats fire every 7 min per user — polling faster is wasted reads.
     const fetchPresence = async () => {
       try {
         const snap = await getDocs(collection(db, 'presence'));
@@ -122,10 +129,10 @@ export function useStaffStatus(
       }
     };
     fetchPresence(); // initial fetch
-    const presenceInterval = setInterval(fetchPresence, 30000); // poll every 30s
+    const presenceInterval = setInterval(fetchPresence, 120000); // poll every 2 min
 
     return () => {
-      unsubUsers();
+      clearInterval(usersInterval);
       clearInterval(presenceInterval);
     };
   }, [user, isFirebaseAuthenticated, isActive]); // Added isActive to dependency array to fix massive quota leak

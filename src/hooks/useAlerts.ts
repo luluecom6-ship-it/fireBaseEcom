@@ -259,75 +259,74 @@ export function useAlerts(
     // asynchronously after this effect runs. We set up the listener anyway
     // and let Firestore reject it if auth fails.
     
-    let unsubscribe: (() => void) | null = null;
+    let fetchInterval: any = null;
     let retryTimeout: any = null;
+    let isFetching = false;
     
-    const startListener = () => {
+    const fetchBroadcasts = async () => {
+      if (isFetching) return;
+      isFetching = true;
       try {
+        const { getDocs } = await import('firebase/firestore');
         const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
         const q = query(
           collection(db, 'push_queue'),
           where('timestamp', '>=', thirtyMinutesAgo)
         );
-        unsubscribe = onSnapshot(q, (snapshot) => {
-          snapshot.docChanges().forEach((change) => {
-            if (change.type === "added") {
-              const data = change.doc.data();
-              const userRole = String(user.role || "").toLowerCase().trim();
-              
-              // Normalize target roles to lowercase and trimmed strings
-              const targetRoles = Array.isArray(data.targetRoles) 
-                ? data.targetRoles.map((r: any) => String(r).toLowerCase().trim())
-                : [];
-              
-              // If targetRoles is missing or empty, assume it's for everyone
-              const isTarget = targetRoles.length === 0 || targetRoles.includes(userRole);
-              
-              // Check if it's a recent broadcast (within last 2 hours to handle clock skew)
-              // Handle both Firestore Timestamp objects and regular timestamps
-              let timestamp: number;
-              if (data.timestamp && typeof data.timestamp.toMillis === 'function') {
-                timestamp = data.timestamp.toMillis();
-              } else if (data.timestamp && typeof data.timestamp.seconds === 'number') {
-                timestamp = data.timestamp.seconds * 1000;
-              } else {
-                timestamp = Date.now();
-              }
-              const isRecent = Math.abs(Date.now() - timestamp) < (120 * 60 * 1000); 
-              
-              // Use session storage to avoid showing the same broadcast multiple times in one session
-              const sessionKey = `broadcast_seen_${change.doc.id}`;
-              const alreadySeen = sessionStorage.getItem(sessionKey);
+        
+        const snapshot = await getDocs(q);
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          const userRole = String(user.role || "").toLowerCase().trim();
+          
+          // Normalize target roles to lowercase and trimmed strings
+          const targetRoles = Array.isArray(data.targetRoles) 
+            ? data.targetRoles.map((r: any) => String(r).toLowerCase().trim())
+            : [];
+          
+          // If targetRoles is missing or empty, assume it's for everyone
+          const isTarget = targetRoles.length === 0 || targetRoles.includes(userRole);
+          
+          // Check if it's a recent broadcast (within last 2 hours to handle clock skew)
+          let timestamp: number;
+          if (data.timestamp && typeof data.timestamp.toMillis === 'function') {
+            timestamp = data.timestamp.toMillis();
+          } else if (data.timestamp && typeof data.timestamp.seconds === 'number') {
+            timestamp = data.timestamp.seconds * 1000;
+          } else {
+            timestamp = Date.now();
+          }
+          const isRecent = Math.abs(Date.now() - timestamp) < (120 * 60 * 1000); 
+          
+          // Use session storage to avoid showing the same broadcast multiple times in one session
+          const sessionKey = `broadcast_seen_${doc.id}`;
+          const alreadySeen = sessionStorage.getItem(sessionKey);
 
-              console.log(`[Broadcast] ID: ${change.doc.id}, UserRole: "${userRole}", TargetRoles: ${JSON.stringify(targetRoles)}, IsTarget: ${isTarget}, IsRecent: ${isRecent}, AlreadySeen: ${!!alreadySeen}`);
-
-              if (isTarget && isRecent && !alreadySeen) {
-                console.log(`[Broadcast] Displaying: ${data.title}`);
-                showToast(`${data.title}: ${data.body}`, "success");
-                setLastBroadcast({ id: change.doc.id, title: data.title, body: data.body });
-                sessionStorage.setItem(sessionKey, "true");
-              } else if (!isTarget) {
-                console.log(`[Broadcast] Role mismatch. User is "${userRole}", Targets are: ${JSON.stringify(targetRoles)}`);
-              }
-            }
-          });
-        }, (error) => {
-          console.error("Push queue listener error:", error);
-          // If permission denied, retry after auth might complete
-          if (error.code === 'permission-denied' && !isFirebaseAuthenticated) {
-            console.log("[Broadcast] Auth not ready yet. Will retry in 10s...");
-            retryTimeout = setTimeout(startListener, 10000);
+          if (isTarget && isRecent && !alreadySeen) {
+            console.log(`[Broadcast] Displaying: ${data.title}`);
+            showToast(`${data.title}: ${data.body}`, "success");
+            setLastBroadcast({ id: doc.id, title: data.title, body: data.body });
+            sessionStorage.setItem(sessionKey, "true");
           }
         });
-      } catch (e) {
-        console.error("[Broadcast] Failed to start listener:", e);
+      } catch (error: any) {
+        console.error("Push queue fetch error:", error);
+        // If permission denied, retry after auth might complete
+        if (error.code === 'permission-denied' && !isFirebaseAuthenticated) {
+          console.log("[Broadcast] Auth not ready yet. Will retry in 10s...");
+          if (retryTimeout) clearTimeout(retryTimeout);
+          retryTimeout = setTimeout(fetchBroadcasts, 10000);
+        }
+      } finally {
+        isFetching = false;
       }
     };
 
-    startListener();
+    fetchBroadcasts();
+    fetchInterval = setInterval(fetchBroadcasts, 60000);
 
     return () => {
-      if (unsubscribe) unsubscribe();
+      if (fetchInterval) clearInterval(fetchInterval);
       if (retryTimeout) clearTimeout(retryTimeout);
     };
   }, [user, isFirebaseAuthenticated, showToast]);
