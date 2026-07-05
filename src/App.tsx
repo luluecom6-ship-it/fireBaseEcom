@@ -235,8 +235,15 @@ export default function App() {
   useEffect(() => {
     if (!user || !isFirebaseAuthenticated) return;
     
+    let lastPresenceUpdate = 0;
+
     // Initial heartbeat
     const updatePresence = async () => {
+      const now = Date.now();
+      // Debounce: don't update if less than 5 minutes have passed since last update
+      if (now - lastPresenceUpdate < 300000) return;
+      lastPresenceUpdate = now;
+
       try {
         const { doc, setDoc, serverTimestamp } = await import('firebase/firestore');
         const { db } = await import('./firebase');
@@ -254,8 +261,8 @@ export default function App() {
       }
     };
 
-    // Pulse every 5 minutes (300000ms) to reduce Firebase writes
-    const interval = setInterval(updatePresence, 300000);
+    // Pulse every 7 minutes (420000ms) to reduce Firebase writes
+    const interval = setInterval(updatePresence, 420000);
     
     // Also pulse on focus/visibility change for better responsiveness
     const handleFocus = () => {
