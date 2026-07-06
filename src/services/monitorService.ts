@@ -689,15 +689,16 @@ export async function runMonitorTick(db: any, messaging: any) {
 
             // --- 10-Minute Cooldown Logic for GOING TO DESTINATION ---
             if (statusStr === 'GOINGTODESTINATION') {
-              let transferringAlertSent = false;
+              let previousAlertSent = false;
               for (const key of whatsappSentCache.keys()) {
-                if (key.startsWith(`WA|${qcOrder.orderID}|TRANSFERRING|`)) {
-                  transferringAlertSent = true;
+                if (key.startsWith(`WA|${qcOrder.orderID}|TRANSFERRING|`) || 
+                    key.startsWith(`WA|${qcOrder.orderID}|GOINGTOORIGIN|`)) {
+                  previousAlertSent = true;
                   break;
                 }
               }
 
-              if (transferringAlertSent) {
+              if (previousAlertSent) {
                 const fullV2Order = matrixV2Array.find((o: any) => o.job_number === qcOrder.orderID);
                 if (fullV2Order) {
                   const lifecycle = getOrderLifecycle(fullV2Order);
