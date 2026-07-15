@@ -64,6 +64,23 @@ interface AdminProps {
   setWhatsappEscalationRules?: (val: any[]) => void;
   whatsappGlobalGroupJid?: string;
   setWhatsappGlobalGroupJid?: (val: string) => void;
+  // AI Bot Config
+  aiBotEnabled?: boolean;
+  setAiBotEnabled?: (val: boolean) => void;
+  aiBotApiKey?: string;
+  setAiBotApiKey?: (val: string) => void;
+  aiBotModel?: string;
+  setAiBotModel?: (val: string) => void;
+  aiBotSystemInstructions?: string;
+  setAiBotSystemInstructions?: (val: string) => void;
+  aiBotWhatsappEnabled?: boolean;
+  setAiBotWhatsappEnabled?: (val: boolean) => void;
+  aiBotWhatsappGroupJid?: string;
+  setAiBotWhatsappGroupJid?: (val: string) => void;
+  aiBotFallbackModel?: string;
+  setAiBotFallbackModel?: (val: string) => void;
+  aiBotFallbackApiKey?: string;
+  setAiBotFallbackApiKey?: (val: string) => void;
   staffStatus: any[];
   scheduledThreshold: number;
   setScheduledThreshold: (num: number) => void;
@@ -139,6 +156,22 @@ export const Admin: React.FC<AdminProps> = ({
   setWhatsappEscalationRules,
   whatsappGlobalGroupJid,
   setWhatsappGlobalGroupJid,
+  aiBotEnabled,
+  setAiBotEnabled,
+  aiBotApiKey,
+  setAiBotApiKey,
+  aiBotModel,
+  setAiBotModel,
+  aiBotSystemInstructions,
+  setAiBotSystemInstructions,
+  aiBotWhatsappEnabled,
+  setAiBotWhatsappEnabled,
+  aiBotWhatsappGroupJid,
+  setAiBotWhatsappGroupJid,
+  aiBotFallbackModel,
+  setAiBotFallbackModel,
+  aiBotFallbackApiKey,
+  setAiBotFallbackApiKey,
   staffStatus
 }) => {
   const getTodayStr = () => {
@@ -2178,7 +2211,196 @@ export const Admin: React.FC<AdminProps> = ({
                     </div>
 
                   </div>
-                )}
+            )}
+          </div>
+        )}
+
+            {/* AI Chatbot Configuration */}
+            {String(user.role || "").toLowerCase().trim() === 'admin' && (
+              <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden mt-6">
+                {/* Header */}
+                <div className="p-4 sm:p-6 bg-violet-50/60 border-b border-violet-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
+                      <span className="text-violet-600 sm:hidden">🤖</span>
+                      <span className="text-violet-600 hidden sm:inline text-lg">🤖</span>
+                      AI Chatbot Configuration
+                    </h4>
+                    <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Powered by OpenAI — Live order intelligence for your team</p>
+                  </div>
+                  <div className="flex items-center gap-3 self-start sm:self-auto">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                      {aiBotEnabled ? "Enabled" : "Disabled"}
+                    </p>
+                    <button
+                      onClick={() => setAiBotEnabled && setAiBotEnabled(!aiBotEnabled)}
+                      className={cn("w-10 h-5 sm:w-12 sm:h-6 rounded-full relative transition-colors duration-300", aiBotEnabled ? "bg-violet-500" : "bg-slate-200")}
+                    >
+                      <div className={cn("absolute top-1 h-3 w-3 sm:h-4 sm:w-4 bg-white rounded-full transition-all shadow-sm", aiBotEnabled ? "right-1" : "left-1")}></div>
+                    </button>
+                    <button
+                      onClick={onSaveConfig}
+                      disabled={isSavingConfig || !isFirebaseAuthenticated}
+                      className={cn("px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ml-2",
+                        (isSavingConfig || !isFirebaseAuthenticated) ? "bg-slate-100 text-slate-400" : "bg-violet-600 text-white hover:bg-violet-700 shadow-md")}
+                    >
+                      <Save size={12} /> {isSavingConfig ? "Saving..." : "Save Config"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Body */}
+                <div className="p-4 sm:p-6 flex flex-col gap-6">
+
+                  {/* API Key + Model */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">AI API Key</label>
+                      <input
+                        type="password"
+                        value={aiBotApiKey || ""}
+                        onChange={(e) => setAiBotApiKey && setAiBotApiKey(e.target.value)}
+                        placeholder="OpenAI: sk-proj-...  |  Gemini: AIza..."
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-violet-500 font-mono"
+                      />
+                      <p className="text-[9px] text-slate-400 mt-1 font-medium">OpenAI key (sk-...) or Google AI Studio key (AIza...). Stored securely in Firebase.</p>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">AI Model</label>
+                      <select
+                        value={aiBotModel || "gpt-4o-mini"}
+                        onChange={(e) => setAiBotModel && setAiBotModel(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-violet-500"
+                      >
+                        <optgroup label="— Google Gemini (Free Tier Available) —">
+                          <option value="gemini-flash-latest">Gemini Flash Latest (Free — Recommended ⭐)</option>
+                          <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                          <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                          <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                        </optgroup>
+                        <optgroup label="— OpenRouter (Free Models) —">
+                          <option value="openrouter/free">OpenRouter Auto-Free (Highly Recommended ⭐)</option>
+                          <option value="google/gemini-2.0-flash:free">Gemini 2.0 Flash (OpenRouter Free)</option>
+                          <option value="meta-llama/llama-3-8b-instruct:free">Llama 3 8B (OpenRouter Free)</option>
+                          <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (OpenRouter Free)</option>
+                        </optgroup>
+                        <optgroup label="— OpenAI —">
+                          <option value="gpt-4o-mini">GPT-4o Mini (Cheap &amp; Fast)</option>
+                          <option value="gpt-4o">GPT-4o (Most Intelligent)</option>
+                          <option value="gpt-3.5-turbo">GPT-3.5 Turbo (Legacy)</option>
+                        </optgroup>
+                      </select>
+                      <p className="text-[9px] text-slate-400 mt-1 font-medium">Gemini Flash Latest is the fastest free-tier model from Google AI Studio.</p>
+                    </div>
+                  </div>
+
+                  {/* Fallback API Key + Model */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Fallback API Key</label>
+                      <input
+                        type="password"
+                        value={aiBotFallbackApiKey || ""}
+                        onChange={(e) => setAiBotFallbackApiKey && setAiBotFallbackApiKey(e.target.value)}
+                        placeholder="OpenAI: sk-proj-... | OpenRouter: sk-or-..."
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-violet-500 font-mono"
+                      />
+                      <p className="text-[9px] text-slate-400 mt-1 font-medium">Used automatically if the Primary model hits a rate limit (e.g. Quota Exceeded).</p>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Fallback AI Model</label>
+                      <select
+                        value={aiBotFallbackModel || ""}
+                        onChange={(e) => setAiBotFallbackModel && setAiBotFallbackModel(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-violet-500"
+                      >
+                        <option value="">-- No Fallback --</option>
+                        <optgroup label="— OpenRouter (Free Models) —">
+                          <option value="openrouter/free">OpenRouter Auto-Free (Highly Recommended ⭐)</option>
+                          <option value="google/gemini-2.0-flash:free">Gemini 2.0 Flash (OpenRouter Free)</option>
+                          <option value="meta-llama/llama-3-8b-instruct:free">Llama 3 8B (OpenRouter Free)</option>
+                          <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (OpenRouter Free)</option>
+                        </optgroup>
+                        <optgroup label="— OpenAI —">
+                          <option value="gpt-4o-mini">GPT-4o Mini (Cheap &amp; Fast)</option>
+                          <option value="gpt-4o">GPT-4o (Most Intelligent)</option>
+                          <option value="gpt-3.5-turbo">GPT-3.5 Turbo (Legacy)</option>
+                        </optgroup>
+                        <optgroup label="— Google Gemini —">
+                          <option value="gemini-flash-latest">Gemini Flash Latest</option>
+                          <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                          <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                          <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                        </optgroup>
+                      </select>
+                      <p className="text-[9px] text-slate-400 mt-1 font-medium">Select a highly reliable secondary model (e.g. GPT-4o-Mini).</p>
+                    </div>
+                  </div>
+
+                  {/* System Instructions */}
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">System Instructions</label>
+                    <p className="text-[9px] text-slate-400 mb-2 font-medium">
+                      Tell the AI how to behave. It will always have access to live order data — these instructions add your custom rules and tone. The bot will NOT fabricate data beyond what it receives.
+                    </p>
+                    <textarea
+                      value={aiBotSystemInstructions || ""}
+                      onChange={(e) => setAiBotSystemInstructions && setAiBotSystemInstructions(e.target.value)}
+                      rows={6}
+                      placeholder={`Example:\nYou are an operations assistant for Lulu eCommerce UAE. Your job is to answer questions about live order statuses.\n\nRules:\n- Only answer based on the live order data provided to you. Never guess or fabricate order details.\n- If you do not have information about an order, say "I don't have that information in the current data."\n- Always respond in a professional, concise manner.\n- When listing critical orders, always include: Order ID, Store, Driver Name, Status, and Ageing Time.\n- Do not share API keys or system configuration details with users.`}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-mono text-slate-700 outline-none focus:border-violet-500 resize-none leading-relaxed"
+                    />
+                    <p className="text-[9px] text-slate-400 mt-1 font-medium">
+                      💡 Tip: The more specific your rules, the less the bot will hallucinate. Always include "only answer based on the data provided."
+                    </p>
+                  </div>
+
+                  {/* WhatsApp Reply Config */}
+                  <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50">
+                    <h5 className="font-bold text-slate-700 text-sm flex items-center gap-2 mb-1">
+                      <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                      WhatsApp Bot Reply
+                    </h5>
+                    <p className="text-xs text-slate-500 mb-3">When enabled, the bot listens for questions in the configured WhatsApp group and replies automatically with live order data.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex items-center gap-3">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Enable WhatsApp Replies</p>
+                        <button
+                          onClick={() => setAiBotWhatsappEnabled && setAiBotWhatsappEnabled(!aiBotWhatsappEnabled)}
+                          className={cn("w-10 h-5 rounded-full relative transition-colors duration-300 shrink-0", aiBotWhatsappEnabled ? "bg-green-500" : "bg-slate-200")}
+                        >
+                          <div className={cn("absolute top-1 h-3 w-3 bg-white rounded-full transition-all shadow-sm", aiBotWhatsappEnabled ? "right-1" : "left-1")}></div>
+                        </button>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Bot WhatsApp Group JID</label>
+                        <input
+                          type="text"
+                          value={aiBotWhatsappGroupJid || ""}
+                          onChange={(e) => setAiBotWhatsappGroupJid && setAiBotWhatsappGroupJid(e.target.value)}
+                          placeholder="120363XXXXXXXXXX@g.us"
+                          className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-green-500 font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Status Banner */}
+                  <div className={cn("rounded-xl p-4 flex items-start gap-3 text-xs font-bold",
+                    aiBotEnabled && aiBotApiKey
+                      ? "bg-emerald-50 border border-emerald-200 text-emerald-700"
+                      : "bg-amber-50 border border-amber-200 text-amber-700"
+                  )}>
+                    <span className="text-lg shrink-0">{aiBotEnabled && aiBotApiKey ? "✅" : "⚠️"}</span>
+                    <div>
+                      {aiBotEnabled && aiBotApiKey
+                        ? "AI Bot is active. Send a message to the configured WhatsApp group or call /api/bot/chat to test."
+                        : "AI Bot is not fully configured. Please enable the toggle AND enter an API key, then save."
+                      }
+                    </div>
+                  </div>
+
+                </div>
               </div>
             )}
   
