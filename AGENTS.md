@@ -56,5 +56,17 @@ Whenever the user refers to **Version 8.0**, it refers to the application state 
 - **Backend**: Hybrid Google Apps Script + Firebase Firestore.
 - **Proxy Layer**: Robust Node.js Express proxy with HTML-intercept capability.
 
+## Version 8.1 Enhancements (June 28, 2026)
+1. **OOS History & Vercel Fixes**:
+   - Fixed OOS History API routing from `API_URL` to direct `/api/oos-history` endpoint.
+   - Fixed Vercel cold-start timeouts by setting `maxDuration: 30` in `vercel.json` for WhatsApp Evolution API reliability.
+   - Fixed Node.js strict ESM `ERR_MODULE_NOT_FOUND` errors by adding `.js` extensions to local imports (e.g., `dateUtils.js`) for serverless functions.
+2. **Granular Ageing Buckets**:
+   - Updated the age bucket logic (`getAgeBucket`, `TIME_INTERVALS`, `AGE_BUCKETS`) to consistently use **5-minute intervals up to 60+ minutes** (e.g., `0-5MIN`, `5-10MIN`, ... `60MIN+`).
+   - Standardized this across the Matrix View, Push Alerts, Admin Escalation, and WhatsApp Escalation Matrix.
+
+## 🛑 STRICT OPERATIONAL RULE: Code Modification Policy
+**DO NOT make any code modifications, formatting changes, or file deletions unless explicitly instructed by the user.** The user manages their own GitHub commits and manual code syncs. If the user states "Update the code with latest version", it means the local representation is now in sync with their latest changes—acknowledge it and wait for further precise instructions. 
+
 ## Persistence Instruction
-This file serves as the definitive reference for Version 7.5. All future modifications should build upon this baseline unless otherwise specified.
+This file serves as the definitive reference for Version 8.1. All future modifications should build upon this baseline unless otherwise specified.
