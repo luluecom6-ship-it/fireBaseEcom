@@ -1266,6 +1266,361 @@ async function startServer() {
     }
   });
 
+  // ═══════════════════════════════════════════════════════════
+  // AI BOT ENDPOINTS
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * GET /api/bot/live-orders
+   * Returns a structured snapshot of all live orders from Matrix V2 GAS,
+   * formatted specifically for AI context injection.
+   * Protected by x-monitor-key header.
+   */
+  app.get("/api/bot/live-orders", async (req: any, res: any) => {
+    try {
+      const monKey = req.headers["x-monitor-key"] || req.query.key;
+      if (monKey !== process.env.MONITOR_SECRET && monKey !== process.env.VITE_MONITOR_SECRET) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const V2_FALLBACK = "https://script.google.com/macros/s/AKfycbxGr0rRSmIuutAd80GfkVO4lYZ-ObJ4WY9hr-xfLim1Is_t1gUBKStJ7nb7LoepIEA_IA/exec";
+      const v2Url = (process.env.V2_GAS_URL || process.env.VITE_V2_GAS_URL || V2_FALLBACK).trim();
+
+      console.log("[Bot/live-orders] Fetching Matrix V2 from GAS...");
+      const gasResp = await axios.get(`${v2Url}${v2Url.includes('?') ? '&' : '?'}action=getMatrixDataV2`, {
+        timeout: 25000,
+        headers: { 'Accept': 'application/json' }
+      });
+
+      let raw = gasResp.data;
+      if (typeof raw === 'string') {
+        try { raw = JSON.parse(raw); } catch (_) {}
+      }
+      if (typeof raw === 'string' && raw.includes('<!DOCTYPE')) {
+        return res.status(502).json({ error: "GAS returned HTML — check GAS permissions" });
+      }
+
+      let orders: any[] = raw?.data || raw?.orders || raw || [];
+      if (!Array.isArray(orders)) orders = [];
+
+      // ── Ageing bucket helper ──
+      const getAgeMins = (order: any): number => {
+        const ts = order.created_at || order.createdAt || order.timestamp || order.orderTime;
+        if (!ts) return 0;
+        return Math.floor((Date.now() - new Date(ts).getTime()) / 60000);
+      };
+      const getBucket = (mins: number): string => {
+        const buckets = [5,10,15,20,25,30,35,40,45,50,55,60];
+        for (let i = 0; i < buckets.length; i++) {
+          if (mins < buckets[i]) return i === 0 ? `0-${buckets[i]}MIN` : `${buckets[i-1]}-${buckets[i]}MIN`;
+        }
+        return "60MIN+";
+      };
+
+      // ── Status normalizer ──
+      const normalizeStatus = (s: string): string => {
+        const map: Record<string,string> = {
+          CREATED: "Created", PICKING: "Picking", PICKINGWITHPACKING: "Picking with Packing",
+          STORING: "Storing", STORED: "Stored", GOINGTOORIGIN: "Going to Origin",
+          TRANSFERRING: "Transferring", GOINGTODESTINATION: "Going to Destination",
+          DELIVERING: "Delivering", DELIVERED: "Delivered", CANCELLED: "Cancelled"
+        };
+        return map[String(s || "").toUpperCase().replace(/\s+/g,"")] || s || "Unknown";
+      };
+
+      // ── Build enriched order list ──
+      const enriched = orders.map((o: any) => {
+        const ageMins = getAgeMins(o);
+        const driver = o.driver_name || o.driverName || o.driver || "";
+        const picker = o.picker_name || o.pickerName || o.picker || "";
+        const status = normalizeStatus(o.status || o.order_status || "");
+        const store = o.store_id || o.storeId || o.store || "";
+        const storeName = o.store_name || o.storeName || store;
+        const region = o.region || o.area || "";
+        const totalItems = o.total_items ?? o.totalItems ?? o.sku_count ?? null;
+        const pickedItems = o.picked_items ?? o.pickedItems ?? null;
+
+        return {
+          orderId: o.job_number || o.orderID || o.order_id || o.id || "",
+          store: store,
+          storeName: storeName,
+          region: region,
+          status: status,
+          ageMins: ageMins,
+          ageBucket: getBucket(ageMins),
+          driver: driver || null,
+          picker: picker || null,
+          totalItems: totalItems,
+          pickedItems: pickedItems,
+          isCritical: ageMins >= 40,
+        };
+      }).filter((o: any) => o.orderId);
+
+      // ── Build summary ──
+      const statusGroups: Record<string, number> = {};
+      enriched.forEach((o: any) => {
+        statusGroups[o.status] = (statusGroups[o.status] || 0) + 1;
+      });
+
+      const critical = enriched.filter((o: any) => o.isCritical);
+      const byStore: Record<string, number> = {};
+      enriched.forEach((o: any) => {
+        byStore[o.store] = (byStore[o.store] || 0) + 1;
+      });
+
+      const result = {
+        fetchedAt: new Date().toISOString(),
+        totalOrders: enriched.length,
+        criticalCount: critical.length,
+        statusBreakdown: statusGroups,
+        storeBreakdown: byStore,
+        criticalOrders: critical,
+        allOrders: enriched,
+      };
+
+      console.log(`[Bot/live-orders] Returning ${enriched.length} orders (${critical.length} critical)`);
+      res.json(result);
+
+    } catch (e: any) {
+      console.error("[Bot/live-orders] Error:", e.message);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Shared Bot Logic ──
+  async function generateBotResponse(question: string, config: any, reqApiKey?: string, reqModel?: string) {
+    const model: string = reqModel || config.aiBotModel || "gemini-2.0-flash";
+    const apiKey: string = reqApiKey || config.aiBotApiKey || "";
+    const systemInstructions: string = config.aiBotSystemInstructions || 
+      "You are an operations assistant. Answer questions strictly based on the live order data provided. Do not fabricate or guess any order details. If information is not in the data, say so clearly.";
+
+    if (!apiKey) {
+      throw new Error("No AI API key configured. Please set it in Admin → Settings → AI Chatbot Configuration.");
+    }
+
+    // Fetch live orders internally
+    const V2_FALLBACK = "https://script.google.com/macros/s/AKfycbxGr0rRSmIuutAd80GfkVO4lYZ-ObJ4WY9hr-xfLim1Is_t1gUBKStJ7nb7LoepIEA_IA/exec";
+    const v2Url = (process.env.V2_GAS_URL || process.env.VITE_V2_GAS_URL || V2_FALLBACK).trim();
+    let liveOrderContext = "Live order data: unavailable at this time.";
+    
+    try {
+      const gasResp = await axios.get(`${v2Url}${v2Url.includes('?') ? '&' : '?'}action=getMatrixDataV2`, {
+        timeout: 20000, headers: { 'Accept': 'application/json' }
+      });
+      let raw = gasResp.data;
+      if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch (_) {} }
+      let orders: any[] = raw?.data || raw?.orders || raw || [];
+      if (!Array.isArray(orders)) orders = [];
+
+      const getAgeMins = (o: any) => {
+        const ts = o.created_at || o.createdAt || o.timestamp || o.orderTime;
+        return ts ? Math.floor((Date.now() - new Date(ts).getTime()) / 60000) : 0;
+      };
+      const getBucket = (mins: number) => {
+        const b = [5,10,15,20,25,30,35,40,45,50,55,60];
+        for (let i = 0; i < b.length; i++) { if (mins < b[i]) return i===0 ? `0-${b[i]}MIN` : `${b[i-1]}-${b[i]}MIN`; }
+        return "60MIN+";
+      };
+
+      const enriched = orders.map((o: any) => ({
+        orderId: o.job_number || o.orderID || o.order_id || "",
+        store: `${o.store_id || o.storeId || ""} ${o.store_name || o.storeName || ""}`.trim(),
+        region: o.region || o.area || "",
+        status: o.status || o.order_status || "Unknown",
+        ageMins: getAgeMins(o),
+        ageBucket: getBucket(getAgeMins(o)),
+        driver: o.driver_name || o.driverName || o.driver || "Unassigned",
+        picker: o.picker_name || o.pickerName || o.picker || "Unassigned",
+        totalItems: o.total_items ?? o.totalItems ?? "?",
+        pickedItems: o.picked_items ?? o.pickedItems ?? "?",
+      })).filter((o: any) => o.orderId);
+
+      const critical = enriched.filter((o: any) => o.ageMins >= 40);
+      const statusMap: Record<string,number> = {};
+      enriched.forEach((o: any) => { statusMap[o.status] = (statusMap[o.status] || 0) + 1; });
+
+      liveOrderContext = `
+LIVE ORDER SNAPSHOT (fetched at ${new Date().toISOString()})
+Total Orders: ${enriched.length}
+Critical Orders (40+ min): ${critical.length}
+Status Breakdown: ${JSON.stringify(statusMap)}
+
+${critical.length > 0 ? `⚠️ CRITICAL ORDERS:\n${critical.map(o => `  - ${o.orderId} | Store: ${o.store} | Region: ${o.region} | Status: ${o.status} | Age: ${o.ageMins} min (${o.ageBucket}) | Driver: ${o.driver} | Picker: ${o.picker} | Items: ${o.pickedItems}/${o.totalItems}`).join('\n')}` : "No critical orders at this time."}
+
+ALL ORDERS (${enriched.length} total):
+${enriched.map(o => `  ${o.orderId} | ${o.store} | ${o.status} | ${o.ageMins}min | Driver: ${o.driver} | Picker: ${o.picker}`).join('\n')}
+`.trim();
+    } catch (gasErr: any) {
+      console.error("[Bot/chat] GAS fetch failed:", gasErr.message);
+      liveOrderContext = "Live order data: GAS fetch failed — " + gasErr.message;
+    }
+
+    const fullSystemPrompt = `${systemInstructions}\n\n${liveOrderContext}`;
+    
+    // Internal generic caller to handle both providers
+    const callAI = async (targetModel: string, targetApiKey: string) => {
+      const isGemini = targetModel.toLowerCase().startsWith("gemini");
+      const isOpenRouter = targetModel.includes("/");
+
+      if (isGemini) {
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${targetApiKey}`;
+        const geminiPayload = {
+          contents: [{ role: "user", parts: [{ text: `${fullSystemPrompt}\n\nUser Question: ${question}` }] }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 1024 }
+        };
+        const geminiResp = await axios.post(geminiUrl, geminiPayload, { headers: { "Content-Type": "application/json" }, timeout: 30000 });
+        const text = geminiResp.data?.candidates?.[0]?.content?.parts?.[0]?.text || "No response from Gemini.";
+        return { answer: text, model: targetModel, provider: "gemini" };
+      } else {
+        const url = isOpenRouter ? "https://openrouter.ai/api/v1/chat/completions" : "https://api.openai.com/v1/chat/completions";
+        const headers: any = {
+          "Authorization": `Bearer ${targetApiKey}`,
+          "Content-Type": "application/json"
+        };
+        if (isOpenRouter) {
+          headers["HTTP-Referer"] = "https://ecom-matrix.web.app";
+          headers["X-Title"] = "Ecom Matrix Bot";
+        }
+
+        const openaiResp = await axios.post(url, {
+          model: targetModel,
+          messages: [
+            { role: "system", content: fullSystemPrompt },
+            { role: "user", content: question }
+          ],
+          temperature: 0.2, max_tokens: 1024,
+        }, {
+          headers,
+          timeout: 30000
+        });
+        const text = openaiResp.data?.choices?.[0]?.message?.content || `No response from ${isOpenRouter ? 'OpenRouter' : 'OpenAI'}.`;
+        return { answer: text, model: targetModel, provider: isOpenRouter ? "openrouter" : "openai" };
+      }
+    };
+
+    let result;
+    try {
+      result = await callAI(model, apiKey);
+      console.log(`[Bot/chat] Answered via ${result.provider} (${result.model})`);
+    } catch (primaryErr: any) {
+      console.warn(`[Bot/chat] Primary model (${model}) failed:`, primaryErr.message);
+      
+      const fallbackModel = config.aiBotFallbackModel;
+      const fallbackApiKey = config.aiBotFallbackApiKey;
+      
+      if (fallbackModel && fallbackApiKey) {
+        console.log(`[Bot/chat] Falling back to secondary model (${fallbackModel})...`);
+        try {
+          result = await callAI(fallbackModel, fallbackApiKey);
+          result.provider = result.provider + " (Fallback)";
+          console.log(`[Bot/chat] Fallback successful via ${result.provider}`);
+        } catch (fallbackErr: any) {
+          console.error(`[Bot/chat] Fallback model also failed:`, fallbackErr.message);
+          throw fallbackErr;
+        }
+      } else {
+        throw primaryErr; // No fallback configured, bubble up original error
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * POST /api/bot/chat
+   * Manual testing endpoint for AI bot.
+   */
+  app.post("/api/bot/chat", async (req: any, res: any) => {
+    try {
+      const { question, model, apiKey } = req.body || {};
+      if (!question || typeof question !== "string") {
+        return res.status(400).json({ error: "question is required" });
+      }
+      const config = await getCachedConfig(db);
+      const result = await generateBotResponse(question, config, apiKey, model);
+      res.json(result);
+    } catch (e: any) {
+      const detail = e.response?.data?.error?.message || e.response?.data?.message || e.message;
+      console.error("[Bot/chat] Error:", detail);
+      res.status(500).json({ error: detail });
+    }
+  });
+
+  /**
+   * POST /api/whatsapp/webhook
+   * Listens for Evolution API incoming messages, triggers AI bot, and replies.
+   */
+  app.post("/api/whatsapp/webhook", async (req: any, res: any) => {
+    // 1. Immediately acknowledge the webhook to prevent Evolution API from retrying
+    res.status(200).send("OK");
+    
+    try {
+      const payload = req.body;
+      if (!payload || payload.event !== "messages.upsert") return;
+
+      const msgData = payload.data?.messages?.[0] || payload.data?.message || payload.data;
+      if (!msgData) return;
+
+      const isFromMe = msgData.key?.fromMe;
+      if (isFromMe) return; // Don't reply to our own messages!
+
+      const remoteJid = msgData.key?.remoteJid;
+      if (!remoteJid) return;
+
+      // Extract text: Evolution API structure varies slightly depending on v1/v2 and message type
+      const messageObj = msgData.message || {};
+      const text = messageObj.conversation || 
+                   messageObj.extendedTextMessage?.text || 
+                   "";
+
+      if (!text || typeof text !== "string") return;
+
+      // 2. Check configuration
+      const config = await getCachedConfig(db);
+      
+      // Strict gating
+      if (!config.aiBotWhatsappEnabled) return;
+      if (!config.aiBotWhatsappGroupJid) return;
+      if (remoteJid !== config.aiBotWhatsappGroupJid) return; // Only listen in the specific group
+
+      console.log(`[Bot/Webhook] Received question in configured group (${remoteJid}): "${text}"`);
+
+      // 3. Generate AI response
+      const aiResult = await generateBotResponse(text, config);
+
+      // 4. Send reply back to WhatsApp via Evolution API
+      if (!config.whatsappApiUrl || !config.whatsappInstanceName || !config.whatsappApiKey) {
+        console.error("[Bot/Webhook] Missing Evolution API credentials to send reply.");
+        return;
+      }
+
+      const replyUrl = `${config.whatsappApiUrl.replace(/\/$/, "")}/message/sendText/${config.whatsappInstanceName}`;
+      const replyPayload = {
+        number: remoteJid,
+        options: {
+          delay: 1200,
+          presence: "composing",
+        },
+        textMessage: {
+          text: aiResult.answer
+        }
+      };
+
+      console.log(`[Bot/Webhook] Sending AI reply to WhatsApp...`);
+      await axios.post(replyUrl, replyPayload, {
+        headers: {
+          "apikey": config.whatsappApiKey,
+          "Content-Type": "application/json"
+        },
+        timeout: 15000
+      });
+      console.log(`[Bot/Webhook] Reply sent successfully.`);
+
+    } catch (e: any) {
+      console.error("[Bot/Webhook] Error processing incoming message:", e.message);
+    }
+  });
+
   // GAS Proxy Route
   app.all(["/api/proxy-gas", "/proxy-gas"], async (req, res) => {
     const start = Date.now();
