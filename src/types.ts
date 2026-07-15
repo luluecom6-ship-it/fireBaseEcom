@@ -71,6 +71,16 @@ export interface AdminData {
   regions?: RegionMapping[];
 }
 
+export interface SystemConfig {
+  whatsappApiUrl?: string;
+  whatsappInstanceName?: string;
+  whatsappApiKey?: string;
+  whatsappAutoOosMappings?: {region: string, groupJid: string, instanceName?: string}[];
+  whatsappManualStoreMappings?: {storeId: string, groupJid: string, instanceName?: string}[];
+  whatsappFulfillmentMappings?: {storeId: string, groupJid: string, inchargeJid: string, managerJid: string, instanceName?: string}[];
+  whatsappLastMileMappings?: {storeId: string, groupJid: string, inchargeJid: string, managerJid: string, instanceName?: string}[];
+}
+
 export interface MatrixItem {
   status: string;
   storeID: string;
@@ -94,6 +104,16 @@ export interface EscalationRule {
   bucket: string;
   region?: string;
   escalationUser: string;
+  isActive: boolean;
+}
+
+export interface WhatsappEscalationRule {
+  id: string;
+  region: string;
+  storeId: string;
+  status: string;
+  bucket: string;
+  escalationLevel: string; // 'Level 1', 'Level 2', 'Level 3', 'Global'
   isActive: boolean;
 }
 

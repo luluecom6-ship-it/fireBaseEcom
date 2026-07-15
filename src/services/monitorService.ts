@@ -1,6 +1,7 @@
 import { detectAlerts } from "../utils/alertLogic.js";
 import { executeGasRequest } from "./gasService.js";
 import axios from "axios";
+import { getPickedItems, getTotalItems, getPickedSkuCount, getSkuCount, getPickerInfo, getDriverInfo, getOrderLifecycle } from "../typesV2.js";
 
 // Memory caches to prevent continuous reads/writes of identical records
 const processedOOSKeys = new Set<string>();
@@ -13,6 +14,13 @@ let isAlertsCacheInitialized = false;
 let cachedConfig: any = {};
 let cachedTokensData: any[] = [];
 let lastConfigTokenFetchTime = 0;
+let lastWhatsappQueueCheckTime = 0;
+let lastCleanupTime = 0;
+let lastOOSArchiveTime = 0;
+
+// WhatsApp dedup: track which alertKey+bucket combos already got a WhatsApp message
+const whatsappSentCache = new Map<string, string>();
+let isWaCacheInitialized = false;
 
 const normalizeStoreId = (id: string | number | null | undefined): string => {
   if (id === null || id === undefined) return "";
@@ -63,9 +71,9 @@ export async function runMonitorTick(db: any, messaging: any) {
       console.log(`[Monitor] Loaded ${processedOOSKeys.size} recent OOS keys into memory.`);
     }
     
-    // Refresh config and tokens every 5 minutes instead of every minute (saves massive quota limit)
+    // Refresh config and tokens every 10 minutes (saves massive quota limit)
     const nowTime = Date.now();
-    if (nowTime - lastConfigTokenFetchTime > 5 * 60 * 1000) {
+    if (nowTime - lastConfigTokenFetchTime > 10 * 60 * 1000) {
       console.log(`[Monitor DEBUG] Refreshing config and fcm_tokens from Firebase...`);
       const configDoc = await db.collection('system').doc('config').get();
       cachedConfig = configDoc.exists ? configDoc.data() : {};
@@ -79,7 +87,10 @@ export async function runMonitorTick(db: any, messaging: any) {
     const config = cachedConfig;
     const allTokensData = cachedTokensData;
     
+    // Push notification rules (FCM) - used for detectAlerts() and Firebase alert writes
     const escalationRules = (config.escalationRules || []).filter((r: any) => r.isActive);
+    // WhatsApp rules - handled separately, NOT fed into detectAlerts()
+    const waEscalationRules = (config.whatsappEscalationRules || []).filter((r: any) => r.isActive);
     const scheduledThreshold = config.scheduledThreshold || 30;
     const oosPushEnabled = config.oosPushEnabled !== false; // Default true
     const scheduledConfig = {
@@ -87,7 +98,7 @@ export async function runMonitorTick(db: any, messaging: any) {
       runningSlot: config.scheduledRunningSlot
     };
 
-    console.log(`[Monitor DEBUG] Config exists: ${!!config.escalationRules}, Rules count: ${escalationRules.length}`);
+    console.log(`[Monitor DEBUG] Config: pushRules=${escalationRules.length}, whatsappRules=${waEscalationRules.length}`);
 
     // Helper for sending notifications with role-based filtering
     const sendFilteredNotification = async (payload: { title: string, body: string, data: any, icon?: string, image?: string }, alertStoreId: string, alertRegion: string, isEscalation: boolean, isOOS?: boolean) => {
@@ -413,6 +424,7 @@ export async function runMonitorTick(db: any, messaging: any) {
             sku,
             itemName: item.item_name || "",
             storeId,
+            storeName: rawStoreName,
             quantity: item.quantity || 0,
             foundQty: item.found_qty || 0,
             location: item.location || "",
@@ -422,6 +434,7 @@ export async function runMonitorTick(db: any, messaging: any) {
             orderCreatedAt: order.created_at || "",
             photoUrl: item.photo_url || "",
             pickerName: item.picker_name || item.picked_by || item.user_name || "System Detected",
+            whatsappSent: false,
             updatedAt: new Date()
           });
 
@@ -477,8 +490,9 @@ export async function runMonitorTick(db: any, messaging: any) {
     const oneHourAgo = new Date(Date.now() - 1 * 60 * 60 * 1000);
     const oneHourAgoISO = oneHourAgo.toISOString();
     
-    // Cleanup: Delete alerts older than 1 hour (Run occasionally to save quota)
-    if (Math.random() < 0.05) {
+    // Cleanup: Delete alerts older than 1 hour (Run every 6 hours to save quota)
+    if (nowTime - lastCleanupTime > 6 * 60 * 60 * 1000) {
+      lastCleanupTime = nowTime;
       const oldAlertsSnap = await db.collection('alerts')
         .where('timestamp', '<', oneHourAgoISO)
         .limit(200)
@@ -506,10 +520,30 @@ export async function runMonitorTick(db: any, messaging: any) {
       console.log(`[Monitor DEBUG] Initialized alerts cache with size: ${existingAlertsCache.size}`);
     }
 
+    if (!isWaCacheInitialized) {
+      const existingWaSnap = await db.collection('whatsapp_logs')
+        .where('timestamp', '>=', oneHourAgoISO)
+        .get();
+
+      existingWaSnap.docs.forEach((doc: any) => {
+        const d = doc.data();
+        whatsappSentCache.set(doc.id, d.timestamp);
+      });
+      isWaCacheInitialized = true;
+      console.log(`[Monitor DEBUG] Initialized WhatsApp cache with size: ${whatsappSentCache.size}`);
+    }
+
     // Cleanup memory trace of old alerts
     for (const [k, v] of existingAlertsCache.entries()) {
       if (v.timestamp && v.timestamp < oneHourAgoISO) {
         existingAlertsCache.delete(k);
+      }
+    }
+
+    // Cleanup memory trace of old WhatsApp logs
+    for (const [k, ts] of whatsappSentCache.entries()) {
+      if (ts && ts < oneHourAgoISO) {
+        whatsappSentCache.delete(k);
       }
     }
 
@@ -543,9 +577,7 @@ export async function runMonitorTick(db: any, messaging: any) {
           isReTrigger = true;
           console.log(`[Monitor] Bucket changed for ${alertId}: ${existing.bucket} -> ${alert.bucket}. Re-triggering...`);
         }
-      }
-
-      if (shouldWrite) {
+      }      if (shouldWrite) {
         const alertData = {
           timestamp: now,
           orderId: alert.item.orderID || "",
@@ -604,7 +636,217 @@ export async function runMonitorTick(db: any, messaging: any) {
       }
     }
 
+    // ============================================================
+    // WHATSAPP DISPATCH (Independent from Push Notifications)
+    // Iterates over quick commerce orders directly, NOT tied to detectAlerts()
+    // ============================================================
+    if (waEscalationRules.length > 0) {
+      try {
+        const waConfig = config;
+        const {
+          whatsappApiUrl,
+          whatsappApiKey,
+          whatsappInstanceName,
+          whatsappFulfillmentMappings = [],
+          whatsappLastMileMappings = [],
+          whatsappGlobalGroupJid = ""
+        } = waConfig;
+
+        if (whatsappApiUrl && whatsappApiKey) {
+          const normStatus = (s: string) => String(s || "").toUpperCase().replace(/[\s_]+/g, '').trim();
+          const getBucketStart = (b: string) => {
+            const norm = String(b || "").replace(/\s*MIN\s*/gi, "").trim();
+            const m = norm.match(/(\d+)/);
+            return m ? parseInt(m[1], 10) : 0;
+          };
+
+          console.log(`[WhatsApp] Processing ${(matrixData.quick || []).length} quick commerce orders against ${waEscalationRules.length} rules`);
+          console.log(`[WhatsApp] Rules: ${waEscalationRules.map((r: any) => `${r.status}|${r.bucket}|${r.escalationLevel}|${r.region}|${r.storeId}`).join(' | ')}`);
+
+          for (const qcOrder of (matrixData.quick || [])) {
+            const statusStr = normStatus(qcOrder.status);
+            const orderStoreId = String(qcOrder.storeID || "").trim();
+            const orderRegion = storeToRegion[orderStoreId] || "";
+            const orderBucketStart = getBucketStart(qcOrder.bucket);
+            const waDedupeKey = `WA|${qcOrder.orderID}|${statusStr}|${qcOrder.bucket}`;
+
+            // Find ALL matching WhatsApp escalation rules, then pick the one with highest bucket
+            // This ensures Level 2/3/Global rules (higher buckets) are preferred over Level 1
+            const allMatchingRules = waEscalationRules.filter((r: any) => {
+              const rBucketStart = getBucketStart(r.bucket);
+              const statusMatch = normStatus(r.status) === statusStr;
+              const bucketMatch = orderBucketStart >= rBucketStart;
+              const regionMatch = (r.region === "All" || r.region === orderRegion);
+              const storeMatch = (r.storeId === "All" || String(r.storeId).trim() === orderStoreId);
+              return r.isActive && statusMatch && bucketMatch && regionMatch && storeMatch;
+            });
+
+            // Sort by bucket start descending — highest bucket (most specific) first
+            allMatchingRules.sort((a: any, b: any) => getBucketStart(b.bucket) - getBucketStart(a.bucket));
+            const matchedRule = allMatchingRules[0] || null;
+
+            if (!matchedRule) continue;
+
+            // --- 10-Minute Cooldown Logic for GOING TO DESTINATION ---
+            if (statusStr === 'GOINGTODESTINATION') {
+              let previousAlertSent = false;
+              for (const key of whatsappSentCache.keys()) {
+                if (key.startsWith(`WA|${qcOrder.orderID}|TRANSFERRING|`) || 
+                    key.startsWith(`WA|${qcOrder.orderID}|GOINGTOORIGIN|`)) {
+                  previousAlertSent = true;
+                  break;
+                }
+              }
+
+              if (previousAlertSent) {
+                const fullV2Order = matrixV2Array.find((o: any) => o.job_number === qcOrder.orderID);
+                if (fullV2Order) {
+                  const lifecycle = getOrderLifecycle(fullV2Order);
+                  if (lifecycle.goingToDestinationStart) {
+                    const elapsedMins = (Date.now() - new Date(lifecycle.goingToDestinationStart).getTime()) / 60000;
+                    if (elapsedMins < 10) {
+                      console.log(`[WhatsApp] ⏳ Cooldown: ${qcOrder.orderID} in GOING TO DESTINATION for ${elapsedMins.toFixed(1)}m. Suppressing until 10m.`);
+                      continue;
+                    }
+                  }
+                }
+              }
+            }
+
+            // Dedup includes escalation level so each level fires independently
+            const levelDedupeKey = `${waDedupeKey}|${matchedRule.escalationLevel || 'Level 1'}`;
+            if (whatsappSentCache.has(levelDedupeKey)) continue;
+
+            const isFulfillment = ['CREATED', 'PICKING', 'PICKINGWITHPACKING', 'PICKINGWITHUNASSIGNEDZONE', 'STORING', 'STORED'].includes(statusStr);
+            const isLastMile = ['TRANSFERRING', 'GOINGTOORIGIN', 'INROUTE', 'GOINGTODESTINATION', 'DELIVERING'].includes(statusStr);
+            
+            let mappingsToUse = isFulfillment ? whatsappFulfillmentMappings : (isLastMile ? whatsappLastMileMappings : []);
+            
+            if (mappingsToUse.length === 0) {
+              console.log(`[WhatsApp] ❌ No ${isFulfillment ? 'fulfillment' : 'last mile'} mappings for order ${qcOrder.orderID}`);
+              continue;
+            }
+
+            const mapping = mappingsToUse.find((m: any) => String(m.storeId || "").trim() === orderStoreId);
+            if (!mapping || !mapping.groupJid) {
+              console.log(`[WhatsApp] ❌ No store mapping for store '${orderStoreId}' (order ${qcOrder.orderID})`);
+              continue;
+            }
+
+            const instanceToUse = mapping.instanceName || whatsappInstanceName;
+            if (!instanceToUse) continue;
+
+            const targetJids = new Set<string>();
+            const targetLevel = matchedRule.escalationLevel || "Level 1";
+
+            targetJids.add(mapping.groupJid);
+            if (["Level 2", "Level 3", "Global"].includes(targetLevel) && mapping.inchargeJid) {
+              targetJids.add(mapping.inchargeJid);
+            }
+            if (["Level 3", "Global"].includes(targetLevel) && mapping.managerJid) {
+              targetJids.add(mapping.managerJid);
+            }
+            if (targetLevel === "Global" && whatsappGlobalGroupJid) {
+              targetJids.add(whatsappGlobalGroupJid);
+            }
+
+            // Format message
+            let emoji = "😔";
+            if (targetLevel === "Level 2") emoji = "⚠️";
+            if (targetLevel === "Level 3") emoji = "🔥";
+            if (targetLevel === "Global") emoji = "🚨";
+            
+            const fullV2Order = matrixV2Array.find((o: any) => o.job_number === qcOrder.orderID);
+            const pickerInfo = fullV2Order ? getPickerInfo(fullV2Order) : null;
+            const driverInfo = fullV2Order ? getDriverInfo(fullV2Order) : null;
+            const storeName = fullV2Order?.store_name || `Store ${orderStoreId}`;
+            
+            // Use human-readable status for the message
+            const displayStatus = String(qcOrder.status || "").replace(/_/g, ' ').toUpperCase();
+            
+            // Determine if this is a last-mile status (show driver) or fulfillment (show picker)
+            const isLastMileStatus = ['TRANSFERRING', 'GOINGTOORIGIN', 'INROUTE', 'GOINGTODESTINATION', 'DELIVERING'].includes(statusStr);
+            
+            let messageText = `*${emoji} Alert: Quick Commerce Delay in ${displayStatus} [${qcOrder.bucket}]*\n\n`;
+            
+            // Status-specific action message
+            const actionMessages: Record<string, string> = {
+              'CREATED': 'Order created however picking not yet started.',
+              'PICKING': 'Order is still in picking status. Kindly complete the picking on priority.',
+              'PICKINGWITHPACKING': 'Order is still in picking status. Kindly complete the picking on priority.',
+              'PICKINGWITHUNASSIGNEDZONE': 'Order is still in picking status. Kindly complete the picking on priority.',
+              'STORED': 'Order is still not handed over to Driver/Rider. Please handover immediately.',
+              'STORING': 'Order is still not handed over to Driver/Rider. Please handover immediately.',
+              'TRANSFERRING': 'Driver still not collected the Order - Please check and push him.',
+              'GOINGTOORIGIN': 'Driver still not reached the Store - Please check and push him.',
+              'GOINGTODESTINATION': 'Driver still did not delivered the Order to customer. Please check and push for on time delivery',
+              'INROUTE': 'Driver is still in Route. Please follow up with him to deliver the order on time.',
+              'DELIVERING': 'Order still showing in delivering - Please check with the driver whether order delivered to customer or not. If delivered ask him to update in the app.',
+            };
+            const actionMsg = actionMessages[statusStr] || '';
+            if (actionMsg) {
+              messageText += `_${actionMsg}_\n\n`;
+            }
+            
+            messageText += `*Order:* ${qcOrder.orderID}\n`;
+            messageText += `*Store Name:* ${storeName}\n`;
+            if (isLastMileStatus) {
+              messageText += `*Driver Name:* ${driverInfo?.name || 'N/A'}\n`;
+              if (driverInfo?.fleet) messageText += `*Fleet:* ${driverInfo.fleet}\n`;
+            } else {
+              messageText += `*Picker Name:* ${pickerInfo?.name || 'N/A'}\n`;
+            }
+            if (fullV2Order) {
+              messageText += `*Picked SKUs:* ${getPickedSkuCount(fullV2Order)} / ${getSkuCount(fullV2Order)}\n`;
+              messageText += `*Picked Items:* ${getPickedItems(fullV2Order)} / ${getTotalItems(fullV2Order)}\n`;
+            }
+            if (targetLevel === "Global") {
+              messageText += `\n*ESCALATION LEVEL:* GLOBAL`;
+            }
+
+            const url = `${whatsappApiUrl.replace(/\/$/, "")}/message/sendText/${instanceToUse}`;
+            
+            for (const jid of targetJids) {
+              if (!jid) continue;
+              try {
+                const waRes = await fetch(url, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", apikey: whatsappApiKey },
+                  body: JSON.stringify({
+                    number: jid,
+                    options: { delay: 0, presence: "composing", linkPreview: false },
+                    text: messageText,
+                  }),
+                });
+                const waResText = await waRes.text();
+                console.log(`[WhatsApp] Sent to ${jid}: HTTP ${waRes.status} - ${waResText.slice(0, 80)}`);
+              } catch (sendErr: any) {
+                console.error(`[WhatsApp] Failed to send to ${jid}:`, sendErr.message);
+              }
+            }
+            console.log(`[WhatsApp] ✅ ${displayStatus} [${qcOrder.bucket}] (${targetLevel}) → ${targetJids.size} recipients for ${qcOrder.orderID}`);
+            const ts = new Date().toISOString();
+            whatsappSentCache.set(levelDedupeKey, ts);
+            // Persist to Firebase to survive Vercel cold starts
+            db.collection('whatsapp_logs').doc(levelDedupeKey.replace(/[\/\.]/g, '_')).set({ timestamp: ts }).catch((e: any) => console.error("[WhatsApp] Failed to save dedupe key:", e.message));
+          }
+        } else {
+          console.log(`[WhatsApp] ❌ Missing whatsappApiUrl or whatsappApiKey`);
+        }
+      } catch (whatsappErr) {
+        console.error(`[WhatsApp] Error in dispatch:`, whatsappErr);
+      }
+    }
+
     // 7. Auto-Escalation Logic (3-minute cooldown)
+    // Only runs when push notification rules are configured
+    if (escalationRules.length === 0) {
+      // No push rules configured - clear any stale alerts from cache
+      if (existingAlertsCache.size > 0) {
+        console.log(`[Monitor] No push rules configured. Clearing ${existingAlertsCache.size} stale alerts from cache.`);
+        existingAlertsCache.clear();
+      }
+    } else {
     const currentEscalationTime = Date.now();
     for (const [alertId, data] of existingAlertsCache.entries()) {
       if (data.status === "Pending" && data.escalation !== "TRUE") {
@@ -663,26 +905,35 @@ export async function runMonitorTick(db: any, messaging: any) {
         }
       }
     }
+    } // end else (escalationRules.length > 0)
     
     // 8. Automated WhatsApp OOS Queue Processor
     try {
       if (config.whatsappOosEnabled && config.whatsappApiUrl && config.whatsappInstanceName && config.whatsappApiKey) {
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
+        // Only check the queue every 5 minutes instead of every 60 seconds to save thousands of Firebase reads
+        if (nowTime - lastWhatsappQueueCheckTime > 5 * 60 * 1000) {
+          lastWhatsappQueueCheckTime = nowTime;
+          
+          const todayStart = new Date();
+          todayStart.setHours(0, 0, 0, 0);
 
-        // Fetch OOS items from today that haven't been sent
-        const oosSnap = await db.collection("oos_history")
-          .where("updatedAt", ">=", todayStart)
-          .where("whatsappSent", "!=", true)
-          .get();
+          // Fetch OOS items from today that haven't been sent
+          // Using == false is 2x cheaper than != true in Firestore
+          const oosSnap = await db.collection("oos_history")
+            .where("updatedAt", ">=", todayStart)
+            .where("whatsappSent", "==", false)
+            .get();
 
-        const mappings = config.whatsappRegionMappings || [];
+          const mappings = config.whatsappAutoOosMappings || [];
 
         for (const docSnap of oosSnap.docs) {
           const oosData = docSnap.data();
           
           // Double-check: skip if already sent (race condition guard)
-          if (oosData.whatsappSent) continue;
+          if (oosData.whatsappSent === true) {
+            processedOOSKeys.add(`wa_${docSnap.id}`);
+            continue;
+          }
 
           // Skip if already processed in-memory during this server session
           if (processedOOSKeys.has(`wa_${docSnap.id}`)) continue;
@@ -701,12 +952,9 @@ export async function runMonitorTick(db: any, messaging: any) {
           }
 
           let mapping = null;
-          // For automated alerts, Admin requested a SINGLE regional group. 
-          // Find mapping that exactly matches the region, but does NOT have a Store ID or Supervisor ID!
+          // Find automated mapping that exactly matches the region (or Global)
           mapping = mappings.find((m: any) => 
-            (String(m.region).trim().toLowerCase() === normRegion || ["global", "all", ""].includes(String(m.region).trim().toLowerCase())) &&
-            !String(m.storeId || "").trim() &&
-            !String(m.supervisorId || "").trim()
+            String(m.region).trim().toLowerCase() === normRegion || ["global", "all", ""].includes(String(m.region).trim().toLowerCase())
           );
 
           if (mapping && mapping.groupJid) {
@@ -715,7 +963,8 @@ export async function runMonitorTick(db: any, messaging: any) {
               // PRE-MARK as sent BEFORE calling the API to prevent race conditions
               await docSnap.ref.update({ whatsappSent: true, whatsappSentAt: new Date().toISOString() });
 
-              const waMessage = `*Out of Stock Alert!*\nStore: ${oosData.storeId}\nOrder No: ${oosData.orderId || "N/A"}\nSKU: ${oosData.sku}\nItem Name: ${oosData.itemName}\nQty: 0`;
+              const storeDisplayName = oosData.storeName ? oosData.storeName : oosData.storeId;
+              const waMessage = `*Out of Stock Alert!*\nStore: ${oosData.storeId}\nOrder No: ${oosData.orderId || "N/A"}\nSKU: ${oosData.sku}\nItem Name: ${oosData.itemName}\nLocation: ${oosData.location || "N/A"}\nStore Name: ${storeDisplayName}`;
 
               let url = `${config.whatsappApiUrl.replace(/\/$/, "")}/message/sendText/${instanceToUse}`;
               let bodyParams: any = {
@@ -764,19 +1013,23 @@ export async function runMonitorTick(db: any, messaging: any) {
                 console.error(`[WhatsApp Auto] Send error for SKU ${oosData.sku}:`, sendErr.message);
                 await docSnap.ref.update({ whatsappError: sendErr.message?.slice(0, 100) });
               }
+            } else {
+              // Fix poison pill: mark as sent even if instance is missing
+              await docSnap.ref.update({ whatsappSent: true, whatsappError: 'No WhatsApp instance configured' });
             }
           } else {
-             // If no mapping found, mark as error so we don't spam trying to send it
              await docSnap.ref.update({ whatsappSent: true, whatsappError: 'No mapping found for store/region' });
           }
         }
+        } // Closing brace for the time check
       }
-    } catch (e) {
-      console.error("[WhatsApp Auto] Queue processor error:", e);
+    } catch (err) {
+      console.error("[Monitor] WhatsApp Auto error:", err);
     }
     
-    // Automatically archive old OOS records older than 24 hours to keep free tier clean (5% chance per min ~ approx once per 20 mins)
-    if (Math.random() < 0.05) {    
+    // 9. Archive old OOS records (> 24 hours)
+    if (nowTime - lastOOSArchiveTime > 6 * 60 * 60 * 1000) {
+      lastOOSArchiveTime = nowTime;
       await archiveOldOOS(db);
     }
     

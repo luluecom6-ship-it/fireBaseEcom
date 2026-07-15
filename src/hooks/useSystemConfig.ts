@@ -25,7 +25,21 @@ export function useSystemConfig(
   const [whatsappApiUrl, setWhatsappApiUrl] = useState('');
   const [whatsappInstanceName, setWhatsappInstanceName] = useState('');
   const [whatsappApiKey, setWhatsappApiKey] = useState('');
-  const [whatsappRegionMappings, setWhatsappRegionMappings] = useState<{region: string, groupJid: string, storeId?: string, supervisorId?: string, instanceName?: string}[]>([]);
+  const [whatsappAutoOosMappings, setWhatsappAutoOosMappings] = useState<{region: string, groupJid: string, instanceName?: string}[]>([]);
+  const [whatsappManualStoreMappings, setWhatsappManualStoreMappings] = useState<{storeId: string, groupJid: string, instanceName?: string}[]>([]);
+  const [whatsappFulfillmentMappings, setWhatsappFulfillmentMappings] = useState<{storeId: string, groupJid: string, inchargeJid: string, managerJid: string, instanceName?: string}[]>([]);
+  const [whatsappLastMileMappings, setWhatsappLastMileMappings] = useState<{storeId: string, groupJid: string, inchargeJid: string, managerJid: string, instanceName?: string}[]>([]);
+  const [whatsappEscalationRules, setWhatsappEscalationRules] = useState<any[]>([]);
+  const [whatsappGlobalGroupJid, setWhatsappGlobalGroupJid] = useState('');
+  // AI Bot Config
+  const [aiBotEnabled, setAiBotEnabled] = useState(false);
+  const [aiBotApiKey, setAiBotApiKey] = useState('');
+  const [aiBotModel, setAiBotModel] = useState('gpt-4o-mini');
+  const [aiBotSystemInstructions, setAiBotSystemInstructions] = useState('');
+  const [aiBotWhatsappEnabled, setAiBotWhatsappEnabled] = useState(false);
+  const [aiBotWhatsappGroupJid, setAiBotWhatsappGroupJid] = useState('');
+  const [aiBotFallbackModel, setAiBotFallbackModel] = useState('');
+  const [aiBotFallbackApiKey, setAiBotFallbackApiKey] = useState('');
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   // Use Firestore for real-time config
@@ -33,83 +47,125 @@ export function useSystemConfig(
     if (!isFirebaseAuthenticated) return;
     const configDoc = doc(db, 'system', 'config');
     
-    // Listen for real-time updates
-    const unsubscribe = onSnapshot(configDoc, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data();
-        if (Array.isArray(data.escalationRules)) {
-          setEscalationRules(data.escalationRules);
+    const fetchConfig = async () => {
+      try {
+        const snapshot = await getDoc(configDoc);
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          if (Array.isArray(data.escalationRules)) {
+            setEscalationRules(data.escalationRules);
+          }
+          if (typeof data.maxImages === 'number') {
+            setMaxImages(data.maxImages);
+          }
+          if (typeof data.scheduledThreshold === 'number') {
+            setScheduledThreshold(data.scheduledThreshold);
+          }
+          if (data.scheduledPastSlot) {
+            setScheduledPastSlotActive(data.scheduledPastSlot.isActive ?? true);
+            setScheduledPastSlotRegions(data.scheduledPastSlot.regions || ['All']);
+          }
+          if (data.scheduledRunningSlot) {
+            setScheduledRunningSlotActive(data.scheduledRunningSlot.isActive ?? true);
+            setScheduledRunningSlotRegions(data.scheduledRunningSlot.regions || ['All']);
+          }
+          if (typeof data.soundAlertsEnabled === 'boolean') {
+            setSoundAlertsEnabled(data.soundAlertsEnabled);
+          }
+          if (typeof data.oosPushEnabled === 'boolean') {
+            setOosPushEnabled(data.oosPushEnabled);
+          }
+          if (Array.isArray(data.oosPushRegions)) {
+            setOosPushRegions(data.oosPushRegions);
+          }
+          if (typeof data.whatsappOosEnabled === 'boolean') {
+            setWhatsappOosEnabled(data.whatsappOosEnabled);
+          }
+          if (Array.isArray(data.whatsappOosRegions)) {
+            setWhatsappOosRegions(data.whatsappOosRegions);
+          }
+          if (typeof data.whatsappApiUrl === 'string') {
+            setWhatsappApiUrl(data.whatsappApiUrl);
+          }
+          if (typeof data.whatsappInstanceName === 'string') {
+            setWhatsappInstanceName(data.whatsappInstanceName);
+          }
+          if (typeof data.whatsappApiKey === 'string') {
+            setWhatsappApiKey(data.whatsappApiKey);
+          }
+          if (Array.isArray(data.whatsappAutoOosMappings)) {
+            setWhatsappAutoOosMappings(data.whatsappAutoOosMappings);
+          }
+          if (Array.isArray(data.whatsappManualStoreMappings)) {
+            setWhatsappManualStoreMappings(data.whatsappManualStoreMappings);
+          }
+          if (Array.isArray(data.whatsappFulfillmentMappings)) {
+            setWhatsappFulfillmentMappings(data.whatsappFulfillmentMappings);
+          }
+          if (Array.isArray(data.whatsappLastMileMappings)) {
+            setWhatsappLastMileMappings(data.whatsappLastMileMappings);
+          }
+          if (Array.isArray(data.whatsappEscalationRules)) {
+            setWhatsappEscalationRules(data.whatsappEscalationRules);
+          }
+          if (typeof data.whatsappGlobalGroupJid === 'string') {
+            setWhatsappGlobalGroupJid(data.whatsappGlobalGroupJid);
+          }
+          // AI Bot
+          if (typeof data.aiBotEnabled === 'boolean') setAiBotEnabled(data.aiBotEnabled);
+          if (typeof data.aiBotApiKey === 'string') setAiBotApiKey(data.aiBotApiKey);
+          if (typeof data.aiBotModel === 'string') setAiBotModel(data.aiBotModel);
+          if (typeof data.aiBotSystemInstructions === 'string') setAiBotSystemInstructions(data.aiBotSystemInstructions);
+          if (typeof data.aiBotWhatsappEnabled === 'boolean') setAiBotWhatsappEnabled(data.aiBotWhatsappEnabled);
+          if (typeof data.aiBotWhatsappGroupJid === 'string') setAiBotWhatsappGroupJid(data.aiBotWhatsappGroupJid);
+          if (typeof data.aiBotFallbackModel === 'string') setAiBotFallbackModel(data.aiBotFallbackModel);
+          if (typeof data.aiBotFallbackApiKey === 'string') setAiBotFallbackApiKey(data.aiBotFallbackApiKey);
+        } else {
+          // Default rules if nothing in Firestore yet
+          const defaultRules = [
+            { id: '1', status: 'CREATED', bucket: '15-20MIN', escalationUser: 'Supervisor A', isActive: true },
+            { id: '2', status: 'PICKING', bucket: '15-20MIN', escalationUser: 'Supervisor B', isActive: true }
+          ];
+          setEscalationRules(defaultRules);
+          setMaxImages(1);
+          setScheduledThreshold(15);
+          setScheduledPastSlotActive(true);
+          setScheduledRunningSlotActive(true);
+          setScheduledPastSlotRegions(['All']);
+          setScheduledRunningSlotRegions(['All']);
+          setSoundAlertsEnabled(true);
+          setOosPushEnabled(true);
+          setOosPushRegions(['All']);
+          setWhatsappOosEnabled(false);
+          setWhatsappOosRegions(['All']);
+          setWhatsappApiUrl('');
+          setWhatsappInstanceName('');
+          setWhatsappApiKey('');
+          setWhatsappAutoOosMappings([]);
+          setWhatsappManualStoreMappings([]);
+          setWhatsappFulfillmentMappings([]);
+          setWhatsappLastMileMappings([]);
+          setWhatsappEscalationRules([]);
+          setWhatsappGlobalGroupJid('');
+          setAiBotEnabled(false);
+          setAiBotApiKey('');
+          setAiBotModel('gpt-4o-mini');
+          setAiBotSystemInstructions('');
+          setAiBotWhatsappEnabled(false);
+          setAiBotWhatsappGroupJid('');
+          setAiBotFallbackModel('');
+          setAiBotFallbackApiKey('');
         }
-        if (typeof data.maxImages === 'number') {
-          setMaxImages(data.maxImages);
-        }
-        if (typeof data.scheduledThreshold === 'number') {
-          setScheduledThreshold(data.scheduledThreshold);
-        }
-        if (data.scheduledPastSlot) {
-          setScheduledPastSlotActive(data.scheduledPastSlot.isActive ?? true);
-          setScheduledPastSlotRegions(data.scheduledPastSlot.regions || ['All']);
-        }
-        if (data.scheduledRunningSlot) {
-          setScheduledRunningSlotActive(data.scheduledRunningSlot.isActive ?? true);
-          setScheduledRunningSlotRegions(data.scheduledRunningSlot.regions || ['All']);
-        }
-        if (typeof data.soundAlertsEnabled === 'boolean') {
-          setSoundAlertsEnabled(data.soundAlertsEnabled);
-        }
-        if (typeof data.oosPushEnabled === 'boolean') {
-          setOosPushEnabled(data.oosPushEnabled);
-        }
-        if (Array.isArray(data.oosPushRegions)) {
-          setOosPushRegions(data.oosPushRegions);
-        }
-        if (typeof data.whatsappOosEnabled === 'boolean') {
-          setWhatsappOosEnabled(data.whatsappOosEnabled);
-        }
-        if (Array.isArray(data.whatsappOosRegions)) {
-          setWhatsappOosRegions(data.whatsappOosRegions);
-        }
-        if (typeof data.whatsappApiUrl === 'string') {
-          setWhatsappApiUrl(data.whatsappApiUrl);
-        }
-        if (typeof data.whatsappInstanceName === 'string') {
-          setWhatsappInstanceName(data.whatsappInstanceName);
-        }
-        if (typeof data.whatsappApiKey === 'string') {
-          setWhatsappApiKey(data.whatsappApiKey);
-        }
-        if (Array.isArray(data.whatsappRegionMappings)) {
-          setWhatsappRegionMappings(data.whatsappRegionMappings);
-        }
-      } else {
-        // Default rules if nothing in Firestore yet
-        const defaultRules = [
-          { id: '1', status: 'CREATED', bucket: '15-20MIN', escalationUser: 'Supervisor A', isActive: true },
-          { id: '2', status: 'PICKING', bucket: '15-20MIN', escalationUser: 'Supervisor B', isActive: true }
-        ];
-        setEscalationRules(defaultRules);
-        setMaxImages(1);
-        setScheduledThreshold(15);
-        setScheduledPastSlotActive(true);
-        setScheduledRunningSlotActive(true);
-        setScheduledPastSlotRegions(['All']);
-        setScheduledRunningSlotRegions(['All']);
-        setSoundAlertsEnabled(true);
-        setOosPushEnabled(true);
-        setOosPushRegions(['All']);
-        setWhatsappOosEnabled(false);
-        setWhatsappOosRegions(['All']);
-        setWhatsappApiUrl('');
-        setWhatsappInstanceName('');
-        setWhatsappApiKey('');
-        setWhatsappRegionMappings([]);
+      } catch (error) {
+        console.error("Firestore config error:", error);
+        if (showToast) showToast("Failed to load live config", "error");
       }
-    }, (error) => {
-      console.error("Firestore config error:", error);
-      if (showToast) showToast("Failed to load live config", "error");
-    });
+    };
 
-    return () => unsubscribe();
+    fetchConfig();
+    const interval = setInterval(fetchConfig, 120000);
+
+    return () => clearInterval(interval);
   }, [showToast, isFirebaseAuthenticated]);
 
   const saveSystemConfig = useCallback(async () => {
@@ -141,7 +197,20 @@ export function useSystemConfig(
         whatsappApiUrl,
         whatsappInstanceName,
         whatsappApiKey,
-        whatsappRegionMappings,
+        whatsappAutoOosMappings,
+        whatsappManualStoreMappings,
+        whatsappFulfillmentMappings,
+        whatsappLastMileMappings,
+        whatsappEscalationRules,
+        whatsappGlobalGroupJid,
+        aiBotEnabled,
+        aiBotApiKey,
+        aiBotModel,
+        aiBotSystemInstructions,
+        aiBotWhatsappEnabled,
+        aiBotWhatsappGroupJid,
+        aiBotFallbackModel,
+        aiBotFallbackApiKey,
         updatedAt: new Date().toISOString()
       }, { merge: true }); // Use merge: true to avoid clobbering unseen config keys
       
@@ -182,7 +251,20 @@ export function useSystemConfig(
     whatsappApiUrl,
     whatsappInstanceName,
     whatsappApiKey,
-    whatsappRegionMappings,
+    whatsappAutoOosMappings,
+    whatsappManualStoreMappings,
+    whatsappFulfillmentMappings,
+    whatsappLastMileMappings,
+    whatsappEscalationRules,
+    whatsappGlobalGroupJid,
+    aiBotEnabled,
+    aiBotApiKey,
+    aiBotModel,
+    aiBotSystemInstructions,
+    aiBotWhatsappEnabled,
+    aiBotWhatsappGroupJid,
+    aiBotFallbackModel,
+    aiBotFallbackApiKey,
     showToast, 
     user
   ]);
@@ -213,7 +295,26 @@ export function useSystemConfig(
     whatsappApiUrl, setWhatsappApiUrl,
     whatsappInstanceName, setWhatsappInstanceName,
     whatsappApiKey, setWhatsappApiKey,
-    whatsappRegionMappings, setWhatsappRegionMappings,
+    whatsappAutoOosMappings,
+    setWhatsappAutoOosMappings,
+    whatsappManualStoreMappings,
+    setWhatsappManualStoreMappings,
+    whatsappFulfillmentMappings,
+    setWhatsappFulfillmentMappings,
+    whatsappLastMileMappings,
+    setWhatsappLastMileMappings,
+    whatsappEscalationRules,
+    setWhatsappEscalationRules,
+    whatsappGlobalGroupJid,
+    setWhatsappGlobalGroupJid,
+    aiBotEnabled, setAiBotEnabled,
+    aiBotApiKey, setAiBotApiKey,
+    aiBotModel, setAiBotModel,
+    aiBotSystemInstructions, setAiBotSystemInstructions,
+    aiBotWhatsappEnabled, setAiBotWhatsappEnabled,
+    aiBotWhatsappGroupJid, setAiBotWhatsappGroupJid,
+    aiBotFallbackModel, setAiBotFallbackModel,
+    aiBotFallbackApiKey, setAiBotFallbackApiKey,
     saveSystemConfig,
     isSavingConfig 
   };

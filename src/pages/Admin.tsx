@@ -14,6 +14,7 @@ import {
 } from '../types';
 import { Header } from '../components/layout/Header';
 import { STATUSES, AGE_BUCKETS } from '../constants';
+import { compressImage } from '../utils/imageUtils';
 import { fixImageUrl, getImages } from '../utils/formatters';
 import { SmartImage } from '../components/layout/common/SmartImage';
 import { cn } from '../lib/utils';
@@ -51,8 +52,35 @@ interface AdminProps {
   setWhatsappInstanceName?: (val: string) => void;
   whatsappApiKey?: string;
   setWhatsappApiKey?: (val: string) => void;
-  whatsappRegionMappings?: {region: string, groupJid: string, storeId?: string, supervisorId?: string, instanceName?: string}[];
-  setWhatsappRegionMappings?: (val: {region: string, groupJid: string, storeId?: string, supervisorId?: string, instanceName?: string}[]) => void;
+  whatsappAutoOosMappings?: {region: string, groupJid: string, instanceName?: string}[];
+  setWhatsappAutoOosMappings?: (val: {region: string, groupJid: string, instanceName?: string}[]) => void;
+  whatsappManualStoreMappings?: {storeId: string, groupJid: string, instanceName?: string}[];
+  setWhatsappManualStoreMappings?: (val: {storeId: string, groupJid: string, instanceName?: string}[]) => void;
+  whatsappFulfillmentMappings?: {storeId: string, groupJid: string, inchargeJid: string, managerJid: string, instanceName?: string}[];
+  setWhatsappFulfillmentMappings?: (val: {storeId: string, groupJid: string, inchargeJid: string, managerJid: string, instanceName?: string}[]) => void;
+  whatsappLastMileMappings?: {storeId: string, groupJid: string, inchargeJid: string, managerJid: string, instanceName?: string}[];
+  setWhatsappLastMileMappings?: (val: {storeId: string, groupJid: string, inchargeJid: string, managerJid: string, instanceName?: string}[]) => void;
+  whatsappEscalationRules?: any[];
+  setWhatsappEscalationRules?: (val: any[]) => void;
+  whatsappGlobalGroupJid?: string;
+  setWhatsappGlobalGroupJid?: (val: string) => void;
+  // AI Bot Config
+  aiBotEnabled?: boolean;
+  setAiBotEnabled?: (val: boolean) => void;
+  aiBotApiKey?: string;
+  setAiBotApiKey?: (val: string) => void;
+  aiBotModel?: string;
+  setAiBotModel?: (val: string) => void;
+  aiBotSystemInstructions?: string;
+  setAiBotSystemInstructions?: (val: string) => void;
+  aiBotWhatsappEnabled?: boolean;
+  setAiBotWhatsappEnabled?: (val: boolean) => void;
+  aiBotWhatsappGroupJid?: string;
+  setAiBotWhatsappGroupJid?: (val: string) => void;
+  aiBotFallbackModel?: string;
+  setAiBotFallbackModel?: (val: string) => void;
+  aiBotFallbackApiKey?: string;
+  setAiBotFallbackApiKey?: (val: string) => void;
   staffStatus: any[];
   scheduledThreshold: number;
   setScheduledThreshold: (num: number) => void;
@@ -116,8 +144,34 @@ export const Admin: React.FC<AdminProps> = ({
   setWhatsappInstanceName,
   whatsappApiKey,
   setWhatsappApiKey,
-  whatsappRegionMappings,
-  setWhatsappRegionMappings,
+  whatsappAutoOosMappings,
+  setWhatsappAutoOosMappings,
+  whatsappManualStoreMappings,
+  setWhatsappManualStoreMappings,
+  whatsappFulfillmentMappings,
+  setWhatsappFulfillmentMappings,
+  whatsappLastMileMappings,
+  setWhatsappLastMileMappings,
+  whatsappEscalationRules,
+  setWhatsappEscalationRules,
+  whatsappGlobalGroupJid,
+  setWhatsappGlobalGroupJid,
+  aiBotEnabled,
+  setAiBotEnabled,
+  aiBotApiKey,
+  setAiBotApiKey,
+  aiBotModel,
+  setAiBotModel,
+  aiBotSystemInstructions,
+  setAiBotSystemInstructions,
+  aiBotWhatsappEnabled,
+  setAiBotWhatsappEnabled,
+  aiBotWhatsappGroupJid,
+  setAiBotWhatsappGroupJid,
+  aiBotFallbackModel,
+  setAiBotFallbackModel,
+  aiBotFallbackApiKey,
+  setAiBotFallbackApiKey,
   staffStatus
 }) => {
   const getTodayStr = () => {
@@ -216,7 +270,7 @@ export const Admin: React.FC<AdminProps> = ({
     }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 2 * 1024 * 1024) {
@@ -224,8 +278,11 @@ export const Admin: React.FC<AdminProps> = ({
         return;
       }
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setUserForm(prev => ({ ...prev, profileImage: reader.result as string }));
+      reader.onloadend = async () => {
+        const base64 = reader.result as string;
+        // Compress to 200px max width, JPEG 0.7 quality to keep under Firestore 1MB doc limit
+        const compressed = await compressImage(base64, 200, 0.7);
+        setUserForm(prev => ({ ...prev, profileImage: compressed }));
       };
       reader.readAsDataURL(file);
     }
@@ -784,7 +841,7 @@ export const Admin: React.FC<AdminProps> = ({
                   <div className="flex items-center gap-3 sm:gap-4">
                     <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 font-black text-sm sm:text-base overflow-hidden border border-slate-50">
                       {u.profileImage ? (
-                        <img src={u.profileImage} className="w-full h-full object-cover" alt={u.name} />
+                        <img src={u.profileImage} className="w-full h-full object-cover" alt={u.name} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                       ) : (
                         u.name.charAt(0)
                       )}
@@ -927,7 +984,7 @@ export const Admin: React.FC<AdminProps> = ({
                           <div className="flex items-center gap-3">
                             <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-sm overflow-hidden border border-slate-100">
                               {u.profileImage ? (
-                                <img src={u.profileImage} className="w-full h-full object-cover" alt={u.name} />
+                                <img src={u.profileImage} className="w-full h-full object-cover" alt={u.name} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                               ) : (
                                 u.name.charAt(0)
                               )}
@@ -1143,9 +1200,10 @@ export const Admin: React.FC<AdminProps> = ({
           </div>
         )}
 
+
         {/* Scheduled Alerts Configuration */}
         {String(user.role || "").toLowerCase().trim() === 'admin' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+          <div className="flex flex-col gap-6 mt-6">
             <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
               <div className="p-4 sm:p-6 bg-indigo-50/50 border-b border-indigo-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
@@ -1406,7 +1464,176 @@ export const Admin: React.FC<AdminProps> = ({
               </div>
             )}
           </div>
-            
+            {/* WhatsApp Escalation Matrix (Quick Commerce) */}
+            {String(user.role || "").toLowerCase().trim() === 'admin' && (
+              <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden mt-6">
+                <div className="p-4 sm:p-6 bg-emerald-50/50 border-b border-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
+                    <MessageSquare size={18} className="text-emerald-600 sm:hidden" />
+                    <MessageSquare size={20} className="text-emerald-600 hidden sm:block" />
+                    WhatsApp Escalation Matrix
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full ml-2">Quick Commerce</span>
+                  </h4>
+                  <div className="flex flex-col sm:flex-row gap-3 sm:items-center w-full sm:w-auto">
+                    <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-emerald-100 shadow-sm w-full sm:w-auto">
+                      <span className="text-[9px] font-black text-slate-500 uppercase">Global Group JID</span>
+                      <input
+                        type="text"
+                        value={whatsappGlobalGroupJid || ''}
+                        onChange={(e) => setWhatsappGlobalGroupJid && setWhatsappGlobalGroupJid(e.target.value)}
+                        placeholder="Global Whatsapp Group JID"
+                        className="bg-transparent border-none outline-none text-xs font-bold text-slate-700 w-32"
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button 
+                        onClick={onSaveConfig}
+                        disabled={isSavingConfig || !isFirebaseAuthenticated}
+                        className={cn(
+                          "px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 sm:gap-2",
+                          (isSavingConfig || !isFirebaseAuthenticated) ? "bg-slate-100 text-slate-400" : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-md"
+                        )}
+                      >
+                        <Save size={12} /> {isSavingConfig ? "Saving..." : "Save"}
+                      </button>
+                      <button 
+                        onClick={() => {
+                          if (setWhatsappEscalationRules && whatsappEscalationRules) {
+                            const newId = Date.now().toString();
+                            setWhatsappEscalationRules([
+                              ...whatsappEscalationRules, 
+                              { id: newId, region: 'All', storeId: 'All', status: 'CREATED', bucket: '15-20', escalationLevel: 'Level 1', isActive: true }
+                            ]);
+                          }
+                        }}
+                        className="px-3 py-1.5 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all"
+                      >
+                        Add Rule
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left min-w-[700px]">
+                    <thead>
+                      <tr className="bg-slate-50/50 border-b border-slate-100">
+                        <th className="p-3 sm:p-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Region</th>
+                        <th className="p-3 sm:p-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Store ID</th>
+                        <th className="p-3 sm:p-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+                        <th className="p-3 sm:p-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Bucket</th>
+                        <th className="p-3 sm:p-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Escalation To</th>
+                        <th className="p-3 sm:p-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Active</th>
+                        <th className="p-3 sm:p-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {(whatsappEscalationRules || [])
+                        .filter(rule => selectedRegion === "All" || rule.region === "All" || rule.region === selectedRegion)
+                        .map((rule: any) => (
+                        <tr key={rule.id} className="hover:bg-slate-50/30 transition-colors">
+                          <td className="p-3 sm:p-4">
+                            <select 
+                              value={rule.region || "All"}
+                              onChange={(e) => setWhatsappEscalationRules && setWhatsappEscalationRules(whatsappEscalationRules!.map(r => r.id === rule.id ? { ...r, region: e.target.value } : r))}
+                              className="w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-[10px] sm:text-xs font-bold text-slate-700 outline-none focus:border-emerald-500"
+                            >
+                              <option value="All">All Regions</option>
+                              {availableRegions.map(reg => (
+                                <option key={`wa_reg_${reg}`} value={reg}>{reg}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="p-3 sm:p-4">
+                            <input
+                              type="text"
+                              value={rule.storeId || 'All'}
+                              onChange={(e) => setWhatsappEscalationRules && setWhatsappEscalationRules(whatsappEscalationRules!.map(r => r.id === rule.id ? { ...r, storeId: e.target.value } : r))}
+                              placeholder="Store ID or All"
+                              className="w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-[10px] sm:text-xs font-bold text-slate-700 outline-none focus:border-emerald-500"
+                            />
+                          </td>
+                          <td className="p-3 sm:p-4">
+                            <select 
+                              value={rule.status || "CREATED"}
+                              onChange={(e) => setWhatsappEscalationRules && setWhatsappEscalationRules(whatsappEscalationRules!.map(r => r.id === rule.id ? { ...r, status: e.target.value } : r))}
+                              className="w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-[10px] sm:text-xs font-bold text-slate-700 outline-none focus:border-emerald-500"
+                            >
+                              <option value="CREATED">CREATED</option>
+                              <option value="PICKING">PICKING</option>
+                              <option value="PICKING WITH PACKING">PICKING WITH PACKING</option>
+                              <option value="PICKING WITH UNASSIGNED ZONE">PICKING WITH UNASSIGNED ZONE</option>
+                              <option value="STORING">STORING</option>
+                              <option value="STORED">STORED</option>
+                              <option value="TRANSFERRING">TRANSFERRING</option>
+                              <option value="GOING TO ORIGIN">GOING TO ORIGIN</option>
+                              <option value="IN ROUTE">IN ROUTE</option>
+                              <option value="GOING TO DESTINATION">GOING TO DESTINATION</option>
+                              <option value="DELIVERING">DELIVERING</option>
+                            </select>
+                          </td>
+                          <td className="p-3 sm:p-4">
+                            <select 
+                              value={rule.bucket || "15-20"}
+                              onChange={(e) => setWhatsappEscalationRules && setWhatsappEscalationRules(whatsappEscalationRules!.map(r => r.id === rule.id ? { ...r, bucket: e.target.value } : r))}
+                              className="w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-[10px] sm:text-xs font-bold text-slate-700 outline-none focus:border-emerald-500"
+                            >
+                              <option value="0-5">0-5 MIN</option>
+                              <option value="5-10">5-10 MIN</option>
+                              <option value="10-15">10-15 MIN</option>
+                              <option value="15-20">15-20 MIN</option>
+                              <option value="20-25">20-25 MIN</option>
+                              <option value="25-30">25-30 MIN</option>
+                              <option value="30-35">30-35 MIN</option>
+                              <option value="35-40">35-40 MIN</option>
+                              <option value="40-45">40-45 MIN</option>
+                              <option value="45-50">45-50 MIN</option>
+                              <option value="50-55">50-55 MIN</option>
+                              <option value="55-60">55-60 MIN</option>
+                              <option value="60+">60+ MIN</option>
+                            </select>
+                          </td>
+                          <td className="p-3 sm:p-4">
+                            <select 
+                              value={rule.escalationLevel || "Level 1"}
+                              onChange={(e) => setWhatsappEscalationRules && setWhatsappEscalationRules(whatsappEscalationRules!.map(r => r.id === rule.id ? { ...r, escalationLevel: e.target.value } : r))}
+                              className="w-full bg-slate-50 border border-slate-100 rounded-lg p-2 text-[10px] sm:text-xs font-bold text-slate-700 outline-none focus:border-emerald-500"
+                            >
+                              <option value="Level 1">Level 1 (Group)</option>
+                              <option value="Level 2">Level 2 (+ Incharge)</option>
+                              <option value="Level 3">Level 3 (+ Manager)</option>
+                              <option value="Global">Global (+ All)</option>
+                            </select>
+                          </td>
+                          <td className="p-3 sm:p-4 text-center">
+                            <button 
+                              onClick={() => setWhatsappEscalationRules && setWhatsappEscalationRules(whatsappEscalationRules!.map(r => r.id === rule.id ? { ...r, isActive: !r.isActive } : r))}
+                              className={cn(
+                                "w-8 h-4 sm:w-10 sm:h-5 rounded-full relative transition-all mx-auto",
+                                rule.isActive ? "bg-emerald-500" : "bg-slate-300"
+                              )}
+                            >
+                              <div className={cn(
+                                "absolute top-0.5 w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-white transition-all shadow-sm",
+                                rule.isActive ? "right-0.5" : "left-0.5"
+                              )}></div>
+                            </button>
+                          </td>
+                          <td className="p-3 sm:p-4 text-center">
+                            <button 
+                              onClick={() => setWhatsappEscalationRules && setWhatsappEscalationRules(whatsappEscalationRules!.filter(r => r.id !== rule.id))}
+                              className="p-1.5 sm:p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors mx-auto block"
+                            >
+                              <X size={14} className="sm:w-4 sm:h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {/* WhatsApp Evolution API Configuration */}
             {String(user.role || "").toLowerCase().trim() === 'admin' && (
               <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden mt-6">
@@ -1564,50 +1791,44 @@ export const Admin: React.FC<AdminProps> = ({
                         </div>
                       </div>
                       
-                      <div className="space-y-3">
-                        {(whatsappRegionMappings || []).map((mapping, idx) => (
-                          <div key={idx} className="flex flex-col gap-2 bg-white p-3 rounded-xl border border-slate-200">
-                            <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center w-full">
-                              <select 
-                                value={mapping.region}
-                                onChange={(e) => {
-                                  const newMappings = [...(whatsappRegionMappings || [])];
-                                  newMappings[idx].region = e.target.value;
-                                  setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
-                                }}
-                                className="w-full sm:w-1/4 shrink-0 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
-                              >
-                                <option value="">Select Region...</option>
-                                {availableRegions.map(reg => <option key={reg} value={reg}>{reg}</option>)}
-                              </select>
+                      <div className="space-y-6">
+                        {/* 1. Automated OOS Mappings (Region) */}
+                        <div className="space-y-3 border border-slate-200 rounded-xl p-4 bg-slate-50/50">
+                          <h5 className="font-bold text-slate-700 text-sm flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                            Automated OOS Mappings (Region Wise)
+                          </h5>
+                          <p className="text-xs text-slate-500 mb-2">Used by the background monitor for automated Out-Of-Stock alerts.</p>
+                          {(whatsappAutoOosMappings || []).map((mapping, idx) => (
+                            <div key={`auto_${idx}`} className="flex flex-col gap-2 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                              <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center w-full">
+                                <select 
+                                  value={mapping.region}
+                                  onChange={(e) => {
+                                    const newMappings = [...(whatsappAutoOosMappings || [])];
+                                    newMappings[idx].region = e.target.value;
+                                    setWhatsappAutoOosMappings && setWhatsappAutoOosMappings(newMappings);
+                                  }}
+                                  className="w-full sm:w-1/3 shrink-0 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                                >
+                                  <option value="">Select Region...</option>
+                                  <option value="All">All Regions</option>
+                                  {availableRegions.map(reg => <option key={reg} value={reg}>{reg}</option>)}
+                                </select>
+                                <input
+                                  type="text"
+                                  value={mapping.instanceName || ''}
+                                  onChange={(e) => {
+                                    const newMappings = [...(whatsappAutoOosMappings || [])];
+                                    newMappings[idx].instanceName = e.target.value;
+                                    setWhatsappAutoOosMappings && setWhatsappAutoOosMappings(newMappings);
+                                  }}
+                                  placeholder="Instance Name (Optional override)"
+                                  className="w-full sm:w-2/3 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                                />
+                              </div>
 
-                              <input
-                                type="text"
-                                value={mapping.storeId || ''}
-                                onChange={(e) => {
-                                  const newMappings = [...(whatsappRegionMappings || [])];
-                                  newMappings[idx].storeId = e.target.value;
-                                  setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
-                                }}
-                                placeholder="Store ID (Optional)"
-                                className="w-full sm:w-1/4 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
-                              />
-
-                              <input
-                                type="text"
-                                value={mapping.supervisorId || ''}
-                                onChange={(e) => {
-                                  const newMappings = [...(whatsappRegionMappings || [])];
-                                  newMappings[idx].supervisorId = e.target.value;
-                                  setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
-                                }}
-                                placeholder="Supervisor ID (Optional)"
-                                className="w-full sm:w-1/4 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
-                              />
-                            </div>
-
-                            <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center w-full">
-                              <div className="flex-1 flex gap-2 w-full sm:w-auto">
+                              <div className="flex gap-2 items-center w-full">
                                 <div className="flex-1 relative">
                                   {(() => {
                                     const rowInstance = mapping.instanceName || whatsappInstanceName || '';
@@ -1617,11 +1838,11 @@ export const Admin: React.FC<AdminProps> = ({
                                         <select
                                           value={mapping.groupJid || ""}
                                           onChange={(e) => {
-                                            const newMappings = [...(whatsappRegionMappings || [])];
+                                            const newMappings = [...(whatsappAutoOosMappings || [])];
                                             newMappings[idx].groupJid = e.target.value;
-                                            setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                                            setWhatsappAutoOosMappings && setWhatsappAutoOosMappings(newMappings);
                                           }}
-                                          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 appearance-none pr-8"
+                                          className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
                                         >
                                           <option value="">Select WhatsApp Group</option>
                                           {groupsForInstance.map(g => <option key={g.id} value={g.id}>{g.subject} ({g.id})</option>)}
@@ -1631,12 +1852,12 @@ export const Admin: React.FC<AdminProps> = ({
                                           type="text" 
                                           value={mapping.groupJid || ""}
                                           onChange={(e) => {
-                                            const newMappings = [...(whatsappRegionMappings || [])];
+                                            const newMappings = [...(whatsappAutoOosMappings || [])];
                                             newMappings[idx].groupJid = e.target.value;
-                                            setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                                            setWhatsappAutoOosMappings && setWhatsappAutoOosMappings(newMappings);
                                           }}
                                           placeholder="WhatsApp Group JID"
-                                          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500"
+                                          className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
                                         />
                                       )
                                     );
@@ -1644,53 +1865,542 @@ export const Admin: React.FC<AdminProps> = ({
                                 </div>
                                 <button
                                   onClick={() => handleFetchGroups(mapping.instanceName || whatsappInstanceName)}
-                                  title="Fetch Groups for this Instance"
-                                  className="h-[38px] px-3 bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 rounded-xl flex items-center justify-center transition-colors shrink-0"
+                                  title="Fetch Groups"
+                                  className="p-2 bg-blue-50 text-blue-600 rounded-lg border border-blue-200 hover:bg-blue-100 shrink-0"
                                 >
                                   <DownloadCloud size={14} />
                                 </button>
                                 <button 
                                   onClick={() => {
-                                    const newMappings = [...(whatsappRegionMappings || [])];
+                                    const newMappings = [...(whatsappAutoOosMappings || [])];
                                     newMappings.splice(idx, 1);
-                                    setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
+                                    setWhatsappAutoOosMappings && setWhatsappAutoOosMappings(newMappings);
                                   }}
-                                  className="h-[38px] w-[38px] bg-red-50 hover:bg-red-100 text-red-500 rounded-xl flex items-center justify-center transition-colors shrink-0"
+                                  className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 shrink-0"
                                 >
                                   <X size={14} />
                                 </button>
                               </div>
-
-                              <input
-                                type="text"
-                                value={mapping.instanceName || ''}
-                                onChange={(e) => {
-                                  const newMappings = [...(whatsappRegionMappings || [])];
-                                  newMappings[idx].instanceName = e.target.value;
-                                  setWhatsappRegionMappings && setWhatsappRegionMappings(newMappings);
-                                }}
-                                placeholder="Evolution Instance (Optional)"
-                                className="w-full sm:w-1/3 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-green-500"
-                              />
-                              
-
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                          <button 
+                            onClick={() => {
+                              setWhatsappAutoOosMappings && setWhatsappAutoOosMappings([...(whatsappAutoOosMappings || []), {region: '', groupJid: '', instanceName: ''}]);
+                            }}
+                            className="mt-2 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                          >
+                            <Plus size={14} /> Add Region Mapping
+                          </button>
+                        </div>
+
+                        {/* 2. Manual Store Mappings (Store Wise) */}
+                        <div className="space-y-3 border border-slate-200 rounded-xl p-4 bg-slate-50/50">
+                          <h5 className="font-bold text-slate-700 text-sm flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                            Manual Push Mappings (Store Wise)
+                          </h5>
+                          <p className="text-xs text-slate-500 mb-2">Used when clicking the manual WhatsApp button in Order Details.</p>
+                          {(whatsappManualStoreMappings || []).map((mapping, idx) => (
+                            <div key={`manual_${idx}`} className="flex flex-col gap-2 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                              <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center w-full">
+                                <input
+                                  type="text"
+                                  value={mapping.storeId || ''}
+                                  onChange={(e) => {
+                                    const newMappings = [...(whatsappManualStoreMappings || [])];
+                                    newMappings[idx].storeId = e.target.value;
+                                    setWhatsappManualStoreMappings && setWhatsappManualStoreMappings(newMappings);
+                                  }}
+                                  placeholder="Store ID (Exact match required)"
+                                  className="w-full sm:w-1/3 shrink-0 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-purple-500"
+                                />
+                                <input
+                                  type="text"
+                                  value={mapping.instanceName || ''}
+                                  onChange={(e) => {
+                                    const newMappings = [...(whatsappManualStoreMappings || [])];
+                                    newMappings[idx].instanceName = e.target.value;
+                                    setWhatsappManualStoreMappings && setWhatsappManualStoreMappings(newMappings);
+                                  }}
+                                  placeholder="Instance Name (Optional override)"
+                                  className="w-full sm:w-2/3 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-purple-500"
+                                />
+                              </div>
+
+                              <div className="flex gap-2 items-center w-full">
+                                <div className="flex-1 relative">
+                                  {(() => {
+                                    const rowInstance = mapping.instanceName || whatsappInstanceName || '';
+                                    const groupsForInstance = fetchedGroupsByInstance[rowInstance] || [];
+                                    return (
+                                      groupsForInstance.length > 0 ? (
+                                        <select
+                                          value={mapping.groupJid || ""}
+                                          onChange={(e) => {
+                                            const newMappings = [...(whatsappManualStoreMappings || [])];
+                                            newMappings[idx].groupJid = e.target.value;
+                                            setWhatsappManualStoreMappings && setWhatsappManualStoreMappings(newMappings);
+                                          }}
+                                          className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-purple-500"
+                                        >
+                                          <option value="">Select WhatsApp Group</option>
+                                          {groupsForInstance.map(g => <option key={g.id} value={g.id}>{g.subject} ({g.id})</option>)}
+                                        </select>
+                                      ) : (
+                                        <input 
+                                          type="text" 
+                                          value={mapping.groupJid || ""}
+                                          onChange={(e) => {
+                                            const newMappings = [...(whatsappManualStoreMappings || [])];
+                                            newMappings[idx].groupJid = e.target.value;
+                                            setWhatsappManualStoreMappings && setWhatsappManualStoreMappings(newMappings);
+                                          }}
+                                          placeholder="WhatsApp Group JID"
+                                          className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-purple-500"
+                                        />
+                                      )
+                                    );
+                                  })()}
+                                </div>
+                                <button
+                                  onClick={() => handleFetchGroups(mapping.instanceName || whatsappInstanceName)}
+                                  title="Fetch Groups"
+                                  className="p-2 bg-purple-50 text-purple-600 rounded-lg border border-purple-200 hover:bg-purple-100 shrink-0"
+                                >
+                                  <DownloadCloud size={14} />
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    const newMappings = [...(whatsappManualStoreMappings || [])];
+                                    newMappings.splice(idx, 1);
+                                    setWhatsappManualStoreMappings && setWhatsappManualStoreMappings(newMappings);
+                                  }}
+                                  className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 shrink-0"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                          <button 
+                            onClick={() => {
+                              setWhatsappManualStoreMappings && setWhatsappManualStoreMappings([...(whatsappManualStoreMappings || []), {storeId: '', groupJid: '', instanceName: ''}]);
+                            }}
+                            className="mt-2 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                          >
+                            <Plus size={14} /> Add Store Mapping
+                          </button>
+                        </div>
                         
-                        <button 
-                          onClick={() => {
-                            setWhatsappRegionMappings && setWhatsappRegionMappings([...(whatsappRegionMappings || []), {region: '', groupJid: '', storeId: '', supervisorId: '', instanceName: ''}]);
-                          }}
-                          className="mt-2 w-full sm:w-auto px-4 py-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
-                        >
-                          <Plus size={14} /> Add Mapping
-                        </button>
+                        {/* Fulfillment Alerts */}
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mt-6">
+                          <h5 className="font-bold text-sm text-slate-800 flex items-center gap-2 mb-1">
+                            <MessageSquare size={16} className="text-orange-500" />
+                            WhatsApp Fulfillment Alerts (Store Routing)
+                          </h5>
+                          <p className="text-xs text-slate-500 mb-2">Used for picking/storing automated status alerts.</p>
+                          {(whatsappFulfillmentMappings || []).map((mapping: any, idx: number) => (
+                            <div key={`fulfill_${idx}`} className="flex flex-col gap-2 bg-white p-3 rounded-xl border border-slate-200 shadow-sm mb-2">
+                              <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center w-full">
+                                <input
+                                  type="text"
+                                  value={mapping.storeId || ''}
+                                  onChange={(e) => {
+                                    const newMappings = [...(whatsappFulfillmentMappings || [])];
+                                    newMappings[idx].storeId = e.target.value;
+                                    setWhatsappFulfillmentMappings && setWhatsappFulfillmentMappings(newMappings);
+                                  }}
+                                  placeholder="Store ID"
+                                  className="w-full sm:w-1/4 shrink-0 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-orange-500"
+                                />
+                                <input
+                                  type="text"
+                                  value={mapping.instanceName || ''}
+                                  onChange={(e) => {
+                                    const newMappings = [...(whatsappFulfillmentMappings || [])];
+                                    newMappings[idx].instanceName = e.target.value;
+                                    setWhatsappFulfillmentMappings && setWhatsappFulfillmentMappings(newMappings);
+                                  }}
+                                  placeholder="Instance Name (Optional)"
+                                  className="w-full sm:w-1/4 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-orange-500"
+                                />
+                                <div className="flex-1 flex gap-2">
+                                  <button 
+                                    onClick={() => handleFetchGroups(mapping.instanceName || whatsappInstanceName)}
+                                    title="Fetch Groups for this Instance"
+                                    className="p-2 w-full bg-orange-50 text-orange-600 rounded-lg border border-orange-200 hover:bg-orange-100 shrink-0 text-xs font-bold flex justify-center items-center gap-1"
+                                  >
+                                    <MessageSquare size={14} /> Fetch WhatsApp Groups
+                                  </button>
+                                  <button 
+                                    onClick={() => {
+                                      const newMappings = [...(whatsappFulfillmentMappings || [])];
+                                      newMappings.splice(idx, 1);
+                                      setWhatsappFulfillmentMappings && setWhatsappFulfillmentMappings(newMappings);
+                                    }}
+                                    className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 shrink-0"
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="flex flex-col sm:flex-row gap-2">
+                                <div className="flex-1">
+                                  <div className="text-[10px] text-slate-400 font-bold mb-1 ml-1 uppercase">Store Group (Level 1)</div>
+                                  <input
+                                    type="text" 
+                                    value={mapping.groupJid || ""}
+                                    onChange={(e) => {
+                                      const newMappings = [...(whatsappFulfillmentMappings || [])];
+                                      newMappings[idx].groupJid = e.target.value;
+                                      setWhatsappFulfillmentMappings && setWhatsappFulfillmentMappings(newMappings);
+                                    }}
+                                    placeholder="Group JID"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-orange-500"
+                                  />
+                                </div>
+                                <div className="flex-1">
+                                  <div className="text-[10px] text-slate-400 font-bold mb-1 ml-1 uppercase">Store Incharge (Level 2)</div>
+                                  <input
+                                    type="text" 
+                                    value={mapping.inchargeJid || ""}
+                                    onChange={(e) => {
+                                      const newMappings = [...(whatsappFulfillmentMappings || [])];
+                                      newMappings[idx].inchargeJid = e.target.value;
+                                      setWhatsappFulfillmentMappings && setWhatsappFulfillmentMappings(newMappings);
+                                    }}
+                                    placeholder="Number / JID"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-orange-500"
+                                  />
+                                </div>
+                                <div className="flex-1">
+                                  <div className="text-[10px] text-slate-400 font-bold mb-1 ml-1 uppercase">Manager (Level 3)</div>
+                                  <input
+                                    type="text" 
+                                    value={mapping.managerJid || ""}
+                                    onChange={(e) => {
+                                      const newMappings = [...(whatsappFulfillmentMappings || [])];
+                                      newMappings[idx].managerJid = e.target.value;
+                                      setWhatsappFulfillmentMappings && setWhatsappFulfillmentMappings(newMappings);
+                                    }}
+                                    placeholder="Number / JID"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-orange-500"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                          <button 
+                            onClick={() => {
+                              setWhatsappFulfillmentMappings && setWhatsappFulfillmentMappings([...(whatsappFulfillmentMappings || []), {storeId: '', groupJid: '', inchargeJid: '', managerJid: '', instanceName: ''}]);
+                            }}
+                            className="mt-2 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                          >
+                            <Plus size={14} /> Add Fulfillment Mapping
+                          </button>
+                        </div>
+                        
+                        {/* Last Mile Alerts */}
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mt-6">
+                          <h5 className="font-bold text-sm text-slate-800 flex items-center gap-2 mb-1">
+                            <MessageSquare size={16} className="text-blue-500" />
+                            WhatsApp Last Mile Alerts (Delivery Routing)
+                          </h5>
+                          <p className="text-xs text-slate-500 mb-2">Used for transit/delivery automated status alerts.</p>
+                          {(whatsappLastMileMappings || []).map((mapping: any, idx: number) => (
+                            <div key={`lastmile_${idx}`} className="flex flex-col gap-2 bg-white p-3 rounded-xl border border-slate-200 shadow-sm mb-2">
+                              <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center w-full">
+                                <input
+                                  type="text"
+                                  value={mapping.storeId || ''}
+                                  onChange={(e) => {
+                                    const newMappings = [...(whatsappLastMileMappings || [])];
+                                    newMappings[idx].storeId = e.target.value;
+                                    setWhatsappLastMileMappings && setWhatsappLastMileMappings(newMappings);
+                                  }}
+                                  placeholder="Store ID"
+                                  className="w-full sm:w-1/4 shrink-0 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                                />
+                                <input
+                                  type="text"
+                                  value={mapping.instanceName || ''}
+                                  onChange={(e) => {
+                                    const newMappings = [...(whatsappLastMileMappings || [])];
+                                    newMappings[idx].instanceName = e.target.value;
+                                    setWhatsappLastMileMappings && setWhatsappLastMileMappings(newMappings);
+                                  }}
+                                  placeholder="Instance Name (Optional)"
+                                  className="w-full sm:w-1/4 bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                                />
+                                <div className="flex-1 flex gap-2">
+                                  <button 
+                                    onClick={() => handleFetchGroups(mapping.instanceName || whatsappInstanceName)}
+                                    title="Fetch Groups for this Instance"
+                                    className="p-2 w-full bg-blue-50 text-blue-600 rounded-lg border border-blue-200 hover:bg-blue-100 shrink-0 text-xs font-bold flex justify-center items-center gap-1"
+                                  >
+                                    <MessageSquare size={14} /> Fetch WhatsApp Groups
+                                  </button>
+                                  <button 
+                                    onClick={() => {
+                                      const newMappings = [...(whatsappLastMileMappings || [])];
+                                      newMappings.splice(idx, 1);
+                                      setWhatsappLastMileMappings && setWhatsappLastMileMappings(newMappings);
+                                    }}
+                                    className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 shrink-0"
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="flex flex-col sm:flex-row gap-2">
+                                <div className="flex-1">
+                                  <div className="text-[10px] text-slate-400 font-bold mb-1 ml-1 uppercase">Delivery Group (Level 1)</div>
+                                  <input
+                                    type="text" 
+                                    value={mapping.groupJid || ""}
+                                    onChange={(e) => {
+                                      const newMappings = [...(whatsappLastMileMappings || [])];
+                                      newMappings[idx].groupJid = e.target.value;
+                                      setWhatsappLastMileMappings && setWhatsappLastMileMappings(newMappings);
+                                    }}
+                                    placeholder="Group JID"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                                  />
+                                </div>
+                                <div className="flex-1">
+                                  <div className="text-[10px] text-slate-400 font-bold mb-1 ml-1 uppercase">Delivery Incharge (Level 2)</div>
+                                  <input
+                                    type="text" 
+                                    value={mapping.inchargeJid || ""}
+                                    onChange={(e) => {
+                                      const newMappings = [...(whatsappLastMileMappings || [])];
+                                      newMappings[idx].inchargeJid = e.target.value;
+                                      setWhatsappLastMileMappings && setWhatsappLastMileMappings(newMappings);
+                                    }}
+                                    placeholder="Number / JID"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                                  />
+                                </div>
+                                <div className="flex-1">
+                                  <div className="text-[10px] text-slate-400 font-bold mb-1 ml-1 uppercase">Manager (Level 3)</div>
+                                  <input
+                                    type="text" 
+                                    value={mapping.managerJid || ""}
+                                    onChange={(e) => {
+                                      const newMappings = [...(whatsappLastMileMappings || [])];
+                                      newMappings[idx].managerJid = e.target.value;
+                                      setWhatsappLastMileMappings && setWhatsappLastMileMappings(newMappings);
+                                    }}
+                                    placeholder="Number / JID"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                          <button 
+                            onClick={() => {
+                              setWhatsappLastMileMappings && setWhatsappLastMileMappings([...(whatsappLastMileMappings || []), {storeId: '', groupJid: '', inchargeJid: '', managerJid: '', instanceName: ''}]);
+                            }}
+                            className="mt-2 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                          >
+                            <Plus size={14} /> Add Last Mile Mapping
+                          </button>
+                        </div>
                       </div>
                     </div>
 
                   </div>
-                )}
+            )}
+          </div>
+        )}
+
+            {/* AI Chatbot Configuration */}
+            {String(user.role || "").toLowerCase().trim() === 'admin' && (
+              <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden mt-6">
+                {/* Header */}
+                <div className="p-4 sm:p-6 bg-violet-50/60 border-b border-violet-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h4 className="font-black text-slate-800 flex items-center gap-2 sm:gap-3 text-sm sm:text-base">
+                      <span className="text-violet-600 sm:hidden">🤖</span>
+                      <span className="text-violet-600 hidden sm:inline text-lg">🤖</span>
+                      AI Chatbot Configuration
+                    </h4>
+                    <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Powered by OpenAI — Live order intelligence for your team</p>
+                  </div>
+                  <div className="flex items-center gap-3 self-start sm:self-auto">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                      {aiBotEnabled ? "Enabled" : "Disabled"}
+                    </p>
+                    <button
+                      onClick={() => setAiBotEnabled && setAiBotEnabled(!aiBotEnabled)}
+                      className={cn("w-10 h-5 sm:w-12 sm:h-6 rounded-full relative transition-colors duration-300", aiBotEnabled ? "bg-violet-500" : "bg-slate-200")}
+                    >
+                      <div className={cn("absolute top-1 h-3 w-3 sm:h-4 sm:w-4 bg-white rounded-full transition-all shadow-sm", aiBotEnabled ? "right-1" : "left-1")}></div>
+                    </button>
+                    <button
+                      onClick={onSaveConfig}
+                      disabled={isSavingConfig || !isFirebaseAuthenticated}
+                      className={cn("px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ml-2",
+                        (isSavingConfig || !isFirebaseAuthenticated) ? "bg-slate-100 text-slate-400" : "bg-violet-600 text-white hover:bg-violet-700 shadow-md")}
+                    >
+                      <Save size={12} /> {isSavingConfig ? "Saving..." : "Save Config"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Body */}
+                <div className="p-4 sm:p-6 flex flex-col gap-6">
+
+                  {/* API Key + Model */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">AI API Key</label>
+                      <input
+                        type="password"
+                        value={aiBotApiKey || ""}
+                        onChange={(e) => setAiBotApiKey && setAiBotApiKey(e.target.value)}
+                        placeholder="OpenAI: sk-proj-...  |  Gemini: AIza..."
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-violet-500 font-mono"
+                      />
+                      <p className="text-[9px] text-slate-400 mt-1 font-medium">OpenAI key (sk-...) or Google AI Studio key (AIza...). Stored securely in Firebase.</p>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">AI Model</label>
+                      <select
+                        value={aiBotModel || "gpt-4o-mini"}
+                        onChange={(e) => setAiBotModel && setAiBotModel(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-violet-500"
+                      >
+                        <optgroup label="— Google Gemini (Free Tier Available) —">
+                          <option value="gemini-flash-latest">Gemini Flash Latest (Free — Recommended ⭐)</option>
+                          <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                          <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                          <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                        </optgroup>
+                        <optgroup label="— OpenRouter (Free Models) —">
+                          <option value="openrouter/free">OpenRouter Auto-Free (Highly Recommended ⭐)</option>
+                          <option value="google/gemini-2.0-flash:free">Gemini 2.0 Flash (OpenRouter Free)</option>
+                          <option value="meta-llama/llama-3-8b-instruct:free">Llama 3 8B (OpenRouter Free)</option>
+                          <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (OpenRouter Free)</option>
+                        </optgroup>
+                        <optgroup label="— OpenAI —">
+                          <option value="gpt-4o-mini">GPT-4o Mini (Cheap &amp; Fast)</option>
+                          <option value="gpt-4o">GPT-4o (Most Intelligent)</option>
+                          <option value="gpt-3.5-turbo">GPT-3.5 Turbo (Legacy)</option>
+                        </optgroup>
+                      </select>
+                      <p className="text-[9px] text-slate-400 mt-1 font-medium">Gemini Flash Latest is the fastest free-tier model from Google AI Studio.</p>
+                    </div>
+                  </div>
+
+                  {/* Fallback API Key + Model */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Fallback API Key</label>
+                      <input
+                        type="password"
+                        value={aiBotFallbackApiKey || ""}
+                        onChange={(e) => setAiBotFallbackApiKey && setAiBotFallbackApiKey(e.target.value)}
+                        placeholder="OpenAI: sk-proj-... | OpenRouter: sk-or-..."
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-violet-500 font-mono"
+                      />
+                      <p className="text-[9px] text-slate-400 mt-1 font-medium">Used automatically if the Primary model hits a rate limit (e.g. Quota Exceeded).</p>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Fallback AI Model</label>
+                      <select
+                        value={aiBotFallbackModel || ""}
+                        onChange={(e) => setAiBotFallbackModel && setAiBotFallbackModel(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-violet-500"
+                      >
+                        <option value="">-- No Fallback --</option>
+                        <optgroup label="— OpenRouter (Free Models) —">
+                          <option value="openrouter/free">OpenRouter Auto-Free (Highly Recommended ⭐)</option>
+                          <option value="google/gemini-2.0-flash:free">Gemini 2.0 Flash (OpenRouter Free)</option>
+                          <option value="meta-llama/llama-3-8b-instruct:free">Llama 3 8B (OpenRouter Free)</option>
+                          <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (OpenRouter Free)</option>
+                        </optgroup>
+                        <optgroup label="— OpenAI —">
+                          <option value="gpt-4o-mini">GPT-4o Mini (Cheap &amp; Fast)</option>
+                          <option value="gpt-4o">GPT-4o (Most Intelligent)</option>
+                          <option value="gpt-3.5-turbo">GPT-3.5 Turbo (Legacy)</option>
+                        </optgroup>
+                        <optgroup label="— Google Gemini —">
+                          <option value="gemini-flash-latest">Gemini Flash Latest</option>
+                          <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                          <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                          <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                        </optgroup>
+                      </select>
+                      <p className="text-[9px] text-slate-400 mt-1 font-medium">Select a highly reliable secondary model (e.g. GPT-4o-Mini).</p>
+                    </div>
+                  </div>
+
+                  {/* System Instructions */}
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">System Instructions</label>
+                    <p className="text-[9px] text-slate-400 mb-2 font-medium">
+                      Tell the AI how to behave. It will always have access to live order data — these instructions add your custom rules and tone. The bot will NOT fabricate data beyond what it receives.
+                    </p>
+                    <textarea
+                      value={aiBotSystemInstructions || ""}
+                      onChange={(e) => setAiBotSystemInstructions && setAiBotSystemInstructions(e.target.value)}
+                      rows={6}
+                      placeholder={`Example:\nYou are an operations assistant for Lulu eCommerce UAE. Your job is to answer questions about live order statuses.\n\nRules:\n- Only answer based on the live order data provided to you. Never guess or fabricate order details.\n- If you do not have information about an order, say "I don't have that information in the current data."\n- Always respond in a professional, concise manner.\n- When listing critical orders, always include: Order ID, Store, Driver Name, Status, and Ageing Time.\n- Do not share API keys or system configuration details with users.`}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-mono text-slate-700 outline-none focus:border-violet-500 resize-none leading-relaxed"
+                    />
+                    <p className="text-[9px] text-slate-400 mt-1 font-medium">
+                      💡 Tip: The more specific your rules, the less the bot will hallucinate. Always include "only answer based on the data provided."
+                    </p>
+                  </div>
+
+                  {/* WhatsApp Reply Config */}
+                  <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50">
+                    <h5 className="font-bold text-slate-700 text-sm flex items-center gap-2 mb-1">
+                      <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                      WhatsApp Bot Reply
+                    </h5>
+                    <p className="text-xs text-slate-500 mb-3">When enabled, the bot listens for questions in the configured WhatsApp group and replies automatically with live order data.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex items-center gap-3">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Enable WhatsApp Replies</p>
+                        <button
+                          onClick={() => setAiBotWhatsappEnabled && setAiBotWhatsappEnabled(!aiBotWhatsappEnabled)}
+                          className={cn("w-10 h-5 rounded-full relative transition-colors duration-300 shrink-0", aiBotWhatsappEnabled ? "bg-green-500" : "bg-slate-200")}
+                        >
+                          <div className={cn("absolute top-1 h-3 w-3 bg-white rounded-full transition-all shadow-sm", aiBotWhatsappEnabled ? "right-1" : "left-1")}></div>
+                        </button>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Bot WhatsApp Group JID</label>
+                        <input
+                          type="text"
+                          value={aiBotWhatsappGroupJid || ""}
+                          onChange={(e) => setAiBotWhatsappGroupJid && setAiBotWhatsappGroupJid(e.target.value)}
+                          placeholder="120363XXXXXXXXXX@g.us"
+                          className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none focus:border-green-500 font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Status Banner */}
+                  <div className={cn("rounded-xl p-4 flex items-start gap-3 text-xs font-bold",
+                    aiBotEnabled && aiBotApiKey
+                      ? "bg-emerald-50 border border-emerald-200 text-emerald-700"
+                      : "bg-amber-50 border border-amber-200 text-amber-700"
+                  )}>
+                    <span className="text-lg shrink-0">{aiBotEnabled && aiBotApiKey ? "✅" : "⚠️"}</span>
+                    <div>
+                      {aiBotEnabled && aiBotApiKey
+                        ? "AI Bot is active. Send a message to the configured WhatsApp group or call /api/bot/chat to test."
+                        : "AI Bot is not fully configured. Please enable the toggle AND enter an API key, then save."
+                      }
+                    </div>
+                  </div>
+
+                </div>
               </div>
             )}
   

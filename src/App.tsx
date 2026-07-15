@@ -111,7 +111,7 @@ export default function App() {
     minimizedAlerts, setMinimizedAlerts, expandedAlertId, setExpandedAlertId,
     adminHiddenAlerts, requestNotificationPermission, testAlert, testBuzzer,
     lastBroadcast, setLastBroadcast
-  } = useAlerts(user, showToast, isFirebaseAuthenticated);
+  } = useAlerts(user, showToast, isFirebaseAuthenticated, page === "alerts");
 
   const { 
     escalationRules, setEscalationRules, maxImages, setMaxImages, 
@@ -128,11 +128,24 @@ export default function App() {
     whatsappApiUrl, setWhatsappApiUrl,
     whatsappInstanceName, setWhatsappInstanceName,
     whatsappApiKey, setWhatsappApiKey,
-    whatsappRegionMappings, setWhatsappRegionMappings,
+    whatsappAutoOosMappings, setWhatsappAutoOosMappings,
+    whatsappManualStoreMappings, setWhatsappManualStoreMappings,
+    whatsappFulfillmentMappings, setWhatsappFulfillmentMappings,
+    whatsappLastMileMappings, setWhatsappLastMileMappings,
+    whatsappEscalationRules, setWhatsappEscalationRules,
+    whatsappGlobalGroupJid, setWhatsappGlobalGroupJid,
+    aiBotEnabled, setAiBotEnabled,
+    aiBotApiKey, setAiBotApiKey,
+    aiBotModel, setAiBotModel,
+    aiBotSystemInstructions, setAiBotSystemInstructions,
+    aiBotWhatsappEnabled, setAiBotWhatsappEnabled,
+    aiBotWhatsappGroupJid, setAiBotWhatsappGroupJid,
+    aiBotFallbackModel, setAiBotFallbackModel,
+    aiBotFallbackApiKey, setAiBotFallbackApiKey,
     saveSystemConfig, isSavingConfig 
   } = useSystemConfig(user, showToast, isFirebaseAuthenticated);
 
-  const { staffStatus } = useStaffStatus(user, isFirebaseAuthenticated);
+  const { staffStatus } = useStaffStatus(user, isFirebaseAuthenticated, 'All', page === "dashboard");
 
   const { oosItems, loading: oosLoading, refetch: refetchOOS } = useOOSHistory(user, page === "oos-history");
 
@@ -230,8 +243,15 @@ export default function App() {
   useEffect(() => {
     if (!user || !isFirebaseAuthenticated) return;
     
+    let lastPresenceUpdate = 0;
+
     // Initial heartbeat
     const updatePresence = async () => {
+      const now = Date.now();
+      // Debounce: don't update if less than 5 minutes have passed since last update
+      if (now - lastPresenceUpdate < 300000) return;
+      lastPresenceUpdate = now;
+
       try {
         const { doc, setDoc, serverTimestamp } = await import('firebase/firestore');
         const { db } = await import('./firebase');
@@ -249,8 +269,8 @@ export default function App() {
       }
     };
 
-    // Pulse every 5 minutes (300000ms) to reduce Firebase writes
-    const interval = setInterval(updatePresence, 300000);
+    // Pulse every 7 minutes (420000ms) to reduce Firebase writes
+    const interval = setInterval(updatePresence, 420000);
     
     // Also pulse on focus/visibility change for better responsiveness
     const handleFocus = () => {
@@ -537,8 +557,34 @@ export default function App() {
             setWhatsappInstanceName={setWhatsappInstanceName}
             whatsappApiKey={whatsappApiKey}
             setWhatsappApiKey={setWhatsappApiKey}
-            whatsappRegionMappings={whatsappRegionMappings}
-            setWhatsappRegionMappings={setWhatsappRegionMappings}
+            whatsappAutoOosMappings={whatsappAutoOosMappings}
+            setWhatsappAutoOosMappings={setWhatsappAutoOosMappings}
+            whatsappManualStoreMappings={whatsappManualStoreMappings}
+            setWhatsappManualStoreMappings={setWhatsappManualStoreMappings}
+            whatsappFulfillmentMappings={whatsappFulfillmentMappings}
+            setWhatsappFulfillmentMappings={setWhatsappFulfillmentMappings}
+            whatsappLastMileMappings={whatsappLastMileMappings}
+            setWhatsappLastMileMappings={setWhatsappLastMileMappings}
+            whatsappEscalationRules={whatsappEscalationRules}
+            setWhatsappEscalationRules={setWhatsappEscalationRules}
+            whatsappGlobalGroupJid={whatsappGlobalGroupJid}
+            setWhatsappGlobalGroupJid={setWhatsappGlobalGroupJid}
+            aiBotEnabled={aiBotEnabled}
+            setAiBotEnabled={setAiBotEnabled}
+            aiBotApiKey={aiBotApiKey}
+            setAiBotApiKey={setAiBotApiKey}
+            aiBotModel={aiBotModel}
+            setAiBotModel={setAiBotModel}
+            aiBotSystemInstructions={aiBotSystemInstructions}
+            setAiBotSystemInstructions={setAiBotSystemInstructions}
+            aiBotWhatsappEnabled={aiBotWhatsappEnabled}
+            setAiBotWhatsappEnabled={setAiBotWhatsappEnabled}
+            aiBotWhatsappGroupJid={aiBotWhatsappGroupJid}
+            setAiBotWhatsappGroupJid={setAiBotWhatsappGroupJid}
+            aiBotFallbackModel={aiBotFallbackModel}
+            setAiBotFallbackModel={setAiBotFallbackModel}
+            aiBotFallbackApiKey={aiBotFallbackApiKey}
+            setAiBotFallbackApiKey={setAiBotFallbackApiKey}
             staffStatus={staffStatus}
             scheduledThreshold={scheduledThreshold}
             setScheduledThreshold={setScheduledThreshold}

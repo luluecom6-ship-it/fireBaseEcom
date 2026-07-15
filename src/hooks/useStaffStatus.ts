@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDocs, Timestamp } from 'firebase/firestore';
 import { User } from '../types';
 
 export interface UserStatus extends User {
@@ -12,39 +12,30 @@ export interface UserStatus extends User {
 export function useStaffStatus(
   user: User | null, 
   isFirebaseAuthenticated: boolean,
-  selectedStoreId: string = 'All'
+  selectedStoreId: string = 'All',
+  isActive: boolean = false
 ) {
   const [allStaffStatus, setAllStaffStatus] = useState<UserStatus[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user || !isFirebaseAuthenticated) {
+    if (!user || !isFirebaseAuthenticated || !isActive) {
       setLoading(false);
       return;
     }
 
     const role = String(user.role || "").toLowerCase().trim();
-    if (role !== 'admin' && role !== 'operator' && role !== 'supervisor') {
+    if (role !== 'admin') {
       setAllStaffStatus([]);
       setLoading(false);
       return;
     }
 
-    let constraints: any[] = [];
-    
-    // Security: Restrict regional access for supervisors
-    if (role === 'supervisor') {
-      const userRegion = String(user.region || "").trim();
-      if (userRegion && userRegion.toLowerCase() !== 'all') {
-        constraints.push(where('region', '==', userRegion));
-      }
-    }
-
-    // Notice: We NO LONGER filter by selectedStoreId in the Firebase query.
-    // This prevents the hook from deleting and re-creating the massive 'presence' 
-    // and 'users' listeners every time the user clicks the Store dropdown.
-
-    const qUsers = query(collection(db, 'users'), ...constraints);
+    // Filter users by operational roles only — excludes system/test accounts
+    const qUsers = query(
+      collection(db, 'users'),
+      where('role', 'in', ['picker', 'driver', 'supervisor', 'manager', 'store'])
+    );
     const users: Record<string, User> = {};
     const presence: Record<string, any> = {};
 
@@ -104,31 +95,47 @@ export function useStaffStatus(
       setAllStaffStatus(combined);
     };
 
-    // Listen to users
-    const unsubUsers = onSnapshot(qUsers, (snapshot) => {
-      snapshot.forEach(doc => {
-        users[doc.id] = doc.data() as User;
-      });
-      updateCombinedStatus();
-      setLoading(false);
-    });
+    // Poll users every 2 minutes instead of real-time onSnapshot.
+    // User profiles rarely change — polling saves massive read quota.
+    const fetchUsers = async () => {
+      try {
+        const snapshot = await getDocs(qUsers);
+        snapshot.forEach(doc => {
+          users[doc.id] = doc.data() as User;
+        });
+        updateCombinedStatus();
+        setLoading(false);
+      } catch (err) {
+        console.error('[StaffStatus] Users fetch error:', err);
+        setLoading(false);
+      }
+    };
+    fetchUsers(); // initial fetch
+    const usersInterval = setInterval(fetchUsers, 120000); // poll every 2 min
 
-    // Listen to all presence updates (filtered by who we actually care about in updateCombinedStatus)
-    // This avoids the 30-limit which was breaking presence for stores with many staff members
-    const unsubPresence = onSnapshot(collection(db, 'presence'), (pSnap) => {
-      pSnap.docs.forEach(pDoc => {
-        const data = pDoc.data();
-        const uid = data.uid || pDoc.id;
-        if (uid) presence[uid] = data;
-      });
-      updateCombinedStatus();
-    });
+    // Poll presence every 2 minutes instead of 30s.
+    // Presence heartbeats fire every 7 min per user — polling faster is wasted reads.
+    const fetchPresence = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'presence'));
+        snap.forEach(pDoc => {
+          const data = pDoc.data();
+          const uid = data.uid || pDoc.id;
+          if (uid) presence[uid] = data;
+        });
+        updateCombinedStatus();
+      } catch (err) {
+        console.error('[StaffStatus] Presence fetch error:', err);
+      }
+    };
+    fetchPresence(); // initial fetch
+    const presenceInterval = setInterval(fetchPresence, 120000); // poll every 2 min
 
     return () => {
-      unsubUsers();
-      unsubPresence();
+      clearInterval(usersInterval);
+      clearInterval(presenceInterval);
     };
-  }, [user, isFirebaseAuthenticated]); // Removed selectedStoreId from dependency array
+  }, [user, isFirebaseAuthenticated, isActive]); // Added isActive to dependency array to fix massive quota leak
 
   // Perform UI filtering synchronously in memory to save Firebase reads
   const staffStatus = useMemo(() => {

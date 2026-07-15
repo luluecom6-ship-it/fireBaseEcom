@@ -8,11 +8,11 @@ export const PREP_STATUSES = [
   "STORING",
   "STORED",
   "PARKED",
-  "AUDITING",
-  "TRANSFERRING"
+  "AUDITING"
 ];
 
 export const DELIVERY_STATUSES = [
+  "TRANSFERRING",
   "GOING TO ORIGIN",
   "GOING TO DESTINATION",
   "IN ROUTE",
@@ -216,7 +216,7 @@ export function detectAlerts(
   // Use UTC as base for all calculations
   const utcNow = new Date();
   
-  const normalize = (s: string) => (s || "").toString().toUpperCase().replace(/\s+/g, '').trim();
+  const normalize = (s: string) => (s || "").toString().toUpperCase().replace(/[\s_]+/g, '').trim();
   const activeRules = escalationRules.filter(r => r.isActive);
 
   // 1. Quick Commerce Alerts
@@ -249,8 +249,8 @@ export function detectAlerts(
       });
 
       if (matchingRules.length > 0) {
-        // Dedup by orderId + status + bucket. 
-        const alertKey = `QUICK|${item.orderID}|${status}|${bucket}`.toLowerCase().trim();
+        // Dedup by orderId + status (EXCLUDE bucket so we can update existing alerts when bucket changes)
+        const alertKey = `QUICK|${item.orderID}|${status}`.toLowerCase().trim();
         
         if (!existingAlertIds.has(alertKey)) {
           results.push({
