@@ -134,6 +134,9 @@ export default function App() {
     whatsappLastMileMappings, setWhatsappLastMileMappings,
     whatsappEscalationRules, setWhatsappEscalationRules,
     whatsappGlobalGroupJid, setWhatsappGlobalGroupJid,
+    whatsappOrderAlertEnabled, setWhatsappOrderAlertEnabled,
+    whatsappOrderAlertArticles, setWhatsappOrderAlertArticles,
+    whatsappOrderAlertTemplate, setWhatsappOrderAlertTemplate,
     saveSystemConfig, isSavingConfig 
   } = useSystemConfig(user, showToast, isFirebaseAuthenticated);
 
@@ -561,6 +564,12 @@ export default function App() {
             setWhatsappEscalationRules={setWhatsappEscalationRules}
             whatsappGlobalGroupJid={whatsappGlobalGroupJid}
             setWhatsappGlobalGroupJid={setWhatsappGlobalGroupJid}
+            whatsappOrderAlertEnabled={whatsappOrderAlertEnabled}
+            setWhatsappOrderAlertEnabled={setWhatsappOrderAlertEnabled}
+            whatsappOrderAlertArticles={whatsappOrderAlertArticles}
+            setWhatsappOrderAlertArticles={setWhatsappOrderAlertArticles}
+            whatsappOrderAlertTemplate={whatsappOrderAlertTemplate}
+            setWhatsappOrderAlertTemplate={setWhatsappOrderAlertTemplate}
             staffStatus={staffStatus}
             scheduledThreshold={scheduledThreshold}
             setScheduledThreshold={setScheduledThreshold}

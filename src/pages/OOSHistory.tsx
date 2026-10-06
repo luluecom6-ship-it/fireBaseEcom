@@ -5,6 +5,7 @@ import { OOSRecord, User } from '../types';
 import { parseServerDate } from '../utils/api';
 // cn is in lib/utils
 import { cn } from '../lib/utils';
+import { authHeaders } from '../utils/authHeaders';
 
 interface OOSHistoryProps {
   oosItems: OOSRecord[];
@@ -62,7 +63,7 @@ export const OOSHistory: React.FC<OOSHistoryProps> = ({
       setIsScanning(true);
       const res = await fetch("/api/admin/whatsapp/scan-and-send", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ requesterRole: user.role.toLowerCase() })
       });
       const data = await res.json();
@@ -95,7 +96,7 @@ export const OOSHistory: React.FC<OOSHistoryProps> = ({
 
       const res = await fetch("/api/admin/send-oos-push", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ item: safeItem, requesterRole: user.role.toLowerCase() })
       });
       let data;

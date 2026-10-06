@@ -105,11 +105,16 @@ service cloud.firestore {
     }
 
     // OOS History
-    match /oos_history/{document} {
-      allow read, write: if true;
-    }
+    // Only the server (Firebase Admin SDK, which bypasses rules) reads/writes this.
+    // No client code uses it, so it must not be public. Supervisors may read it.
     match /oos_history/{document=**} {
-      allow read, write: if true;
+      allow read: if isSupervisor();
+      allow write: if false;
+    }
+
+    // Order Alert send log - server only (covered by default deny, explicit for clarity)
+    match /order_alert_log/{document=**} {
+      allow read, write: if false;
     }
 
     // User Presence/Heartbeats

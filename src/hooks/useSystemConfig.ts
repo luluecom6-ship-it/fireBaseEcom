@@ -4,6 +4,7 @@ import { db, auth } from '../firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 
 import { User } from '../types';
+import { OrderAlertArticle } from '../utils/orderAlertTemplate';
 
 export function useSystemConfig(
   user: User | null,
@@ -31,6 +32,9 @@ export function useSystemConfig(
   const [whatsappLastMileMappings, setWhatsappLastMileMappings] = useState<{storeId: string, groupJid: string, inchargeJid: string, managerJid: string, instanceName?: string}[]>([]);
   const [whatsappEscalationRules, setWhatsappEscalationRules] = useState<any[]>([]);
   const [whatsappGlobalGroupJid, setWhatsappGlobalGroupJid] = useState('');
+  const [whatsappOrderAlertEnabled, setWhatsappOrderAlertEnabled] = useState(false);
+  const [whatsappOrderAlertArticles, setWhatsappOrderAlertArticles] = useState<OrderAlertArticle[]>([]);
+  const [whatsappOrderAlertTemplate, setWhatsappOrderAlertTemplate] = useState('');
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   // Use Firestore for real-time config
@@ -102,6 +106,15 @@ export function useSystemConfig(
           if (typeof data.whatsappGlobalGroupJid === 'string') {
             setWhatsappGlobalGroupJid(data.whatsappGlobalGroupJid);
           }
+          if (typeof data.whatsappOrderAlertEnabled === 'boolean') {
+            setWhatsappOrderAlertEnabled(data.whatsappOrderAlertEnabled);
+          }
+          if (Array.isArray(data.whatsappOrderAlertArticles)) {
+            setWhatsappOrderAlertArticles(data.whatsappOrderAlertArticles);
+          }
+          if (typeof data.whatsappOrderAlertTemplate === 'string') {
+            setWhatsappOrderAlertTemplate(data.whatsappOrderAlertTemplate);
+          }
         } else {
           // Default rules if nothing in Firestore yet
           const defaultRules = [
@@ -129,6 +142,9 @@ export function useSystemConfig(
           setWhatsappLastMileMappings([]);
           setWhatsappEscalationRules([]);
           setWhatsappGlobalGroupJid('');
+          setWhatsappOrderAlertEnabled(false);
+          setWhatsappOrderAlertArticles([]);
+          setWhatsappOrderAlertTemplate('');
         }
       } catch (error) {
         console.error("Firestore config error:", error);
@@ -177,6 +193,9 @@ export function useSystemConfig(
         whatsappLastMileMappings,
         whatsappEscalationRules,
         whatsappGlobalGroupJid,
+        whatsappOrderAlertEnabled,
+        whatsappOrderAlertArticles,
+        whatsappOrderAlertTemplate,
         updatedAt: new Date().toISOString()
       }, { merge: true }); // Use merge: true to avoid clobbering unseen config keys
       
@@ -214,6 +233,7 @@ export function useSystemConfig(
     oosPushEnabled,
     oosPushRegions,
     whatsappOosEnabled,
+    whatsappOosRegions,
     whatsappApiUrl,
     whatsappInstanceName,
     whatsappApiKey,
@@ -223,6 +243,9 @@ export function useSystemConfig(
     whatsappLastMileMappings,
     whatsappEscalationRules,
     whatsappGlobalGroupJid,
+    whatsappOrderAlertEnabled,
+    whatsappOrderAlertArticles,
+    whatsappOrderAlertTemplate,
     showToast, 
     user
   ]);
@@ -265,6 +288,9 @@ export function useSystemConfig(
     setWhatsappEscalationRules,
     whatsappGlobalGroupJid,
     setWhatsappGlobalGroupJid,
+    whatsappOrderAlertEnabled, setWhatsappOrderAlertEnabled,
+    whatsappOrderAlertArticles, setWhatsappOrderAlertArticles,
+    whatsappOrderAlertTemplate, setWhatsappOrderAlertTemplate,
     saveSystemConfig,
     isSavingConfig 
   };
