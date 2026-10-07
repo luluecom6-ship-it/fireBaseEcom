@@ -2,7 +2,7 @@
 
 export interface OrderAlertArticle {
   sku: string;              // article number (matches order item `sku`)
-  note?: string;            // optional reason, available as {{note}}
+  note?: string;            // optional note; replaces the default footer line (also available as {{note}})
   messageOverride?: string; // optional per-article template (empty = use global)
   active?: boolean;         // default true
   startDate?: string;       // optional YYYY-MM-DD (inclusive)
@@ -23,7 +23,10 @@ export const ORDER_ALERT_PLACEHOLDERS: { key: string; label: string }[] = [
   { key: 'status', label: 'Order Status' },
   { key: 'slot', label: 'Slot' },
   { key: 'note', label: 'Article Note' },
+  { key: 'action', label: 'Article note, or default action line' },
 ];
+
+export const DEFAULT_ORDER_ALERT_FOOTER = 'Take necessary action on this order.';
 
 export const DEFAULT_ORDER_ALERT_TEMPLATE =
   `🚨 *Order Alert*\n\n` +
@@ -33,7 +36,7 @@ export const DEFAULT_ORDER_ALERT_TEMPLATE =
   `Item Name: {{itemName}}\n` +
   `Location: {{location}}\n` +
   `Store Name: {{storeName}}\n\n` +
-  `Take necessary action on this order.`;
+  `{{action}}`;
 
 export const ORDER_ALERT_SAMPLE_VARS: Record<string, string> = {
   store: '2382',
@@ -53,9 +56,17 @@ export const normalizeSku = (s: any): string => String(s ?? '').trim().toLowerCa
 
 export function renderOrderAlert(template: string | undefined | null, vars: Record<string, any>): string {
   const t = (template && template.trim()) ? template : DEFAULT_ORDER_ALERT_TEMPLATE;
-  const out = t.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, k) => {
-    const v = vars[k];
+  const note = String(vars.note ?? '').trim();
+  // {{action}} = the article's note when it has one, otherwise the default footer line
+  const all: Record<string, any> = { ...vars, action: note || DEFAULT_ORDER_ALERT_FOOTER };
+  let out = t.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, k) => {
+    const v = all[k];
     return v === undefined || v === null || String(v).trim() === '' ? '--' : String(v);
   });
+  // Templates saved earlier still contain the fixed footer text: swap it for the note,
+  // unless the template already places the note itself via {{note}}.
+  if (note && !/\{\{\s*note\s*\}\}/.test(t)) {
+    out = out.split(DEFAULT_ORDER_ALERT_FOOTER).join(note);
+  }
   return out.replace(/\n{3,}/g, '\n\n').trim();
 }

@@ -244,7 +244,7 @@ export const OrderAlertConfig: React.FC<Props> = ({
                 placeholder="SKU — paste several separated by comma, space or new line" />
               <input className={input} value={noteInput} onChange={e => setNoteInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && addArticles()}
-                placeholder="Optional note (single SKU) → {{note}}" />
+                placeholder="Note for this SKU → replaces the last line of the alert" />
               <button onClick={addArticles} className="px-3 py-2 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-xs font-bold flex items-center gap-1.5 justify-center">
                 <Plus size={14} /> Add
               </button>
@@ -335,7 +335,7 @@ export const OrderAlertConfig: React.FC<Props> = ({
                 </pre>
               </div>
             </div>
-            <p className="text-[9px] font-bold text-slate-400 mt-1">WhatsApp formatting works: *bold*, _italic_. Empty values show as "--".</p>
+            <p className="text-[9px] font-bold text-slate-400 mt-1">WhatsApp formatting works: *bold*, _italic_. Empty values show as "--". The last line ({'{{action}}'}) shows the SKU's note, or "Take necessary action on this order." when the SKU has no note. The preview uses the sample note "Priority article".</p>
           </div>
 
           {/* Test */}
