@@ -163,7 +163,7 @@ export const OrderAlertConfig: React.FC<Props> = ({
           <div>
             <h5 className="text-xs font-black text-slate-800">Article numbers (SKU)</h5>
             <p className="text-[9px] font-bold text-slate-400 mt-0.5 mb-3">
-              Only orders created after an article is added will trigger it. Each order + article alerts once and is never re-sent. Alerts go out on the monitor's ~10-minute cycle. Recipient = store group in "WhatsApp Fulfillment Alerts".
+              Applies to new orders AND orders already open (not yet delivered) when the article is added. Each order + article alerts once and is never re-sent. Adding an article with many open orders sends up to 20 alerts per cycle. Alerts go out on the monitor's ~10-minute cycle. Recipient = store group in "WhatsApp Fulfillment Alerts".
             </p>
             <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-2">
               <input className={input} value={skuInput} onChange={e => setSkuInput(e.target.value)}

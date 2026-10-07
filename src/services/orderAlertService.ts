@@ -7,7 +7,7 @@ import {
 } from "../utils/orderAlertTemplate.js";
 
 /**
- * WhatsApp "Order Alert": the first time the monitor sees an undelivered order
+ * WhatsApp "Order Alert": the first time the monitor sees an undelivered order (new OR already open when the article was added)
  * that contains a watched article (SKU), send ONE message (with the item photo)
  * to the store's fulfillment WhatsApp group. Never re-sent once marked "sent".
  *
@@ -139,7 +139,6 @@ export async function processOrderAlerts(db: any, orders: any[]) {
     const rawStoreName = String(order.store_name || "");
     const m = rawStoreName.match(/\b(\d{4})\b/);
     const storeId = m ? m[1] : rawStoreName.slice(0, 4) || "UNKNOWN";
-    const createdMs = order.created_at ? new Date(order.created_at).getTime() : 0;
 
     for (const item of order.items) {
       const article = bySku.get(normalizeSku(item.sku));
@@ -151,10 +150,6 @@ export async function processOrderAlerts(db: any, orders: any[]) {
       if (article.startDate && todayStr < article.startDate) continue;
       if (article.endDate && todayStr > article.endDate) continue;
       if (article.minQty && Number(item.quantity || 0) < Number(article.minQty)) continue;
-
-      // Only orders created after the article was added to the watchlist
-      const addedMs = article.addedAt ? new Date(article.addedAt).getTime() : 0;
-      if (addedMs && createdMs && createdMs < addedMs) continue;
 
       const key = `${orderId}_${item.sku}`.replace(/\//g, "_");
       if (handled.has(key)) continue;
