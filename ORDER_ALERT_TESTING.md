@@ -14,9 +14,11 @@ Branch: `feature/order-article-alert` (nothing here touches `main`).
 - `firestore.rules`: `oos_history` is no longer public (server/Admin SDK only).
   **Rules are NOT live until you run `firebase deploy --only firestore:rules`.**
 
-- **Common group** (Admin > Order Alert card): one extra WhatsApp group that gets every
-  Order Alert from every store, with its own On/Off toggle. Sent once per order+article,
-  tracked separately from the store group (log id ends `__common`). Uses the main instance.
+- **Common groups by region** (Admin > Order Alert card): add as many extra WhatsApp groups as you
+  like; each has its own On/Off switch and region choice (specific regions or All). A store
+  alerts its own fulfillment group plus every enabled common group covering its region. Sent once per
+  order+article per group (log id `..__common_<groupId>`). The earlier single common group is
+  carried over automatically as an "All regions" group. Uses the main instance.
 
 ## Safe testing checklist
 1. Use a Vercel *preview* deployment of this branch (not production).

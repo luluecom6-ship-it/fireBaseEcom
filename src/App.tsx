@@ -137,8 +137,7 @@ export default function App() {
     whatsappOrderAlertEnabled, setWhatsappOrderAlertEnabled,
     whatsappOrderAlertArticles, setWhatsappOrderAlertArticles,
     whatsappOrderAlertTemplate, setWhatsappOrderAlertTemplate,
-    whatsappOrderAlertCommonEnabled, setWhatsappOrderAlertCommonEnabled,
-    whatsappOrderAlertCommonGroupJid, setWhatsappOrderAlertCommonGroupJid,
+    whatsappOrderAlertCommonGroups, setWhatsappOrderAlertCommonGroups,
     saveSystemConfig, isSavingConfig 
   } = useSystemConfig(user, showToast, isFirebaseAuthenticated);
 
@@ -572,10 +571,8 @@ export default function App() {
             setWhatsappOrderAlertArticles={setWhatsappOrderAlertArticles}
             whatsappOrderAlertTemplate={whatsappOrderAlertTemplate}
             setWhatsappOrderAlertTemplate={setWhatsappOrderAlertTemplate}
-            whatsappOrderAlertCommonEnabled={whatsappOrderAlertCommonEnabled}
-            setWhatsappOrderAlertCommonEnabled={setWhatsappOrderAlertCommonEnabled}
-            whatsappOrderAlertCommonGroupJid={whatsappOrderAlertCommonGroupJid}
-            setWhatsappOrderAlertCommonGroupJid={setWhatsappOrderAlertCommonGroupJid}
+            whatsappOrderAlertCommonGroups={whatsappOrderAlertCommonGroups}
+            setWhatsappOrderAlertCommonGroups={setWhatsappOrderAlertCommonGroups}
             staffStatus={staffStatus}
             scheduledThreshold={scheduledThreshold}
             setScheduledThreshold={setScheduledThreshold}

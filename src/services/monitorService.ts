@@ -487,7 +487,7 @@ export async function runMonitorTick(db: any, messaging: any) {
 
     // --- WhatsApp Order Alert (watched articles, fires when picking starts) ---
     try {
-      await processOrderAlerts(db, matrixV2Array);
+      await processOrderAlerts(db, matrixV2Array, { storeToRegion });
     } catch (oaErr: any) {
       console.error("[Monitor] Order Alert error:", oaErr?.message || oaErr);
     }

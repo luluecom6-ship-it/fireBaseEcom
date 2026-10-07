@@ -3,6 +3,8 @@ import {
   DEFAULT_ORDER_ALERT_TEMPLATE,
   ORDER_ALERT_SAMPLE_VARS,
   OrderAlertArticle,
+  groupAppliesToRegion,
+  resolveCommonGroups,
   normalizeSku,
   renderOrderAlert,
 } from "../utils/orderAlertTemplate.js";
@@ -96,7 +98,7 @@ export async function getOrderAlertLog(db: any, limit = 50) {
     const x = d.data();
     const ts = (v: any) => (v?.toDate ? v.toDate().toISOString() : v || "");
     return {
-      id: d.id, orderId: x.orderId, sku: x.sku, storeId: x.storeId, destination: x.destination || "store", status: x.status,
+      id: d.id, orderId: x.orderId, sku: x.sku, storeId: x.storeId, destination: x.destination || "store", groupName: x.groupName || "", region: x.region || "", status: x.status,
       attempts: x.attempts || 1, error: x.error || "", sentAt: x.sentAt || "", createdAt: ts(x.createdAt),
     };
   });
@@ -125,7 +127,7 @@ export interface OrderAlertRunSummary {
   reasons: Record<string, number>;
   samples: { orderId: string; storeId: string; sku: string; status: string; result: string }[];
   feed: { itemKeys: string[]; skuSample: string[]; statusSample: string[] };
-  commonGroup: "off" | "on" | "on-but-no-group-id";
+  commonGroup: string;            // e.g. "off" or "2 active: North, South"
 }
 
 /** Fetches the same V2 order feed the monitor uses (so a manual run sees identical data). */
@@ -150,6 +152,27 @@ export async function fetchMatrixV2Orders(): Promise<any[]> {
   return Array.isArray(raw) ? raw : [];
 }
 
+/** store id -> region, from the same Admin data the monitor uses. */
+export async function fetchStoreRegions(): Promise<Record<string, string>> {
+  const FALLBACK_V1_GAS_URL =
+    "https://script.google.com/macros/s/AKfycbziSK-a3_zBsoEPHBe1Yaz-pTEYtnZyuHdTPhziDSlB3Vhn8DZ0qaPLICnb9eY_ptj5/exec";
+  let baseUrl = (process.env.GAS_API_URL || process.env.VITE_GAS_API_URL || "").trim();
+  if (!baseUrl || baseUrl === "undefined" || !baseUrl.startsWith("http")) baseUrl = FALLBACK_V1_GAS_URL;
+  const res: any = await executeGasRequest(
+    { method: "GET", url: `${baseUrl}?action=getAdminData` },
+    { skipCache: true, cacheKey: `GET:${baseUrl}:action=getAdminData` },
+  );
+  const body: any = res.data;
+  const adminRaw = body?.status === "success" ? body.data : body?.data || body;
+  const out: Record<string, string> = {};
+  (adminRaw?.regions || []).forEach((r: any) => {
+    const sId = String(r.storeId || r.StoreID || "").trim();
+    const reg = String(r.region || r.Region || "").trim();
+    if (sId) out[sId] = reg;
+  });
+  return out;
+}
+
 export async function getOrderAlertStatus(db: any) {
   const snap = await db.collection("order_alert_status").doc("last").get();
   return snap.exists ? snap.data() : null;
@@ -158,13 +181,15 @@ export async function getOrderAlertStatus(db: any) {
 export async function processOrderAlerts(
   db: any,
   orders: any[],
-  opts: { refreshConfig?: boolean; source?: "monitor" | "manual" } = {},
+  opts: { refreshConfig?: boolean; source?: "monitor" | "manual"; storeToRegion?: Record<string, string> } = {},
 ): Promise<OrderAlertRunSummary> {
   if (opts.refreshConfig) cfgTime = 0;
   const config = await getConfig(db);
   const list: any[] = Array.isArray(orders) ? orders : [];
-  const commonJid = String(config.whatsappOrderAlertCommonGroupJid || "").trim();
-  const commonOn = !!config.whatsappOrderAlertCommonEnabled && !!commonJid;
+  const storeToRegion: Record<string, string> = opts.storeToRegion || {};
+  const commonGroups = resolveCommonGroups(config).filter(
+    (g) => g && g.enabled && String(g.groupJid || "").trim() && (g.regions || []).length > 0,
+  );
 
   const summary: OrderAlertRunSummary = {
     at: new Date().toISOString(),
@@ -178,7 +203,9 @@ export async function processOrderAlerts(
     reasons: {},
     samples: [],
     feed: { itemKeys: [], skuSample: [], statusSample: [] },
-    commonGroup: config.whatsappOrderAlertCommonEnabled ? (commonJid ? "on" : "on-but-no-group-id") : "off",
+    commonGroup: commonGroups.length
+      ? `${commonGroups.length} active: ${commonGroups.map((g) => `${g.name || "Common"} [${(g.regions || []).join("/")}]`).join(", ")}`
+      : "off",
   };
   const note = (reason: string, orderId: string, storeId: string, sku: string, status: string, result = reason) => {
     summary.reasons[reason] = (summary.reasons[reason] || 0) + 1;
@@ -252,20 +279,31 @@ export async function processOrderAlerts(
       const baseKey = `${orderId}_${item.sku}`.replace(/\//g, "_");
 
       // Destinations: the store's fulfillment group and/or the one common group.
-      const targets: { kind: "store" | "common"; key: string; jid: string; instance: string }[] = [];
+      const region = storeToRegion[storeId] || "";
+      const targets: { kind: "store" | "common"; key: string; jid: string; instance: string; label?: string }[] = [];
       const mapping = mappings.find((x: any) => normStore(x.storeId) === normStore(storeId));
       if (mapping && mapping.groupJid) {
         const instance = mapping.instanceName || config.whatsappInstanceName;
         if (instance) targets.push({ kind: "store", key: baseKey, jid: mapping.groupJid, instance });
-      } else if (!commonOn && !missingMappingLogged.has(storeId)) {
-        missingMappingLogged.add(storeId);
-        console.warn(`[OrderAlert] No fulfillment group mapped for store ${storeId}; alerts for it are skipped.`);
       }
-      if (commonOn && config.whatsappInstanceName) {
-        targets.push({ kind: "common", key: `${baseKey}__common`, jid: commonJid, instance: config.whatsappInstanceName });
+      // Common groups whose region selection covers this store's region
+      const seenJids = new Set<string>(targets.map((t) => t.jid));
+      if (config.whatsappInstanceName) {
+        for (const g of commonGroups) {
+          if (!groupAppliesToRegion(g, region)) continue;
+          const jid = String(g.groupJid).trim();
+          if (seenJids.has(jid)) continue; // never post the same alert twice into one group
+          seenJids.add(jid);
+          const key = g.id === "common" ? `${baseKey}__common` : `${baseKey}__common_${String(g.id).replace(/[^A-Za-z0-9_-]/g, "")}`;
+          targets.push({ kind: "common", key, jid, instance: config.whatsappInstanceName, label: g.name || "Common group" });
+        }
       }
       if (targets.length === 0) {
-        note(`no group for store ${storeId} (no fulfillment mapping, common group off)`, orderId, storeId, item.sku, status);
+        if (!missingMappingLogged.has(storeId)) {
+          missingMappingLogged.add(storeId);
+          console.warn(`[OrderAlert] No group for store ${storeId} (region "${region || "unknown"}"): no fulfillment mapping and no common group covers it.`);
+        }
+        note(`no group for store ${storeId} (region ${region || "unknown"}): no fulfillment mapping and no common group selected for this region`, orderId, storeId, item.sku, status);
         continue;
       }
 
@@ -293,7 +331,7 @@ export async function processOrderAlerts(
         let attempts = 1;
         try {
           await ref.create({
-            orderId, sku: String(item.sku), storeId, destination: t.kind, status: "sending", attempts,
+            orderId, sku: String(item.sku), storeId, destination: t.kind, groupName: t.label || "", region, status: "sending", attempts,
             createdAt: new Date(), updatedAt: new Date(),
           });
         } catch (_e) {
@@ -315,7 +353,7 @@ export async function processOrderAlerts(
           if (result.ok) {
             handled.add(t.key);
             summary.sent++;
-            note("SENT", orderId, storeId, item.sku, status, `sent to ${t.kind} group`);
+            note("SENT", orderId, storeId, item.sku, status, `sent to ${t.kind === "common" ? `common group "${t.label}"` : "store group"}`);
             await ref.update({ status: "sent", sentAt: new Date().toISOString(), updatedAt: new Date() });
             console.log(`[OrderAlert] Sent for order ${orderId}, SKU ${item.sku} -> ${t.kind} group (store ${storeId})`);
           } else {

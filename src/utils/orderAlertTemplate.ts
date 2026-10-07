@@ -70,3 +70,29 @@ export function renderOrderAlert(template: string | undefined | null, vars: Reco
   }
   return out.replace(/\n{3,}/g, '\n\n').trim();
 }
+
+// ---- Common groups (one or more groups that receive alerts for chosen regions) ----
+export interface OrderAlertCommonGroup {
+  id: string;         // stable id; 'common' = the original single common group
+  name: string;
+  groupJid: string;
+  regions: string[];  // region names, or ['All'] for every region. Empty = receives nothing.
+  enabled: boolean;
+}
+
+/** Current list; falls back to the older single "common group" settings so nothing is lost. */
+export function resolveCommonGroups(cfg: any): OrderAlertCommonGroup[] {
+  if (Array.isArray(cfg?.whatsappOrderAlertCommonGroups)) return cfg.whatsappOrderAlertCommonGroups;
+  const jid = String(cfg?.whatsappOrderAlertCommonGroupJid || '').trim();
+  if (!jid && !cfg?.whatsappOrderAlertCommonEnabled) return [];
+  return [{ id: 'common', name: 'Common group', groupJid: jid, regions: ['All'], enabled: !!cfg?.whatsappOrderAlertCommonEnabled }];
+}
+
+/** Does this group receive alerts for a store in `region`? (unknown region only matches 'All') */
+export function groupAppliesToRegion(g: OrderAlertCommonGroup, region: string): boolean {
+  const regs = (g.regions || []).map((r) => String(r).trim().toLowerCase()).filter(Boolean);
+  if (regs.length === 0) return false;
+  if (regs.includes('all')) return true;
+  const r = String(region || '').trim().toLowerCase();
+  return !!r && regs.includes(r);
+}
