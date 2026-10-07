@@ -12,7 +12,7 @@ import fs from "fs";
 import { executeGasRequest } from "./src/services/gasService.js";
 import { runMonitorTick } from "./src/services/monitorService.js";
 import { authorizeRequest } from "./src/services/authGuard.js";
-import { sendOrderAlertTest, getOrderAlertLog, retryOrderAlert, getOrderAlertStatus, fetchMatrixV2Orders, processOrderAlerts } from "./src/services/orderAlertService.js";
+import { sendOrderAlertTest, getOrderAlertLog, retryOrderAlert, getOrderAlertStatus, fetchMatrixV2Orders, fetchStoreRegions, processOrderAlerts } from "./src/services/orderAlertService.js";
 
 const FIRESTORE_DB_ID =
   process.env.FIREBASE_DATABASE_ID ||
@@ -436,8 +436,11 @@ async function startServer() {
       if (!db) return res.status(500).json({ error: "Missing Firebase features" });
       const guard = await authorizeRequest(req, db, ["admin"], { strict: true });
       if (!guard.ok) return res.status(guard.status).json({ error: guard.error });
-      const orders = await fetchMatrixV2Orders();
-      const summary = await processOrderAlerts(db, orders, { refreshConfig: true, source: "manual" });
+      const [orders, storeToRegion] = await Promise.all([
+        fetchMatrixV2Orders(),
+        fetchStoreRegions().catch((): Record<string, string> => ({})),
+      ]);
+      const summary = await processOrderAlerts(db, orders, { refreshConfig: true, source: "manual", storeToRegion });
       res.json({ status: "success", summary });
     } catch (e: any) {
       console.error("[OrderAlert Run Error]", e);

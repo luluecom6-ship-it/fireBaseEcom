@@ -20,7 +20,7 @@ import { SmartImage } from '../components/layout/common/SmartImage';
 import { cn } from '../lib/utils';
 import { useSystemConfig } from '../hooks/useSystemConfig';
 import { OrderAlertConfig } from '../components/admin/OrderAlertConfig';
-import type { OrderAlertArticle } from '../utils/orderAlertTemplate';
+import type { OrderAlertArticle, OrderAlertCommonGroup } from '../utils/orderAlertTemplate';
 import { db } from '../firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -72,10 +72,8 @@ interface AdminProps {
   setWhatsappOrderAlertArticles?: (val: OrderAlertArticle[]) => void;
   whatsappOrderAlertTemplate?: string;
   setWhatsappOrderAlertTemplate?: (val: string) => void;
-  whatsappOrderAlertCommonEnabled?: boolean;
-  setWhatsappOrderAlertCommonEnabled?: (val: boolean) => void;
-  whatsappOrderAlertCommonGroupJid?: string;
-  setWhatsappOrderAlertCommonGroupJid?: (val: string) => void;
+  whatsappOrderAlertCommonGroups?: OrderAlertCommonGroup[];
+  setWhatsappOrderAlertCommonGroups?: (val: OrderAlertCommonGroup[]) => void;
   // AI Bot Config
   aiBotEnabled?: boolean;
   setAiBotEnabled?: (val: boolean) => void;
@@ -174,10 +172,8 @@ export const Admin: React.FC<AdminProps> = ({
   setWhatsappOrderAlertArticles,
   whatsappOrderAlertTemplate,
   setWhatsappOrderAlertTemplate,
-  whatsappOrderAlertCommonEnabled,
-  setWhatsappOrderAlertCommonEnabled,
-  whatsappOrderAlertCommonGroupJid,
-  setWhatsappOrderAlertCommonGroupJid,
+  whatsappOrderAlertCommonGroups,
+  setWhatsappOrderAlertCommonGroups,
   aiBotEnabled,
   setAiBotEnabled,
   aiBotApiKey,
@@ -2238,7 +2234,7 @@ export const Admin: React.FC<AdminProps> = ({
         )}
 
             {/* WhatsApp Order Alert (watched articles) */}
-            {String(user.role || "").toLowerCase().trim() === 'admin' && setWhatsappOrderAlertEnabled && setWhatsappOrderAlertArticles && setWhatsappOrderAlertTemplate && setWhatsappOrderAlertCommonEnabled && setWhatsappOrderAlertCommonGroupJid && (
+            {String(user.role || "").toLowerCase().trim() === 'admin' && setWhatsappOrderAlertEnabled && setWhatsappOrderAlertArticles && setWhatsappOrderAlertTemplate && setWhatsappOrderAlertCommonGroups && (
               <OrderAlertConfig
                 enabled={!!whatsappOrderAlertEnabled}
                 setEnabled={setWhatsappOrderAlertEnabled}
@@ -2246,14 +2242,13 @@ export const Admin: React.FC<AdminProps> = ({
                 setArticles={setWhatsappOrderAlertArticles}
                 template={whatsappOrderAlertTemplate || ''}
                 setTemplate={setWhatsappOrderAlertTemplate}
-                commonEnabled={!!whatsappOrderAlertCommonEnabled}
-                setCommonEnabled={setWhatsappOrderAlertCommonEnabled}
-                commonGroupJid={whatsappOrderAlertCommonGroupJid || ''}
-                setCommonGroupJid={setWhatsappOrderAlertCommonGroupJid}
+                commonGroups={whatsappOrderAlertCommonGroups || []}
+                setCommonGroups={setWhatsappOrderAlertCommonGroups}
+                availableRegions={availableRegions}
                 onSave={onSaveConfig}
                 isSaving={!!isSavingConfig}
                 canSave={!!isFirebaseAuthenticated}
-                defaultTestJid={whatsappOrderAlertCommonGroupJid || (whatsappFulfillmentMappings || [])[0]?.groupJid}
+                defaultTestJid={(whatsappOrderAlertCommonGroups || []).find(g => g.groupJid?.trim())?.groupJid || (whatsappFulfillmentMappings || [])[0]?.groupJid}
                 requesterRole={String(user.role || '')}
                 showToast={showToast}
               />

@@ -7,6 +7,7 @@ import {
   ORDER_ALERT_PLACEHOLDERS,
   ORDER_ALERT_SAMPLE_VARS,
   OrderAlertArticle,
+  OrderAlertCommonGroup,
   normalizeSku,
   renderOrderAlert,
 } from '../../utils/orderAlertTemplate';
@@ -18,10 +19,9 @@ interface Props {
   setArticles: (v: OrderAlertArticle[]) => void;
   template: string;
   setTemplate: (v: string) => void;
-  commonEnabled: boolean;
-  setCommonEnabled: (v: boolean) => void;
-  commonGroupJid: string;
-  setCommonGroupJid: (v: string) => void;
+  commonGroups: OrderAlertCommonGroup[];
+  setCommonGroups: (v: OrderAlertCommonGroup[]) => void;
+  availableRegions: string[];
   onSave: () => void;
   isSaving: boolean;
   canSave: boolean;
@@ -32,7 +32,7 @@ interface Props {
 
 export const OrderAlertConfig: React.FC<Props> = ({
   enabled, setEnabled, articles, setArticles, template, setTemplate,
-  commonEnabled, setCommonEnabled, commonGroupJid, setCommonGroupJid,
+  commonGroups, setCommonGroups, availableRegions,
   onSave, isSaving, canSave, defaultTestJid, requesterRole, showToast,
 }) => {
   const [skuInput, setSkuInput] = useState('');
@@ -69,6 +69,17 @@ export const OrderAlertConfig: React.FC<Props> = ({
     setSkuInput(''); setNoteInput('');
     showToast?.(`${fresh.length} article(s) added. Click Save Config to apply.`, 'success');
   };
+
+  const addGroup = () =>
+    setCommonGroups([...commonGroups, {
+      id: `g${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`,
+      name: `Common group ${commonGroups.length + 1}`,
+      groupJid: '',
+      regions: [],
+      enabled: true,
+    }]);
+  const updateGroup = (id: string, patch: Partial<OrderAlertCommonGroup>) =>
+    setCommonGroups(commonGroups.map(g => (g.id === id ? { ...g, ...patch } : g)));
 
   const updateArticle = (sku: string, patch: Partial<OrderAlertArticle>) =>
     setArticles(articles.map(a => (a.sku === sku ? { ...a, ...patch } : a)));
@@ -205,38 +216,79 @@ export const OrderAlertConfig: React.FC<Props> = ({
 
       {enabled && (
         <div className="p-4 sm:p-6 bg-slate-50 flex flex-col gap-6">
-          {/* Common group */}
+          {/* Common groups (by region) */}
           <div className="bg-white border border-slate-200 rounded-xl p-3 sm:p-4">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-start justify-between gap-3">
               <div>
-                <h5 className="text-xs font-black text-slate-800">Common group (all stores)</h5>
+                <h5 className="text-xs font-black text-slate-800">Common groups (by region)</h5>
                 <p className="text-[9px] font-bold text-slate-400 mt-0.5">
-                  One WhatsApp group that receives every Order Alert from every store, in addition to the store's own fulfillment group. Each alert is sent once to it.
+                  Extra WhatsApp groups that receive Order Alerts in addition to each store's own fulfillment group. Pick which regions each group gets: all stores in the selected regions are sent to it. Each alert is sent once per group.
                 </p>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{commonEnabled ? 'On' : 'Off'}</p>
-                <button
-                  onClick={() => setCommonEnabled(!commonEnabled)}
-                  className={cn('w-10 h-5 rounded-full relative transition-colors duration-300', commonEnabled ? 'bg-amber-500' : 'bg-slate-200')}
-                >
-                  <div className={cn('absolute top-1 h-3 w-3 bg-white rounded-full transition-all shadow-sm', commonEnabled ? 'right-1' : 'left-1')} />
-                </button>
-              </div>
+              <button onClick={addGroup}
+                className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 shrink-0">
+                <Plus size={12} /> Add group
+              </button>
             </div>
-            <input className={cn(input, 'mt-3')} value={commonGroupJid} onChange={e => setCommonGroupJid(e.target.value)}
-              placeholder="Common group JID (120363…@g.us)" />
-            {commonEnabled && !commonGroupJid.trim() && (
-              <p className="text-[10px] font-bold text-red-500 mt-1">Enter the group JID, otherwise nothing is sent to the common group.</p>
-            )}
-            <p className="text-[9px] font-bold text-slate-400 mt-1">Uses the main WhatsApp instance. Stores without a fulfillment mapping still reach this group while it is On.</p>
+
+            {commonGroups.length === 0 && <p className="text-xs text-slate-400 font-bold mt-3">No common groups. Only store fulfillment groups receive alerts.</p>}
+
+            <div className="mt-3 flex flex-col gap-3">
+              {commonGroups.map(g => {
+                const allOn = (g.regions || []).some(r => r.toLowerCase() === 'all');
+                return (
+                  <div key={g.id} className="border border-slate-200 rounded-xl p-3 bg-slate-50">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => updateGroup(g.id, { enabled: !g.enabled })}
+                        className={cn('w-10 h-5 rounded-full relative transition-colors duration-300 shrink-0', g.enabled ? 'bg-amber-500' : 'bg-slate-200')}
+                        title={g.enabled ? 'On' : 'Off'}
+                      >
+                        <div className={cn('absolute top-1 h-3 w-3 bg-white rounded-full transition-all shadow-sm', g.enabled ? 'right-1' : 'left-1')} />
+                      </button>
+                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 w-6 shrink-0">{g.enabled ? 'On' : 'Off'}</span>
+                      <input className={cn(input, 'flex-1')} value={g.name} placeholder="Group name (e.g. North region)"
+                        onChange={e => updateGroup(g.id, { name: e.target.value })} />
+                      <button onClick={() => setCommonGroups(commonGroups.filter(x => x.id !== g.id))} className="text-red-400 hover:text-red-600 shrink-0" title="Remove group">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                    <input className={cn(input, 'mt-2')} value={g.groupJid} placeholder="Group JID (120363…@g.us)"
+                      onChange={e => updateGroup(g.id, { groupJid: e.target.value })} />
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-3 mb-1">Regions that go to this group</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button onClick={() => updateGroup(g.id, { regions: allOn ? [] : ['All'] })}
+                        className={cn('px-2.5 py-1 rounded-md text-[10px] font-black border', allOn ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-slate-600 border-slate-200 hover:bg-amber-50')}>
+                        All regions
+                      </button>
+                      {availableRegions.map(reg => {
+                        const on = !allOn && (g.regions || []).some(r => r.toLowerCase() === reg.toLowerCase());
+                        return (
+                          <button key={reg} disabled={allOn}
+                            onClick={() => updateGroup(g.id, { regions: on ? g.regions.filter(r => r.toLowerCase() !== reg.toLowerCase()) : [...(g.regions || []).filter(r => r.toLowerCase() !== 'all'), reg] })}
+                            className={cn('px-2.5 py-1 rounded-md text-[10px] font-black border',
+                              allOn ? 'bg-slate-100 text-slate-300 border-slate-100' : on ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-slate-600 border-slate-200 hover:bg-amber-50')}>
+                            {reg}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {g.enabled && !g.groupJid.trim() && <p className="text-[10px] font-bold text-red-500 mt-2">Enter the group JID, otherwise nothing is sent to this group.</p>}
+                    {g.enabled && (g.regions || []).length === 0 && <p className="text-[10px] font-bold text-red-500 mt-2">Select at least one region (or All regions), otherwise nothing is sent to this group.</p>}
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-[9px] font-bold text-slate-400 mt-2">
+              Uses the main WhatsApp instance. A store with no fulfillment mapping still reaches any group that covers its region. A store whose region isn't known only reaches groups set to "All regions".
+            </p>
           </div>
 
           {/* Articles */}
           <div>
             <h5 className="text-xs font-black text-slate-800">Article numbers (SKU)</h5>
             <p className="text-[9px] font-bold text-slate-400 mt-0.5 mb-3">
-              Applies to new orders AND orders already open (not yet delivered) when the article is added. Each order + article alerts once and is never re-sent. Adding an article with many open orders sends up to 20 alerts per cycle. Alerts go out on the monitor's ~10-minute cycle. Recipients = the store group in "WhatsApp Fulfillment Alerts" and, if switched on below, the common group.
+              Applies to new orders AND orders already open (not yet delivered) when the article is added. Each order + article alerts once and is never re-sent. Adding an article with many open orders sends up to 20 alerts per cycle. Alerts go out on the monitor's ~10-minute cycle. Recipients = the store group in "WhatsApp Fulfillment Alerts" plus any common group below whose regions cover the store.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-2">
               <input className={input} value={skuInput} onChange={e => setSkuInput(e.target.value)}
@@ -433,7 +485,7 @@ export const OrderAlertConfig: React.FC<Props> = ({
                         <td className="p-2">{l.orderId}</td>
                         <td className="p-2">{l.sku}</td>
                         <td className="p-2">{l.storeId}</td>
-                        <td className="p-2">{l.destination === 'common' ? 'Common' : 'Store'}</td>
+                        <td className="p-2">{l.destination === 'common' ? (l.groupName || 'Common') : 'Store'}</td>
                         <td className="p-2" title={l.error || ''}>
                           <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-black uppercase',
                             l.status === 'sent' ? 'bg-green-100 text-green-700' : l.status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-500')}>
