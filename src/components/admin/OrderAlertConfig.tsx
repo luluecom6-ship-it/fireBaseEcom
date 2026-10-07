@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Plus, Trash2, Save, Send, RotateCcw, BellRing, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Save, Send, RotateCcw, BellRing, ChevronDown, ChevronUp, RefreshCw, Play } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { authHeaders } from '../../utils/authHeaders';
 import {
@@ -42,6 +42,10 @@ export const OrderAlertConfig: React.FC<Props> = ({
   const [isTesting, setIsTesting] = useState(false);
   const [logs, setLogs] = useState<any[] | null>(null);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [status, setStatus] = useState<any | null>(null);
+  const [statusLoaded, setStatusLoaded] = useState(false);
+  const [isLoadingStatus, setIsLoadingStatus] = useState(false);
+  const [isRunning, setIsRunning] = useState(false);
   const templateRef = useRef<HTMLTextAreaElement>(null);
 
   const effectiveTemplate = template && template.trim() ? template : DEFAULT_ORDER_ALERT_TEMPLATE;
@@ -107,6 +111,43 @@ export const OrderAlertConfig: React.FC<Props> = ({
       loadLogs();
     } catch (e: any) {
       showToast?.(e.message || 'Retry failed', 'error');
+    }
+  };
+
+  const loadStatus = async () => {
+    setIsLoadingStatus(true);
+    try {
+      const res = await fetch('/api/admin/whatsapp/order-alert-status', { headers: await authHeaders() });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setStatus(data.status || null);
+      setStatusLoaded(true);
+    } catch (e: any) {
+      showToast?.(e.message || 'Failed to load status', 'error');
+    } finally {
+      setIsLoadingStatus(false);
+    }
+  };
+
+  const runNow = async () => {
+    if (!window.confirm('Run the alert check now? This sends REAL WhatsApp alerts (once per order) for every matching order currently in the feed. Save Config first if you changed anything.')) return;
+    setIsRunning(true);
+    try {
+      const res = await fetch('/api/admin/whatsapp/order-alert-run', {
+        method: 'POST',
+        headers: await authHeaders({ 'Content-Type': 'application/json' }),
+        body: '{}',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setStatus(data.summary || null);
+      setStatusLoaded(true);
+      showToast?.(`Check finished: ${data.summary?.sent ?? 0} sent`, 'success');
+      loadLogs();
+    } catch (e: any) {
+      showToast?.(e.message || 'Run failed', 'error');
+    } finally {
+      setIsRunning(false);
     }
   };
 
@@ -307,6 +348,65 @@ export const OrderAlertConfig: React.FC<Props> = ({
             </button>
             <p className="text-[9px] font-bold text-slate-400">Tests use the current (unsaved) message above.</p>
           </div>
+          {/* Status & diagnostics */}
+          <div className="bg-white border border-slate-200 rounded-xl p-3 sm:p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <h5 className="text-xs font-black text-slate-800">Status &amp; diagnostics</h5>
+              <div className="flex items-center gap-3">
+                <button onClick={loadStatus} disabled={isLoadingStatus}
+                  className="text-[10px] font-black uppercase tracking-widest text-amber-600 hover:text-amber-700 flex items-center gap-1">
+                  <RefreshCw size={12} className={isLoadingStatus ? 'animate-spin' : ''} /> {statusLoaded ? 'Refresh' : 'Load last run'}
+                </button>
+                <button onClick={runNow} disabled={isRunning}
+                  className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest bg-amber-600 text-white hover:bg-amber-700 disabled:bg-slate-200 disabled:text-slate-400 flex items-center gap-1.5">
+                  <Play size={12} /> {isRunning ? 'Running…' : 'Run alert check now'}
+                </button>
+              </div>
+            </div>
+            {!statusLoaded && <p className="text-[10px] font-bold text-slate-400">Shows what the monitor did on its last cycle and why each matching order was or wasn't alerted.</p>}
+            {statusLoaded && !status && (
+              <p className="text-xs font-bold text-red-500">No run recorded yet. If the feature has been on for 10+ minutes, this deployment's monitor is not being triggered. Use “Run alert check now”.</p>
+            )}
+            {status && (
+              <div className="text-xs font-bold text-slate-700 flex flex-col gap-2">
+                <p>
+                  Last run: {status.at ? new Date(status.at).toLocaleString() : '--'} ({status.source === 'manual' ? 'manual' : 'monitor cycle'})
+                </p>
+                {status.problem && <p className="text-red-600">⚠ {status.problem}</p>}
+                <p className="text-slate-500">
+                  Orders in feed: {status.ordersScanned} · Watched articles: {status.watchedArticles} · Matching items: {status.matchedItems} · Sent: {status.sent} · Failed: {status.failed} · Common group: {status.commonGroup}
+                </p>
+                {status.reasons && Object.keys(status.reasons).length > 0 && (
+                  <ul className="list-disc pl-5 text-slate-600">
+                    {Object.entries(status.reasons).map(([k, v]: any) => <li key={k}>{k}: {v}</li>)}
+                  </ul>
+                )}
+                {status.samples && status.samples.length > 0 && (
+                  <div className="overflow-x-auto border border-slate-100 rounded-lg">
+                    <table className="w-full text-[11px]">
+                      <thead><tr className="text-left text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
+                        <th className="p-1.5">Order</th><th className="p-1.5">Store</th><th className="p-1.5">SKU</th><th className="p-1.5">Order status</th><th className="p-1.5">Result</th>
+                      </tr></thead>
+                      <tbody>
+                        {status.samples.map((s: any, i: number) => (
+                          <tr key={i} className="border-b border-slate-50">
+                            <td className="p-1.5">{s.orderId}</td><td className="p-1.5">{s.storeId}</td><td className="p-1.5">{s.sku}</td>
+                            <td className="p-1.5">{s.status}</td><td className="p-1.5">{s.result}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {status.feed && (
+                  <p className="text-[10px] text-slate-400 break-words">
+                    Feed SKU sample: {(status.feed.skuSample || []).join(', ') || '--'} · Order statuses seen: {(status.feed.statusSample || []).join(', ') || '--'} · Item fields: {(status.feed.itemKeys || []).join(', ') || '--'}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Send log */}
           <div>
             <div className="flex items-center justify-between mb-2">

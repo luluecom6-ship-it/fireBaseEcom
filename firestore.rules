@@ -112,8 +112,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Order Alert send log - server only (covered by default deny, explicit for clarity)
+    // Order Alert send log + last-run status - server only (default deny, explicit for clarity)
     match /order_alert_log/{document=**} {
+      allow read, write: if false;
+    }
+    match /order_alert_status/{document=**} {
       allow read, write: if false;
     }
 

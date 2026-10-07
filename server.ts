@@ -12,7 +12,7 @@ import fs from "fs";
 import { executeGasRequest } from "./src/services/gasService.js";
 import { runMonitorTick } from "./src/services/monitorService.js";
 import { authorizeRequest } from "./src/services/authGuard.js";
-import { sendOrderAlertTest, getOrderAlertLog, retryOrderAlert } from "./src/services/orderAlertService.js";
+import { sendOrderAlertTest, getOrderAlertLog, retryOrderAlert, getOrderAlertStatus, fetchMatrixV2Orders, processOrderAlerts } from "./src/services/orderAlertService.js";
 
 const FIRESTORE_DB_ID =
   process.env.FIREBASE_DATABASE_ID ||
@@ -415,6 +415,33 @@ async function startServer() {
     } catch (error: any) {
       console.error("[WhatsApp Test Error]", error);
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Order Alert: last run summary (why alerts were / were not sent)
+  app.get("/api/admin/whatsapp/order-alert-status", async (req, res) => {
+    try {
+      if (!db) return res.status(500).json({ error: "Missing Firebase features" });
+      const guard = await authorizeRequest(req, db, ["admin"], { strict: true });
+      if (!guard.ok) return res.status(guard.status).json({ error: guard.error });
+      res.json({ status: await getOrderAlertStatus(db) });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Order Alert: run ONLY the alert step now (no push notifications / OOS processing)
+  app.post("/api/admin/whatsapp/order-alert-run", async (req, res) => {
+    try {
+      if (!db) return res.status(500).json({ error: "Missing Firebase features" });
+      const guard = await authorizeRequest(req, db, ["admin"], { strict: true });
+      if (!guard.ok) return res.status(guard.status).json({ error: guard.error });
+      const orders = await fetchMatrixV2Orders();
+      const summary = await processOrderAlerts(db, orders, { refreshConfig: true, source: "manual" });
+      res.json({ status: "success", summary });
+    } catch (e: any) {
+      console.error("[OrderAlert Run Error]", e);
+      res.status(500).json({ error: e.message });
     }
   });
 
