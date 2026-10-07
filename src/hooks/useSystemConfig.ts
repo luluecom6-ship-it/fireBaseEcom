@@ -35,6 +35,8 @@ export function useSystemConfig(
   const [whatsappOrderAlertEnabled, setWhatsappOrderAlertEnabled] = useState(false);
   const [whatsappOrderAlertArticles, setWhatsappOrderAlertArticles] = useState<OrderAlertArticle[]>([]);
   const [whatsappOrderAlertTemplate, setWhatsappOrderAlertTemplate] = useState('');
+  const [whatsappOrderAlertCommonEnabled, setWhatsappOrderAlertCommonEnabled] = useState(false);
+  const [whatsappOrderAlertCommonGroupJid, setWhatsappOrderAlertCommonGroupJid] = useState('');
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   // Use Firestore for real-time config
@@ -115,6 +117,12 @@ export function useSystemConfig(
           if (typeof data.whatsappOrderAlertTemplate === 'string') {
             setWhatsappOrderAlertTemplate(data.whatsappOrderAlertTemplate);
           }
+          if (typeof data.whatsappOrderAlertCommonEnabled === 'boolean') {
+            setWhatsappOrderAlertCommonEnabled(data.whatsappOrderAlertCommonEnabled);
+          }
+          if (typeof data.whatsappOrderAlertCommonGroupJid === 'string') {
+            setWhatsappOrderAlertCommonGroupJid(data.whatsappOrderAlertCommonGroupJid);
+          }
         } else {
           // Default rules if nothing in Firestore yet
           const defaultRules = [
@@ -145,6 +153,8 @@ export function useSystemConfig(
           setWhatsappOrderAlertEnabled(false);
           setWhatsappOrderAlertArticles([]);
           setWhatsappOrderAlertTemplate('');
+          setWhatsappOrderAlertCommonEnabled(false);
+          setWhatsappOrderAlertCommonGroupJid('');
         }
       } catch (error) {
         console.error("Firestore config error:", error);
@@ -196,6 +206,8 @@ export function useSystemConfig(
         whatsappOrderAlertEnabled,
         whatsappOrderAlertArticles,
         whatsappOrderAlertTemplate,
+        whatsappOrderAlertCommonEnabled,
+        whatsappOrderAlertCommonGroupJid: whatsappOrderAlertCommonGroupJid.trim(),
         updatedAt: new Date().toISOString()
       }, { merge: true }); // Use merge: true to avoid clobbering unseen config keys
       
@@ -246,6 +258,8 @@ export function useSystemConfig(
     whatsappOrderAlertEnabled,
     whatsappOrderAlertArticles,
     whatsappOrderAlertTemplate,
+    whatsappOrderAlertCommonEnabled,
+    whatsappOrderAlertCommonGroupJid,
     showToast, 
     user
   ]);
@@ -291,6 +305,8 @@ export function useSystemConfig(
     whatsappOrderAlertEnabled, setWhatsappOrderAlertEnabled,
     whatsappOrderAlertArticles, setWhatsappOrderAlertArticles,
     whatsappOrderAlertTemplate, setWhatsappOrderAlertTemplate,
+    whatsappOrderAlertCommonEnabled, setWhatsappOrderAlertCommonEnabled,
+    whatsappOrderAlertCommonGroupJid, setWhatsappOrderAlertCommonGroupJid,
     saveSystemConfig,
     isSavingConfig 
   };

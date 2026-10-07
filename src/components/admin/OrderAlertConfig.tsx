@@ -18,6 +18,10 @@ interface Props {
   setArticles: (v: OrderAlertArticle[]) => void;
   template: string;
   setTemplate: (v: string) => void;
+  commonEnabled: boolean;
+  setCommonEnabled: (v: boolean) => void;
+  commonGroupJid: string;
+  setCommonGroupJid: (v: string) => void;
   onSave: () => void;
   isSaving: boolean;
   canSave: boolean;
@@ -28,6 +32,7 @@ interface Props {
 
 export const OrderAlertConfig: React.FC<Props> = ({
   enabled, setEnabled, articles, setArticles, template, setTemplate,
+  commonEnabled, setCommonEnabled, commonGroupJid, setCommonGroupJid,
   onSave, isSaving, canSave, defaultTestJid, requesterRole, showToast,
 }) => {
   const [skuInput, setSkuInput] = useState('');
@@ -159,11 +164,38 @@ export const OrderAlertConfig: React.FC<Props> = ({
 
       {enabled && (
         <div className="p-4 sm:p-6 bg-slate-50 flex flex-col gap-6">
+          {/* Common group */}
+          <div className="bg-white border border-slate-200 rounded-xl p-3 sm:p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h5 className="text-xs font-black text-slate-800">Common group (all stores)</h5>
+                <p className="text-[9px] font-bold text-slate-400 mt-0.5">
+                  One WhatsApp group that receives every Order Alert from every store, in addition to the store's own fulfillment group. Each alert is sent once to it.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{commonEnabled ? 'On' : 'Off'}</p>
+                <button
+                  onClick={() => setCommonEnabled(!commonEnabled)}
+                  className={cn('w-10 h-5 rounded-full relative transition-colors duration-300', commonEnabled ? 'bg-amber-500' : 'bg-slate-200')}
+                >
+                  <div className={cn('absolute top-1 h-3 w-3 bg-white rounded-full transition-all shadow-sm', commonEnabled ? 'right-1' : 'left-1')} />
+                </button>
+              </div>
+            </div>
+            <input className={cn(input, 'mt-3')} value={commonGroupJid} onChange={e => setCommonGroupJid(e.target.value)}
+              placeholder="Common group JID (120363…@g.us)" />
+            {commonEnabled && !commonGroupJid.trim() && (
+              <p className="text-[10px] font-bold text-red-500 mt-1">Enter the group JID, otherwise nothing is sent to the common group.</p>
+            )}
+            <p className="text-[9px] font-bold text-slate-400 mt-1">Uses the main WhatsApp instance. Stores without a fulfillment mapping still reach this group while it is On.</p>
+          </div>
+
           {/* Articles */}
           <div>
             <h5 className="text-xs font-black text-slate-800">Article numbers (SKU)</h5>
             <p className="text-[9px] font-bold text-slate-400 mt-0.5 mb-3">
-              Applies to new orders AND orders already open (not yet delivered) when the article is added. Each order + article alerts once and is never re-sent. Adding an article with many open orders sends up to 20 alerts per cycle. Alerts go out on the monitor's ~10-minute cycle. Recipient = store group in "WhatsApp Fulfillment Alerts".
+              Applies to new orders AND orders already open (not yet delivered) when the article is added. Each order + article alerts once and is never re-sent. Adding an article with many open orders sends up to 20 alerts per cycle. Alerts go out on the monitor's ~10-minute cycle. Recipients = the store group in "WhatsApp Fulfillment Alerts" and, if switched on below, the common group.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-2">
               <input className={input} value={skuInput} onChange={e => setSkuInput(e.target.value)}
@@ -291,7 +323,7 @@ export const OrderAlertConfig: React.FC<Props> = ({
                   <thead>
                     <tr className="text-left text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
                       <th className="p-2">Time</th><th className="p-2">Order</th><th className="p-2">SKU</th>
-                      <th className="p-2">Store</th><th className="p-2">Status</th><th className="p-2"></th>
+                      <th className="p-2">Store</th><th className="p-2">To</th><th className="p-2">Status</th><th className="p-2"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -301,6 +333,7 @@ export const OrderAlertConfig: React.FC<Props> = ({
                         <td className="p-2">{l.orderId}</td>
                         <td className="p-2">{l.sku}</td>
                         <td className="p-2">{l.storeId}</td>
+                        <td className="p-2">{l.destination === 'common' ? 'Common' : 'Store'}</td>
                         <td className="p-2" title={l.error || ''}>
                           <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-black uppercase',
                             l.status === 'sent' ? 'bg-green-100 text-green-700' : l.status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-500')}>

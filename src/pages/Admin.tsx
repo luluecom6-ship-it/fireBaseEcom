@@ -72,6 +72,10 @@ interface AdminProps {
   setWhatsappOrderAlertArticles?: (val: OrderAlertArticle[]) => void;
   whatsappOrderAlertTemplate?: string;
   setWhatsappOrderAlertTemplate?: (val: string) => void;
+  whatsappOrderAlertCommonEnabled?: boolean;
+  setWhatsappOrderAlertCommonEnabled?: (val: boolean) => void;
+  whatsappOrderAlertCommonGroupJid?: string;
+  setWhatsappOrderAlertCommonGroupJid?: (val: string) => void;
   // AI Bot Config
   aiBotEnabled?: boolean;
   setAiBotEnabled?: (val: boolean) => void;
@@ -170,6 +174,10 @@ export const Admin: React.FC<AdminProps> = ({
   setWhatsappOrderAlertArticles,
   whatsappOrderAlertTemplate,
   setWhatsappOrderAlertTemplate,
+  whatsappOrderAlertCommonEnabled,
+  setWhatsappOrderAlertCommonEnabled,
+  whatsappOrderAlertCommonGroupJid,
+  setWhatsappOrderAlertCommonGroupJid,
   aiBotEnabled,
   setAiBotEnabled,
   aiBotApiKey,
@@ -2230,7 +2238,7 @@ export const Admin: React.FC<AdminProps> = ({
         )}
 
             {/* WhatsApp Order Alert (watched articles) */}
-            {String(user.role || "").toLowerCase().trim() === 'admin' && setWhatsappOrderAlertEnabled && setWhatsappOrderAlertArticles && setWhatsappOrderAlertTemplate && (
+            {String(user.role || "").toLowerCase().trim() === 'admin' && setWhatsappOrderAlertEnabled && setWhatsappOrderAlertArticles && setWhatsappOrderAlertTemplate && setWhatsappOrderAlertCommonEnabled && setWhatsappOrderAlertCommonGroupJid && (
               <OrderAlertConfig
                 enabled={!!whatsappOrderAlertEnabled}
                 setEnabled={setWhatsappOrderAlertEnabled}
@@ -2238,10 +2246,14 @@ export const Admin: React.FC<AdminProps> = ({
                 setArticles={setWhatsappOrderAlertArticles}
                 template={whatsappOrderAlertTemplate || ''}
                 setTemplate={setWhatsappOrderAlertTemplate}
+                commonEnabled={!!whatsappOrderAlertCommonEnabled}
+                setCommonEnabled={setWhatsappOrderAlertCommonEnabled}
+                commonGroupJid={whatsappOrderAlertCommonGroupJid || ''}
+                setCommonGroupJid={setWhatsappOrderAlertCommonGroupJid}
                 onSave={onSaveConfig}
                 isSaving={!!isSavingConfig}
                 canSave={!!isFirebaseAuthenticated}
-                defaultTestJid={(whatsappFulfillmentMappings || [])[0]?.groupJid}
+                defaultTestJid={whatsappOrderAlertCommonGroupJid || (whatsappFulfillmentMappings || [])[0]?.groupJid}
                 requesterRole={String(user.role || '')}
                 showToast={showToast}
               />

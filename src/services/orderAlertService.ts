@@ -9,7 +9,7 @@ import {
 /**
  * WhatsApp "Order Alert": the first time the monitor sees an undelivered order (new OR already open when the article was added)
  * that contains a watched article (SKU), send ONE message (with the item photo)
- * to the store's fulfillment WhatsApp group. Never re-sent once marked "sent".
+ * to the store's fulfillment WhatsApp group and, if enabled, one common group. Never re-sent once marked "sent".
  *
  * - Config lives in Firestore system/config (edited from Admin > Settings).
  * - De-duplication is atomic via order_alert_log/{orderId_sku} (create()).
@@ -95,7 +95,7 @@ export async function getOrderAlertLog(db: any, limit = 50) {
     const x = d.data();
     const ts = (v: any) => (v?.toDate ? v.toDate().toISOString() : v || "");
     return {
-      id: d.id, orderId: x.orderId, sku: x.sku, storeId: x.storeId, status: x.status,
+      id: d.id, orderId: x.orderId, sku: x.sku, storeId: x.storeId, destination: x.destination || "store", status: x.status,
       attempts: x.attempts || 1, error: x.error || "", sentAt: x.sentAt || "", createdAt: ts(x.createdAt),
     };
   });
@@ -127,6 +127,8 @@ export async function processOrderAlerts(db: any, orders: any[]) {
 
   const globalTemplate: string = config.whatsappOrderAlertTemplate || DEFAULT_ORDER_ALERT_TEMPLATE;
   const mappings: any[] = config.whatsappFulfillmentMappings || [];
+  const commonJid = String(config.whatsappOrderAlertCommonGroupJid || "").trim();
+  const commonOn = !!config.whatsappOrderAlertCommonEnabled && !!commonJid;
   let sends = 0;
 
   for (const order of orders) {
@@ -151,40 +153,20 @@ export async function processOrderAlerts(db: any, orders: any[]) {
       if (article.endDate && todayStr > article.endDate) continue;
       if (article.minQty && Number(item.quantity || 0) < Number(article.minQty)) continue;
 
-      const key = `${orderId}_${item.sku}`.replace(/\//g, "_");
-      if (handled.has(key)) continue;
+      const baseKey = `${orderId}_${item.sku}`.replace(/\//g, "_");
 
+      // Destinations: the store's fulfillment group and/or the one common group.
+      const targets: { kind: "store" | "common"; key: string; jid: string; instance: string }[] = [];
       const mapping = mappings.find((x: any) => normStore(x.storeId) === normStore(storeId));
-      if (!mapping || !mapping.groupJid) {
-        if (!missingMappingLogged.has(storeId)) {
-          missingMappingLogged.add(storeId);
-          console.warn(`[OrderAlert] No fulfillment group mapped for store ${storeId}; alerts for it are skipped.`);
-        }
-        continue;
+      if (mapping && mapping.groupJid) {
+        const instance = mapping.instanceName || config.whatsappInstanceName;
+        if (instance) targets.push({ kind: "store", key: baseKey, jid: mapping.groupJid, instance });
+      } else if (!commonOn && !missingMappingLogged.has(storeId)) {
+        missingMappingLogged.add(storeId);
+        console.warn(`[OrderAlert] No fulfillment group mapped for store ${storeId}; alerts for it are skipped.`);
       }
-      const instance = mapping.instanceName || config.whatsappInstanceName;
-      if (!instance) continue;
-
-      if (sends >= MAX_SENDS_PER_TICK) return;
-
-      // Atomic claim (also protects against overlapping server instances)
-      const ref = db.collection("order_alert_log").doc(key);
-      let attempts = 1;
-      try {
-        await ref.create({
-          orderId, sku: String(item.sku), storeId, status: "sending", attempts,
-          createdAt: new Date(), updatedAt: new Date(),
-        });
-      } catch (_e) {
-        const snap = await ref.get();
-        const d = snap.exists ? snap.data() || {} : {};
-        if (d.status === "failed" && (d.attempts ?? 1) < MAX_ATTEMPTS) {
-          attempts = (d.attempts ?? 1) + 1;
-          await ref.update({ status: "sending", attempts, updatedAt: new Date() });
-        } else {
-          handled.add(key);
-          continue;
-        }
+      if (commonOn && config.whatsappInstanceName) {
+        targets.push({ kind: "common", key: `${baseKey}__common`, jid: commonJid, instance: config.whatsappInstanceName });
       }
 
       const template = (article.messageOverride && article.messageOverride.trim()) || globalTemplate;
@@ -202,20 +184,45 @@ export async function processOrderAlerts(db: any, orders: any[]) {
         note: article.note,
       });
 
-      sends++;
-      try {
-        const result = await postToEvolution(config, instance, mapping.groupJid, text, largeImageUrl(item.photo_url));
-        if (result.ok) {
-          handled.add(key);
-          await ref.update({ status: "sent", sentAt: new Date().toISOString(), updatedAt: new Date() });
-          console.log(`[OrderAlert] Sent for order ${orderId}, SKU ${item.sku} -> store ${storeId}`);
-        } else {
-          await ref.update({ status: "failed", error: result.error, updatedAt: new Date() });
-          console.error(`[OrderAlert] Failed (${attempts}/${MAX_ATTEMPTS}) ${orderId}/${item.sku}: ${result.error}`);
+      for (const t of targets) {
+        if (handled.has(t.key)) continue;
+        if (sends >= MAX_SENDS_PER_TICK) return;
+
+        // Atomic claim per destination (also protects against overlapping server instances)
+        const ref = db.collection("order_alert_log").doc(t.key);
+        let attempts = 1;
+        try {
+          await ref.create({
+            orderId, sku: String(item.sku), storeId, destination: t.kind, status: "sending", attempts,
+            createdAt: new Date(), updatedAt: new Date(),
+          });
+        } catch (_e) {
+          const snap = await ref.get();
+          const d = snap.exists ? snap.data() || {} : {};
+          if (d.status === "failed" && (d.attempts ?? 1) < MAX_ATTEMPTS) {
+            attempts = (d.attempts ?? 1) + 1;
+            await ref.update({ status: "sending", attempts, updatedAt: new Date() });
+          } else {
+            handled.add(t.key);
+            continue;
+          }
         }
-      } catch (e: any) {
-        await ref.update({ status: "failed", error: String(e?.message || e).slice(0, 120), updatedAt: new Date() });
-        console.error(`[OrderAlert] Error (${attempts}/${MAX_ATTEMPTS}) ${orderId}/${item.sku}:`, e?.message);
+
+        sends++;
+        try {
+          const result = await postToEvolution(config, t.instance, t.jid, text, largeImageUrl(item.photo_url));
+          if (result.ok) {
+            handled.add(t.key);
+            await ref.update({ status: "sent", sentAt: new Date().toISOString(), updatedAt: new Date() });
+            console.log(`[OrderAlert] Sent for order ${orderId}, SKU ${item.sku} -> ${t.kind} group (store ${storeId})`);
+          } else {
+            await ref.update({ status: "failed", error: result.error, updatedAt: new Date() });
+            console.error(`[OrderAlert] Failed (${attempts}/${MAX_ATTEMPTS}) ${orderId}/${item.sku} [${t.kind}]: ${result.error}`);
+          }
+        } catch (e: any) {
+          await ref.update({ status: "failed", error: String(e?.message || e).slice(0, 120), updatedAt: new Date() });
+          console.error(`[OrderAlert] Error (${attempts}/${MAX_ATTEMPTS}) ${orderId}/${item.sku} [${t.kind}]:`, e?.message);
+        }
       }
     }
   }
