@@ -134,6 +134,11 @@ export default function App() {
     whatsappLastMileMappings, setWhatsappLastMileMappings,
     whatsappEscalationRules, setWhatsappEscalationRules,
     whatsappGlobalGroupJid, setWhatsappGlobalGroupJid,
+    whatsappOrderAlertEnabled, setWhatsappOrderAlertEnabled,
+    whatsappOrderAlertArticles, setWhatsappOrderAlertArticles,
+    whatsappOrderAlertTemplate, setWhatsappOrderAlertTemplate,
+    whatsappOrderAlertCommonEnabled, setWhatsappOrderAlertCommonEnabled,
+    whatsappOrderAlertCommonGroupJid, setWhatsappOrderAlertCommonGroupJid,
     saveSystemConfig, isSavingConfig 
   } = useSystemConfig(user, showToast, isFirebaseAuthenticated);
 
@@ -561,6 +566,16 @@ export default function App() {
             setWhatsappEscalationRules={setWhatsappEscalationRules}
             whatsappGlobalGroupJid={whatsappGlobalGroupJid}
             setWhatsappGlobalGroupJid={setWhatsappGlobalGroupJid}
+            whatsappOrderAlertEnabled={whatsappOrderAlertEnabled}
+            setWhatsappOrderAlertEnabled={setWhatsappOrderAlertEnabled}
+            whatsappOrderAlertArticles={whatsappOrderAlertArticles}
+            setWhatsappOrderAlertArticles={setWhatsappOrderAlertArticles}
+            whatsappOrderAlertTemplate={whatsappOrderAlertTemplate}
+            setWhatsappOrderAlertTemplate={setWhatsappOrderAlertTemplate}
+            whatsappOrderAlertCommonEnabled={whatsappOrderAlertCommonEnabled}
+            setWhatsappOrderAlertCommonEnabled={setWhatsappOrderAlertCommonEnabled}
+            whatsappOrderAlertCommonGroupJid={whatsappOrderAlertCommonGroupJid}
+            setWhatsappOrderAlertCommonGroupJid={setWhatsappOrderAlertCommonGroupJid}
             staffStatus={staffStatus}
             scheduledThreshold={scheduledThreshold}
             setScheduledThreshold={setScheduledThreshold}

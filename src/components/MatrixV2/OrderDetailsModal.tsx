@@ -14,6 +14,7 @@ import {
 } from '../../typesV2';
 import { SmartImage } from '../layout/common/SmartImage';
 import { fixImageUrl } from '../../utils/formatters';
+import { authHeaders } from '../../utils/authHeaders';
 
 interface OrderDetailsModalProps {
   order: Order;
@@ -78,7 +79,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({ order, onC
     try {
       const response = await fetch('/api/admin/whatsapp/manual-item-push', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           order,
           item,

@@ -11,6 +11,8 @@ import { getFirestore } from "firebase-admin/firestore";
 import fs from "fs";
 import { executeGasRequest } from "./src/services/gasService.js";
 import { runMonitorTick } from "./src/services/monitorService.js";
+import { authorizeRequest } from "./src/services/authGuard.js";
+import { sendOrderAlertTest, getOrderAlertLog, retryOrderAlert, getOrderAlertStatus, fetchMatrixV2Orders, processOrderAlerts } from "./src/services/orderAlertService.js";
 
 const FIRESTORE_DB_ID =
   process.env.FIREBASE_DATABASE_ID ||
@@ -416,6 +418,77 @@ async function startServer() {
     }
   });
 
+  // Order Alert: last run summary (why alerts were / were not sent)
+  app.get("/api/admin/whatsapp/order-alert-status", async (req, res) => {
+    try {
+      if (!db) return res.status(500).json({ error: "Missing Firebase features" });
+      const guard = await authorizeRequest(req, db, ["admin"], { strict: true });
+      if (!guard.ok) return res.status(guard.status).json({ error: guard.error });
+      res.json({ status: await getOrderAlertStatus(db) });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Order Alert: run ONLY the alert step now (no push notifications / OOS processing)
+  app.post("/api/admin/whatsapp/order-alert-run", async (req, res) => {
+    try {
+      if (!db) return res.status(500).json({ error: "Missing Firebase features" });
+      const guard = await authorizeRequest(req, db, ["admin"], { strict: true });
+      if (!guard.ok) return res.status(guard.status).json({ error: guard.error });
+      const orders = await fetchMatrixV2Orders();
+      const summary = await processOrderAlerts(db, orders, { refreshConfig: true, source: "manual" });
+      res.json({ status: "success", summary });
+    } catch (e: any) {
+      console.error("[OrderAlert Run Error]", e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Order Alert: recent send log + retry for failed alerts
+  app.get("/api/admin/whatsapp/order-alert-log", async (req, res) => {
+    try {
+      if (!db) return res.status(500).json({ error: "Missing Firebase features" });
+      const guard = await authorizeRequest(req, db, ["admin"], { strict: true });
+      if (!guard.ok) return res.status(guard.status).json({ error: guard.error });
+      res.json({ logs: await getOrderAlertLog(db, 50) });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/admin/whatsapp/order-alert-retry", async (req, res) => {
+    try {
+      if (!db) return res.status(500).json({ error: "Missing Firebase features" });
+      const { id } = req.body;
+      const guard = await authorizeRequest(req, db, ["admin"], { strict: true });
+      if (!guard.ok) return res.status(guard.status).json({ error: guard.error });
+      const ok = await retryOrderAlert(db, String(id || ""));
+      if (!ok) return res.status(400).json({ error: "Only failed alerts can be retried" });
+      res.json({ status: "success" });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Order Alert: send a sample message using the (unsaved) template from Admin
+  app.post("/api/admin/whatsapp/order-alert-test", async (req, res) => {
+    try {
+      if (!db) return res.status(500).json({ error: "Missing Firebase features" });
+      const { number, template } = req.body;
+      const guard = await authorizeRequest(req, db, ["admin"], { strict: true });
+      if (!guard.ok) return res.status(guard.status).json({ error: guard.error });
+      if (!number) return res.status(400).json({ error: "Group JID or phone number is required" });
+      const sysData = await getCachedConfig(db);
+      const result = await sendOrderAlertTest(sysData, number, template);
+      if (!result.ok) return res.status(400).json({ error: result.error });
+      res.json({ status: "success" });
+    } catch (e: any) {
+      console.error("[OrderAlert Test Error]", e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.get("/api/admin/whatsapp/groups", async (req, res) => {
     try {
       if (!db)
@@ -462,13 +535,11 @@ async function startServer() {
         return res.status(500).json({ error: "Missing Firebase features" });
       const { order, item, requesterId, requesterRole } = req.body;
 
-      if (
-        !item ||
-        !order ||
-        !["admin", "supervisor", "operator"].includes(requesterRole)
-      ) {
+      if (!item || !order) {
         return res.status(403).json({ error: "Unauthorized or missing data" });
       }
+      const guard = await authorizeRequest(req, db, ["admin", "supervisor", "operator"]);
+      if (!guard.ok) return res.status(guard.status).json({ error: guard.error });
 
       const sysData = await getCachedConfig(db);
 
@@ -584,10 +655,8 @@ async function startServer() {
   app.post("/api/admin/whatsapp/scan-and-send", async (req, res) => {
     try {
       if (!db) return res.status(500).json({ error: "Missing Firebase" });
-      const { requesterRole } = req.body;
-      if (!["admin", "operator"].includes(requesterRole)) {
-        return res.status(403).json({ error: "Admin/Operator only" });
-      }
+      const guard = await authorizeRequest(req, db, ["admin", "operator"]);
+      if (!guard.ok) return res.status(guard.status).json({ error: guard.error });
 
       const config = await getCachedConfig(db);
       if (!config.whatsappApiUrl || !config.whatsappApiKey || !config.whatsappInstanceName) {
@@ -703,15 +772,12 @@ async function startServer() {
       if (!db || !messaging)
         return res.status(500).json({ error: "Missing Firebase features" });
 
-      const { item, requesterRole } = req.body;
-      if (
-        !item ||
-        (requesterRole !== "admin" &&
-          requesterRole !== "operator" &&
-          requesterRole !== "supervisor")
-      ) {
+      const { item } = req.body;
+      if (!item) {
         return res.status(403).json({ error: "Unauthorized" });
       }
+      const guard = await authorizeRequest(req, db, ["admin", "operator", "supervisor"]);
+      if (!guard.ok) return res.status(guard.status).json({ error: guard.error });
 
       // Fetch region mapping
       let alertRegion = "";

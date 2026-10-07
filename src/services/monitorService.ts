@@ -1,6 +1,7 @@
 import { detectAlerts } from "../utils/alertLogic.js";
 import { executeGasRequest } from "./gasService.js";
 import axios from "axios";
+import { processOrderAlerts } from "./orderAlertService.js";
 import { getPickedItems, getTotalItems, getPickedSkuCount, getSkuCount, getPickerInfo, getDriverInfo, getOrderLifecycle } from "../typesV2.js";
 
 // Memory caches to prevent continuous reads/writes of identical records
@@ -482,6 +483,13 @@ export async function runMonitorTick(db: any, messaging: any) {
           processedOOSKeys.add(oosKey);
         }
       }
+    }
+
+    // --- WhatsApp Order Alert (watched articles, fires when picking starts) ---
+    try {
+      await processOrderAlerts(db, matrixV2Array);
+    } catch (oaErr: any) {
+      console.error("[Monitor] Order Alert error:", oaErr?.message || oaErr);
     }
 
     console.log(`[Monitor DEBUG] Total Orders (V1+V2): Quick=${matrixData.quick.length}, Sched=${matrixData.schedule.length}, Regions Raw=${regions.length}`);

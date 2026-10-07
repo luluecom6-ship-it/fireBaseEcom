@@ -19,6 +19,8 @@ import { fixImageUrl, getImages } from '../utils/formatters';
 import { SmartImage } from '../components/layout/common/SmartImage';
 import { cn } from '../lib/utils';
 import { useSystemConfig } from '../hooks/useSystemConfig';
+import { OrderAlertConfig } from '../components/admin/OrderAlertConfig';
+import type { OrderAlertArticle } from '../utils/orderAlertTemplate';
 import { db } from '../firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -64,6 +66,16 @@ interface AdminProps {
   setWhatsappEscalationRules?: (val: any[]) => void;
   whatsappGlobalGroupJid?: string;
   setWhatsappGlobalGroupJid?: (val: string) => void;
+  whatsappOrderAlertEnabled?: boolean;
+  setWhatsappOrderAlertEnabled?: (val: boolean) => void;
+  whatsappOrderAlertArticles?: OrderAlertArticle[];
+  setWhatsappOrderAlertArticles?: (val: OrderAlertArticle[]) => void;
+  whatsappOrderAlertTemplate?: string;
+  setWhatsappOrderAlertTemplate?: (val: string) => void;
+  whatsappOrderAlertCommonEnabled?: boolean;
+  setWhatsappOrderAlertCommonEnabled?: (val: boolean) => void;
+  whatsappOrderAlertCommonGroupJid?: string;
+  setWhatsappOrderAlertCommonGroupJid?: (val: string) => void;
   // AI Bot Config
   aiBotEnabled?: boolean;
   setAiBotEnabled?: (val: boolean) => void;
@@ -156,6 +168,16 @@ export const Admin: React.FC<AdminProps> = ({
   setWhatsappEscalationRules,
   whatsappGlobalGroupJid,
   setWhatsappGlobalGroupJid,
+  whatsappOrderAlertEnabled,
+  setWhatsappOrderAlertEnabled,
+  whatsappOrderAlertArticles,
+  setWhatsappOrderAlertArticles,
+  whatsappOrderAlertTemplate,
+  setWhatsappOrderAlertTemplate,
+  whatsappOrderAlertCommonEnabled,
+  setWhatsappOrderAlertCommonEnabled,
+  whatsappOrderAlertCommonGroupJid,
+  setWhatsappOrderAlertCommonGroupJid,
   aiBotEnabled,
   setAiBotEnabled,
   aiBotApiKey,
@@ -2214,6 +2236,28 @@ export const Admin: React.FC<AdminProps> = ({
             )}
           </div>
         )}
+
+            {/* WhatsApp Order Alert (watched articles) */}
+            {String(user.role || "").toLowerCase().trim() === 'admin' && setWhatsappOrderAlertEnabled && setWhatsappOrderAlertArticles && setWhatsappOrderAlertTemplate && setWhatsappOrderAlertCommonEnabled && setWhatsappOrderAlertCommonGroupJid && (
+              <OrderAlertConfig
+                enabled={!!whatsappOrderAlertEnabled}
+                setEnabled={setWhatsappOrderAlertEnabled}
+                articles={whatsappOrderAlertArticles || []}
+                setArticles={setWhatsappOrderAlertArticles}
+                template={whatsappOrderAlertTemplate || ''}
+                setTemplate={setWhatsappOrderAlertTemplate}
+                commonEnabled={!!whatsappOrderAlertCommonEnabled}
+                setCommonEnabled={setWhatsappOrderAlertCommonEnabled}
+                commonGroupJid={whatsappOrderAlertCommonGroupJid || ''}
+                setCommonGroupJid={setWhatsappOrderAlertCommonGroupJid}
+                onSave={onSaveConfig}
+                isSaving={!!isSavingConfig}
+                canSave={!!isFirebaseAuthenticated}
+                defaultTestJid={whatsappOrderAlertCommonGroupJid || (whatsappFulfillmentMappings || [])[0]?.groupJid}
+                requesterRole={String(user.role || '')}
+                showToast={showToast}
+              />
+            )}
 
             {/* AI Chatbot Configuration */}
             {String(user.role || "").toLowerCase().trim() === 'admin' && (
